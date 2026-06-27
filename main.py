@@ -30,14 +30,23 @@ class MusicBot(commands.Bot):
         # Vue persistante : les boutons restent actifs après un redémarrage.
         self.add_view(PanelView(self.manager))
 
-        if config.GUILD_ID:
-            guild = discord.Object(id=config.GUILD_ID)
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            log.info("Commandes synchronisées sur le serveur %s.", config.GUILD_ID)
-        else:
-            await self.tree.sync()
-            log.info("Commandes synchronisées globalement (propagation ~1h).")
+        try:
+            if config.GUILD_ID:
+                guild = discord.Object(id=config.GUILD_ID)
+                self.tree.copy_global_to(guild=guild)
+                await self.tree.sync(guild=guild)
+                log.info("Commandes synchronisées sur le serveur %s.", config.GUILD_ID)
+            else:
+                await self.tree.sync()
+                log.info("Commandes synchronisées globalement (propagation ~1h).")
+        except discord.Forbidden:
+            log.error(
+                "Sync refusé (403 Missing Access). Ré-invite le bot avec le scope "
+                "'applications.commands' et vérifie que GUILD_ID est bien l'ID du "
+                "SERVEUR. Le bot reste en ligne, mais /panel n'apparaîtra qu'après."
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.error("Échec de la synchronisation des commandes : %s", exc)
 
     async def on_ready(self):
         log.info("Connecté : %s (id %s)", self.user, self.user.id)
