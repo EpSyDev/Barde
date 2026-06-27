@@ -14,7 +14,6 @@ load_dotenv(BASE_DIR / ".env")
 load_dotenv()
 
 # --- Secrets / identifiants ---
-TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0) or None
 
@@ -36,13 +35,15 @@ def _resolve_ffmpeg() -> str:
 FFMPEG_PATH = _resolve_ffmpeg()
 
 # --- Les 4 salons ---
-# Chaque entrée : (index, channel_id, nom par défaut)
-CHANNELS = []
+# Un bot distinct par salon (Discord = 1 connexion vocale par bot et par serveur).
+# Chaque entrée : (index, token, channel_id, nom). Le 1er sert aussi de bot "panneau".
+SLOTS = []
 for i in range(1, 5):
+    token = os.getenv(f"TOKEN_{i}", "").strip()
     cid = int(os.getenv(f"CHANNEL_{i}") or 0)
-    if cid:
+    if token and cid:
         name = os.getenv(f"CHANNEL_{i}_NAME", f"Salon {i}")
-        CHANNELS.append((i, cid, name))
+        SLOTS.append((i, token, cid, name))
 
 
 def load_state() -> dict:
