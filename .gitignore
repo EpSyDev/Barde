@@ -1,7 +1,6 @@
 # Secrets & état
 .env
-bot/.env
-bot/state.json
+state.json
 
 # Python
 __pycache__/

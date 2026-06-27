@@ -1,1 +1,4 @@
--r bot/requirements.txt
+discord.py[voice]>=2.4.0
+yt-dlp>=2025.1.1
+python-dotenv>=1.0.1
+imageio-ffmpeg>=0.5.1
