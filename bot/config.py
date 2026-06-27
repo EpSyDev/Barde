@@ -6,10 +6,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).parent
 STATE_FILE = BASE_DIR / "state.json"
+
+# Charge les secrets, que le .env soit dans bot/ ou à la racine du conteneur.
+load_dotenv(BASE_DIR / ".env")
+load_dotenv()
 
 # --- Secrets / identifiants ---
 TOKEN = os.getenv("DISCORD_TOKEN", "")
