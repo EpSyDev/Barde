@@ -1,6 +1,7 @@
 """Configuration et persistance de l'état des salons."""
 import json
 import os
+import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,7 +15,23 @@ STATE_FILE = BASE_DIR / "state.json"
 TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0) or None
-FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
+
+
+def _resolve_ffmpeg() -> str:
+    """Trouve FFmpeg : variable d'env > PATH système > binaire pip embarqué."""
+    raw = os.getenv("FFMPEG_PATH", "ffmpeg")
+    if raw != "ffmpeg" and Path(raw).exists():
+        return raw
+    if shutil.which(raw):
+        return raw
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # noqa: BLE001
+        return raw  # tentera "ffmpeg" et échouera proprement si introuvable
+
+
+FFMPEG_PATH = _resolve_ffmpeg()
 
 # --- Les 4 salons ---
 # Chaque entrée : (index, channel_id, nom par défaut)
