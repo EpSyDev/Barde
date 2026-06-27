@@ -1,6 +1,7 @@
 # Secrets & état
 .env
 state.json
+cookies.txt
 
 # Python
 __pycache__/

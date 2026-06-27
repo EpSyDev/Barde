@@ -10,16 +10,23 @@ import config
 log = logging.getLogger("bot.player")
 
 # Extraction du flux audio sans téléchargement.
-# player_client=android : contourne le blocage des IP datacenter par YouTube.
-YTDL_OPTS = {
-    "format": "bestaudio/best",
-    "quiet": True,
-    "no_warnings": True,
-    "noplaylist": True,
-    "default_search": "auto",
-    "source_address": "0.0.0.0",
-    "extractor_args": {"youtube": {"player_client": ["android"]}},
-}
+def _ytdl_opts():
+    opts = {
+        "format": "bestaudio/best",
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "default_search": "auto",
+        "source_address": "0.0.0.0",
+    }
+    cookies = config.cookies_path()
+    if cookies:
+        # Cookies d'un compte YouTube : contourne le blocage des IP datacenter.
+        opts["cookiefile"] = cookies
+    else:
+        # À défaut, on tente le client android (de moins en moins fiable).
+        opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+    return opts
 
 # -reconnect : FFmpeg reprend le stream si la connexion lâche (utile sur 3H).
 FFMPEG_OPTIONS = {
@@ -69,7 +76,7 @@ class VoicePlayer:
         loop = asyncio.get_running_loop()
 
         def run():
-            with yt_dlp.YoutubeDL(YTDL_OPTS) as ydl:
+            with yt_dlp.YoutubeDL(_ytdl_opts()) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if "entries" in info:
                     info = info["entries"][0]

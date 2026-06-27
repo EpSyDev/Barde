@@ -34,6 +34,12 @@ def _resolve_ffmpeg() -> str:
 
 FFMPEG_PATH = _resolve_ffmpeg()
 
+
+def cookies_path():
+    """Chemin du fichier cookies YouTube s'il existe (sinon None)."""
+    p = os.getenv("COOKIES_FILE", str(BASE_DIR / "cookies.txt"))
+    return p if Path(p).exists() else None
+
 # --- Les 4 salons ---
 # Un bot distinct par salon (Discord = 1 connexion vocale par bot et par serveur).
 # Chaque entrée : (index, token, channel_id, nom). Le 1er sert aussi de bot "panneau".
