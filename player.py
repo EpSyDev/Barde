@@ -18,14 +18,14 @@ def _ytdl_opts():
         "noplaylist": True,
         "default_search": "auto",
         "source_address": "0.0.0.0",
+        # Télécharge le solveur JS (EJS) pour résoudre les challenges de
+        # signature YouTube. Nécessite un runtime JS (deno) installé.
+        "remote_components": ["ejs:github"],
     }
     cookies = config.cookies_path()
     if cookies:
         # Cookies d'un compte YouTube : contourne le blocage des IP datacenter.
         opts["cookiefile"] = cookies
-    else:
-        # À défaut, on tente le client android (de moins en moins fiable).
-        opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
     return opts
 
 # -reconnect : FFmpeg reprend le stream si la connexion lâche (utile sur 3H).
