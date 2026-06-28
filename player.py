@@ -86,7 +86,11 @@ class VoicePlayer:
         self.active = True
         await self.ensure_connected()
         if self.library.tracks:
-            await self._play_at(min(self.pos, len(self.library.tracks) - 1))
+            # Reprise : on repart à la position mémorisée (sinon au début).
+            start_pos = self.library.pos
+            if not 0 <= start_pos < len(self.library.tracks):
+                start_pos = 0
+            await self._play_at(start_pos)
 
     async def notify_added(self):
         """Appelé par le baker quand une piste est prête."""
@@ -132,6 +136,7 @@ class VoicePlayer:
                 return
             pos %= len(self.library.tracks)
             self.pos = pos
+            self.library.set_pos(pos)   # mémorise pour la reprise au reboot
             track = self.library.tracks[pos]
             await self.ensure_connected()
 

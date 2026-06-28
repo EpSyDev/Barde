@@ -1,7 +1,6 @@
 """Playlist locale d'un salon : manifeste JSON + fichiers audio."""
 import json
 import logging
-from pathlib import Path
 
 import config
 
@@ -18,6 +17,7 @@ class Library:
         self._manifest = self.dir / "manifest.json"
         self.tracks = []        # [{title, url, file|None, live: bool}]
         self.shuffle = False
+        self.pos = 0            # dernière position lue (reprise au reboot)
         self._load()
 
     def _load(self):
@@ -26,11 +26,12 @@ class Library:
                 data = json.loads(self._manifest.read_text(encoding="utf-8"))
                 self.tracks = data.get("tracks", [])
                 self.shuffle = data.get("shuffle", False)
+                self.pos = data.get("pos", 0)
             except (json.JSONDecodeError, OSError):
                 log.error("[slot %s] manifest illisible", self.index)
 
     def save(self):
-        data = {"shuffle": self.shuffle, "tracks": self.tracks}
+        data = {"shuffle": self.shuffle, "pos": self.pos, "tracks": self.tracks}
         self._manifest.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -45,14 +46,28 @@ class Library:
             self._unlink(t)
             self.save()
 
+    def move(self, i, delta):
+        """Déplace la piste i de delta (-1 = monter, +1 = descendre). Retourne la nouvelle position."""
+        j = i + delta
+        if 0 <= i < len(self.tracks) and 0 <= j < len(self.tracks):
+            self.tracks[i], self.tracks[j] = self.tracks[j], self.tracks[i]
+            self.save()
+            return j
+        return i
+
     def clear(self):
         for t in self.tracks:
             self._unlink(t)
         self.tracks = []
+        self.pos = 0
         self.save()
 
     def set_shuffle(self, value):
         self.shuffle = bool(value)
+        self.save()
+
+    def set_pos(self, pos):
+        self.pos = pos
         self.save()
 
     def path(self, track):

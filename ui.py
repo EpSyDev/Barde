@@ -144,7 +144,7 @@ class PanelView(discord.ui.View):
             ("⏭️ Suivant", discord.ButtonStyle.secondary, "skip", 1),
             ("⏹️ Stop", discord.ButtonStyle.danger, "stop", 1),
             ("🔀 Aléatoire", discord.ButtonStyle.secondary, "shuffle", 2),
-            ("📋 Voir la file", discord.ButtonStyle.secondary, "queue", 2),
+            ("🗂️ Gérer la file", discord.ButtonStyle.secondary, "manage", 2),
             ("🗑️ Vider", discord.ButtonStyle.danger, "clear", 2),
             ("🔄 Rafraîchir", discord.ButtonStyle.secondary, "refresh", 2),
         ]
@@ -191,8 +191,11 @@ class PanelView(discord.ui.View):
                 )
                 return
 
-            if action == "queue":
-                await self._show_queue(interaction, player)
+            if action == "manage":
+                view = ManageView(self.manager, self.selected)
+                await interaction.response.send_message(
+                    embed=view.embed(), view=view, ephemeral=True
+                )
                 return
 
             if action == "playpause":
@@ -217,16 +220,93 @@ class PanelView(discord.ui.View):
 
         return callback
 
-    async def _show_queue(self, interaction, player):
+class ManageView(discord.ui.View):
+    """Gestion de la file d'un salon : retirer / monter / descendre une piste (éphémère)."""
+
+    def __init__(self, manager, index):
+        super().__init__(timeout=180)
+        self.manager = manager
+        self.index = index
+        self.sel = None          # position sélectionnée dans la file
+        self._build()
+
+    def _player(self):
+        return self.manager.get(self.index)
+
+    def embed(self):
+        p = self._player()
         lines = []
-        for i, t in enumerate(player.library.tracks):
-            mark = "▶️" if t is player.current else f"{i + 1}."
-            live = " 🔴 (live)" if t.get("live") else ""
-            lines.append(f"{mark} {t['title']}{live}")
-        text = "\n".join(lines) or "*File vide.*"
-        embed = discord.Embed(
-            title=f"📋 File complète — {player.slot.name}",
-            description=text[:4000],
+        for i, t in enumerate(p.library.tracks[:25]):
+            mark = "▶️" if t is p.current else f"`{i + 1:>2}.`"
+            cur = " ⬅️" if i == self.sel else ""
+            live = " 🔴" if t.get("live") else ""
+            lines.append(f"{mark} {t['title'][:60]}{live}{cur}")
+        more = len(p.library.tracks) - 25
+        if more > 0:
+            lines.append(f"*… +{more} (non listées)*")
+        return discord.Embed(
+            title=f"🗂️ Gérer la file — {p.slot.name}",
+            description="\n".join(lines) or "*File vide.*",
             color=0x5865F2,
+        ).set_footer(text="Choisis une piste puis : Retirer · Monter · Descendre")
+
+    def _build(self):
+        self.clear_items()
+        p = self._player()
+        options = [
+            discord.SelectOption(
+                label=f"{i + 1}. {t['title'][:80]}",
+                value=str(i),
+                default=(i == self.sel),
+            )
+            for i, t in enumerate(p.library.tracks[:25])
+        ]
+        select = discord.ui.Select(
+            placeholder="Choisir une piste…",
+            options=options or [discord.SelectOption(label="(file vide)", value="-1")],
+            disabled=not options,
+            row=0,
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        select.callback = self._on_pick
+        self.add_item(select)
+
+        for label, style, action in [
+            ("🗑️ Retirer", discord.ButtonStyle.danger, "remove"),
+            ("⬆️ Monter", discord.ButtonStyle.secondary, "up"),
+            ("⬇️ Descendre", discord.ButtonStyle.secondary, "down"),
+        ]:
+            btn = discord.ui.Button(label=label, style=style, row=1)
+            btn.callback = self._make_cb(action)
+            self.add_item(btn)
+
+    async def _on_pick(self, interaction: discord.Interaction):
+        if not is_admin(interaction):
+            await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
+            return
+        self.sel = int(interaction.data["values"][0])
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    def _make_cb(self, action):
+        async def callback(interaction: discord.Interaction):
+            if not is_admin(interaction):
+                await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
+                return
+            if self.sel is None or self.sel < 0:
+                await interaction.response.send_message(
+                    "Choisis d'abord une piste dans le menu.", ephemeral=True
+                )
+                return
+            lib = self._player().library
+            if action == "remove":
+                lib.remove(self.sel)
+                self.sel = None
+            elif action == "up":
+                self.sel = lib.move(self.sel, -1)
+            elif action == "down":
+                self.sel = lib.move(self.sel, +1)
+            self._build()
+            await interaction.response.edit_message(embed=self.embed(), view=self)
+            await self.manager.refresh_panel()
+
+        return callback
