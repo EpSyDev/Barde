@@ -2,6 +2,9 @@
 .env
 state.json
 cookies.txt
+taverne.db
+taverne.db-wal
+taverne.db-shm
 
 # Audio pré-téléchargé (radios)
 media/
