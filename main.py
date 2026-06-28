@@ -17,14 +17,24 @@ logging.basicConfig(
 )
 log = logging.getLogger("bot")
 
-intents = discord.Intents.default()  # voice_states inclus, message_content non requis
+# Intents minimaux : seulement ce qu'il faut pour voir les salons et le vocal.
+intents = discord.Intents.none()
+intents.guilds = True
+intents.voice_states = True
+
+# Réglages communs pour réduire la mémoire (pas de cache membres/messages).
+_LIGHT = {
+    "chunk_guilds_at_startup": False,
+    "member_cache_flags": discord.MemberCacheFlags.none(),
+    "max_messages": None,
+}
 
 
 class ChannelClient(discord.Client):
     """Bot secondaire : gère uniquement la lecture dans son salon."""
 
     def __init__(self, **kwargs):
-        super().__init__(intents=intents, **kwargs)
+        super().__init__(intents=intents, **_LIGHT, **kwargs)
         self.player = None
 
     async def on_ready(self):
@@ -40,7 +50,7 @@ class PrimaryBot(commands.Bot):
     """Bot principal : son salon + commandes slash + panneau /panel."""
 
     def __init__(self, manager):
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(command_prefix="!", intents=intents, **_LIGHT)
         self.manager = manager
         self.player = None
 
