@@ -1,4 +1,4 @@
-"""File de préparation : télécharge + remuxe les pistes en local (tâche de fond)."""
+"""File de préparation : télécharge + normalise/remuxe les pistes en local (tâche de fond)."""
 import asyncio
 import logging
 import os
@@ -10,6 +10,14 @@ import yt_dlp
 import config
 
 log = logging.getLogger("bot.baker")
+
+
+def _low_priority():
+    if hasattr(os, "nice"):
+        try:
+            os.nice(19)
+        except OSError:
+            pass
 
 
 class Baker:
@@ -49,6 +57,7 @@ class Baker:
                 self.queue.task_done()
                 await self.manager.refresh_panel()
 
+    # --- Hooks de progression ---
     def _hook(self, index):
         def hook(d):
             status = d.get("status")
@@ -68,6 +77,27 @@ class Baker:
             self._last_refresh = now
             asyncio.run_coroutine_threadsafe(self.manager.refresh_panel(), self._loop)
 
+    # --- Extraction ---
+    async def _list_entries(self, url):
+        """Retourne la liste des vidéos (déplie une playlist, sinon 1 seule URL)."""
+        loop = asyncio.get_running_loop()
+
+        def run():
+            opts = config.ytdl_base_opts()
+            opts["noplaylist"] = False
+            opts["extract_flat"] = "in_playlist"
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if info.get("entries"):
+                urls = [
+                    (e.get("url") or e.get("webpage_url") or e.get("id"))
+                    for e in info["entries"] if e
+                ]
+                return [u for u in urls if u][: config.PLAYLIST_LIMIT]
+            return [url]
+
+        return await loop.run_in_executor(None, run)
+
     async def _ydl(self, url, download, outtmpl=None, index=None):
         loop = asyncio.get_running_loop()
 
@@ -85,7 +115,15 @@ class Baker:
 
         return await loop.run_in_executor(None, run)
 
+    # --- Préparation ---
     async def _bake(self, index, url):
+        for video_url in await self._list_entries(url):
+            try:
+                await self._bake_one(index, video_url)
+            except Exception as exc:  # noqa: BLE001
+                log.error("[slot %s] piste échouée (%s) : %s", index, video_url, exc)
+
+    async def _bake_one(self, index, url):
         lib = self.manager.libraries[index]
         info, _ = await self._ydl(url, download=False)
         title = info.get("title", "Inconnu")
@@ -100,7 +138,7 @@ class Baker:
                 outtmpl=str(lib.dir / f"{tid}.%(ext)s"), index=index,
             )
             out = str(lib.dir / f"{tid}.ogg")
-            await self._remux(downloaded, out)
+            await self._process(downloaded, out)
             if downloaded and os.path.exists(downloaded) and downloaded != out:
                 try:
                     os.remove(downloaded)
@@ -111,18 +149,30 @@ class Baker:
         log.info("[slot %s] prêt : %s", index, title)
         await self.manager.players[index].notify_added()
 
-    async def _remux(self, src, dst):
+    async def _process(self, src, dst):
+        """Normalise (ré-encode) si activé, sinon copie l'opus tel quel."""
+        if config.NORMALIZE:
+            ok = await self._run_ffmpeg(src, dst, [
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2",
+                "-threads", "1",
+            ])
+            if ok:
+                return
         if await self._run_ffmpeg(src, dst, ["-c:a", "copy"]):
             return
-        await self._run_ffmpeg(
-            src, dst,
-            ["-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2"],
-        )
+        await self._run_ffmpeg(src, dst, [
+            "-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2", "-threads", "1",
+        ])
 
     async def _run_ffmpeg(self, src, dst, codec_args):
+        kwargs = {}
+        if hasattr(os, "nice"):
+            kwargs["preexec_fn"] = _low_priority
         proc = await asyncio.create_subprocess_exec(
             config.FFMPEG_PATH, "-y", "-i", src, "-vn", *codec_args, dst,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            **kwargs,
         )
         return await proc.wait() == 0

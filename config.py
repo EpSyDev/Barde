@@ -14,6 +14,10 @@ load_dotenv()
 
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0) or None
+# Normalisation du volume au téléchargement (ré-encodage one-shot). 1 = activé.
+NORMALIZE = os.getenv("NORMALIZE_AUDIO", "1").strip().lower() not in ("0", "false", "")
+# Nombre max de pistes importées d'une playlist d'un coup.
+PLAYLIST_LIMIT = int(os.getenv("PLAYLIST_LIMIT") or 100)
 
 
 def _resolve_ffmpeg() -> str:
