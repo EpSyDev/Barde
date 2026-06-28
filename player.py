@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import random
+import time
 
 import discord
 import yt_dlp
@@ -31,6 +32,8 @@ class VoicePlayer:
         self._current = None
         self._lock = asyncio.Lock()
         self.public_message = None
+        self._seek_offset = 0
+        self._play_started = 0.0
 
     # --- État exposé au panneau ---
     @property
@@ -48,6 +51,19 @@ class VoicePlayer:
     @property
     def queue_len(self):
         return len(self.library.tracks)
+
+    @property
+    def current_position(self):
+        """Position courante en secondes depuis le début de la piste (approximative)."""
+        if not self.is_playing and not self.paused:
+            return 0
+        return int(self._seek_offset + (time.time() - self._play_started))
+
+    async def seek(self, seconds: int):
+        """Saute à la position `seconds` dans la piste courante."""
+        if self._current is None or self._current.get("live"):
+            return
+        await self._play_at(self.pos, seek=seconds)
 
     # --- Connexion ---
     async def ensure_connected(self):
@@ -176,7 +192,7 @@ class VoicePlayer:
         self.voice = None
 
     # --- Coeur de lecture ---
-    async def _play_at(self, pos):
+    async def _play_at(self, pos, seek: int = 0):
         async with self._lock:
             if not self.active or not self.library.tracks:
                 return
@@ -203,13 +219,18 @@ class VoicePlayer:
                 # Fichier local opus → copie directe (aucun ré-encodage).
                 source = discord.FFmpegOpusAudio(
                     self.library.path(track), codec="copy",
-                    executable=config.FFMPEG_PATH, options="-vn",
+                    executable=config.FFMPEG_PATH,
+                    before_options=f"-ss {seek}" if seek else None,
+                    options="-vn",
                 )
 
             self.voice.play(source, after=self._make_after(my_epoch))
             self._current = track
+            self._seek_offset = seek
+            self._play_started = time.time()
             self.paused = False
-            log.info("[%s] ▶ %s", self.slot.name, track.get("title"))
+            log.info("[%s] ▶ %s%s", self.slot.name, track.get("title"),
+                     f" (seek {seek}s)" if seek else "")
         await self.refresh_public()
 
     def _make_after(self, epoch):

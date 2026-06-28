@@ -4,6 +4,7 @@ import logging
 import discord
 
 import config
+from public import SeekModal
 
 log = logging.getLogger("bot.ui")
 
@@ -147,6 +148,7 @@ class PanelView(discord.ui.View):
             ("🗂️ Gérer la file", discord.ButtonStyle.secondary, "manage", 2),
             ("🗑️ Vider", discord.ButtonStyle.danger, "clear", 2),
             ("🔄 Rafraîchir", discord.ButtonStyle.secondary, "refresh", 2),
+            ("⏩ Position", discord.ButtonStyle.secondary, "seek", 3),
             ("📢 Publier le jukebox dans le salon", discord.ButtonStyle.success, "publish", 3),
         ]
         for label, style, action, row in actions:
@@ -197,6 +199,16 @@ class PanelView(discord.ui.View):
                 await interaction.response.send_message(
                     embed=view.embed(), view=view, ephemeral=True
                 )
+                return
+
+            if action == "seek":
+                if player.current and not player.current.get("live"):
+                    await interaction.response.send_modal(SeekModal(player))
+                else:
+                    await interaction.response.send_message(
+                        "Aucune piste locale en cours (seek indisponible sur les live).",
+                        ephemeral=True,
+                    )
                 return
 
             if action == "publish":
