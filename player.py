@@ -12,7 +12,9 @@ log = logging.getLogger("bot.player")
 # Extraction du flux audio sans téléchargement.
 def _ytdl_opts():
     opts = {
-        "format": "bestaudio/best",
+        # Privilégie l'audio opus : Discord l'accepte tel quel (copie sans
+        # ré-encodage = quasi 0 CPU).
+        "format": "bestaudio[acodec=opus]/bestaudio/best",
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
@@ -101,9 +103,11 @@ class VoicePlayer:
             if my_epoch != self._epoch:
                 return  # une autre lecture a pris le relais pendant l'extraction
 
-            source = discord.FFmpegOpusAudio(
+            # from_probe détecte le codec : si la source est déjà en opus,
+            # FFmpeg le copie sans ré-encoder (CPU quasi nul). Sinon il
+            # ré-encode en repli.
+            source = await discord.FFmpegOpusAudio.from_probe(
                 stream_url,
-                bitrate=128,
                 executable=config.FFMPEG_PATH,
                 **FFMPEG_OPTIONS,
             )
