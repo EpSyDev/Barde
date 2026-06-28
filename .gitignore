@@ -3,6 +3,9 @@
 state.json
 cookies.txt
 
+# Audio pré-téléchargé (radios)
+media/
+
 # Python
 __pycache__/
 *.py[cod]

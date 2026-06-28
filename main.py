@@ -7,6 +7,7 @@ from discord.ext import commands
 
 import config
 from commands import setup as setup_commands
+from library import Library
 from manager import PlayerManager, Slot
 from player import VoicePlayer
 from ui import PanelView
@@ -39,11 +40,10 @@ class ChannelClient(discord.Client):
 
     async def on_ready(self):
         log.info("[%s] connecté : %s", self.player.slot.name, self.user)
-        if self.player.slot.url:
-            try:
-                await self.player.start()
-            except Exception as exc:  # noqa: BLE001
-                log.error("[%s] autostart : %s", self.player.slot.name, exc)
+        try:
+            await self.player.start()
+        except Exception as exc:  # noqa: BLE001
+            log.error("[%s] autostart : %s", self.player.slot.name, exc)
 
 
 class PrimaryBot(commands.Bot):
@@ -76,11 +76,10 @@ class PrimaryBot(commands.Bot):
 
     async def on_ready(self):
         log.info("[%s] connecté (principal) : %s", self.player.slot.name, self.user)
-        if self.player.slot.url:
-            try:
-                await self.player.start()
-            except Exception as exc:  # noqa: BLE001
-                log.error("[%s] autostart : %s", self.player.slot.name, exc)
+        try:
+            await self.player.start()
+        except Exception as exc:  # noqa: BLE001
+            log.error("[%s] autostart : %s", self.player.slot.name, exc)
 
 
 async def _run_client(client, token, name):
@@ -98,20 +97,23 @@ async def main():
             "Aucun salon configuré. Renseigne TOKEN_1..4 + CHANNEL_1..4 dans le .env"
         )
 
+    config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     manager = PlayerManager()
     runners = []
 
     for position, (index, token, channel_id, name) in enumerate(config.SLOTS):
-        slot = Slot(index, channel_id, name, manager.saved_url(index))
+        slot = Slot(index, channel_id, name)
+        library = Library(index)
         if position == 0:
             client = PrimaryBot(manager)   # 1er = bot panneau
         else:
             client = ChannelClient()
-        player = VoicePlayer(client, slot, manager)
+        player = VoicePlayer(client, slot, library, manager)
         client.player = player
         manager.add(player)
         runners.append(_run_client(client, token, name))
 
+    manager.baker.start()
     await asyncio.gather(*runners)
 
 

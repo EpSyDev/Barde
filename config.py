@@ -1,5 +1,4 @@
-"""Configuration et persistance de l'état des salons."""
-import json
+"""Configuration et helpers partagés."""
 import os
 import shutil
 from pathlib import Path
@@ -7,13 +6,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
-STATE_FILE = BASE_DIR / "state.json"
+MEDIA_DIR = BASE_DIR / "media"        # fichiers audio pré-téléchargés (radios)
 
-# Charge les secrets, que le .env soit dans bot/ ou à la racine du conteneur.
+# Charge les secrets, que le .env soit dans le dossier du bot ou à la racine.
 load_dotenv(BASE_DIR / ".env")
 load_dotenv()
 
-# --- Secrets / identifiants ---
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0) or None
 
@@ -29,7 +27,7 @@ def _resolve_ffmpeg() -> str:
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:  # noqa: BLE001
-        return raw  # tentera "ffmpeg" et échouera proprement si introuvable
+        return raw
 
 
 FFMPEG_PATH = _resolve_ffmpeg()
@@ -40,9 +38,27 @@ def cookies_path():
     p = os.getenv("COOKIES_FILE", str(BASE_DIR / "cookies.txt"))
     return p if Path(p).exists() else None
 
-# --- Les 4 salons ---
-# Un bot distinct par salon (Discord = 1 connexion vocale par bot et par serveur).
-# Chaque entrée : (index, token, channel_id, nom). Le 1er sert aussi de bot "panneau".
+
+def ytdl_base_opts() -> dict:
+    """Options yt-dlp communes (extraction + téléchargement)."""
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "default_search": "auto",
+        "source_address": "0.0.0.0",
+        # Solveur JS (deno) pour les challenges de signature YouTube.
+        "remote_components": ["ejs:github"],
+        # Privilégie l'opus (copie sans ré-encodage côté lecture).
+        "format": "bestaudio[acodec=opus]/bestaudio/best",
+    }
+    cookies = cookies_path()
+    if cookies:
+        opts["cookiefile"] = cookies
+    return opts
+
+
+# --- Les 4 salons : un bot (token) par salon ---
 SLOTS = []
 for i in range(1, 5):
     token = os.getenv(f"TOKEN_{i}", "").strip()
@@ -50,24 +66,3 @@ for i in range(1, 5):
     if token and cid:
         name = os.getenv(f"CHANNEL_{i}_NAME", f"Salon {i}")
         SLOTS.append((i, token, cid, name))
-
-
-def load_state() -> dict:
-    """Charge les URLs sauvegardées (URL par salon, persistante entre redémarrages)."""
-    if STATE_FILE.exists():
-        try:
-            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
-
-
-def save_state(slots) -> None:
-    """Sauvegarde l'URL et le nom de chaque salon."""
-    data = {
-        str(s.index): {"name": s.name, "url": s.url}
-        for s in slots
-    }
-    STATE_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
