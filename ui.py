@@ -164,7 +164,9 @@ class PanelView(discord.ui.View):
             return
         self.selected = int(interaction.data["values"][0])
         self.manager.set_panel(interaction.message, self)
-        await interaction.response.edit_message(embed=self._embed(), view=self)
+        # Pas de view= : on garde les composants tels quels (le menu conserve
+        # le choix de l'utilisateur au lieu de revenir au 1er salon).
+        await interaction.response.edit_message(embed=self._embed())
 
     def _make_cb(self, action):
         async def callback(interaction: discord.Interaction):
@@ -204,7 +206,7 @@ class PanelView(discord.ui.View):
                 await player.stop()
                 player.library.clear()
 
-            await interaction.response.edit_message(embed=self._embed(), view=self)
+            await interaction.response.edit_message(embed=self._embed())
 
         return callback
 

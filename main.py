@@ -10,7 +10,6 @@ from commands import setup as setup_commands
 from library import Library
 from manager import PlayerManager, Slot
 from player import VoicePlayer
-from ui import PanelView
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +55,6 @@ class PrimaryBot(commands.Bot):
 
     async def setup_hook(self):
         await setup_commands(self)
-        self.add_view(PanelView(self.manager))
         try:
             if config.GUILD_ID:
                 guild = discord.Object(id=config.GUILD_ID)
