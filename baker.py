@@ -139,7 +139,7 @@ class Baker:
                 outtmpl=str(lib.dir / f"{tid}.%(ext)s"), index=index,
             )
             out = str(lib.dir / f"{tid}.ogg")
-            await self._process(downloaded, out)
+            await self._process(downloaded, out, duration=info.get("duration"))
             if downloaded and os.path.exists(downloaded) and downloaded != out:
                 try:
                     os.remove(downloaded)
@@ -150,9 +150,10 @@ class Baker:
         log.info("[slot %s] prêt : %s", index, title)
         await self.manager.players[index].notify_added()
 
-    async def _process(self, src, dst):
-        """Normalise (ré-encode) si activé, sinon copie l'opus tel quel."""
-        if config.NORMALIZE:
+    async def _process(self, src, dst, duration=None):
+        """Normalise si activé ET durée raisonnable (≤30 min), sinon copie directe."""
+        normalize = config.NORMALIZE and (duration is None or duration <= 1800)
+        if normalize:
             ok = await self._run_ffmpeg(src, dst, [
                 "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
                 "-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2",
@@ -160,6 +161,7 @@ class Baker:
             ])
             if ok:
                 return
+
         if await self._run_ffmpeg(src, dst, ["-c:a", "copy"]):
             return
         await self._run_ffmpeg(src, dst, [
