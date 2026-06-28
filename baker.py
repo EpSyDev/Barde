@@ -129,8 +129,9 @@ class Baker:
         title = info.get("title", "Inconnu")
         await self.manager.refresh_panel()
 
+        meta = {"thumb": info.get("thumbnail"), "duration": info.get("duration")}
         if info.get("is_live"):
-            lib.add({"title": title, "url": url, "file": None, "live": True})
+            lib.add({"title": title, "url": url, "file": None, "live": True, **meta})
         else:
             tid = uuid.uuid4().hex[:12]
             _, downloaded = await self._ydl(
@@ -144,7 +145,7 @@ class Baker:
                     os.remove(downloaded)
                 except OSError:
                     pass
-            lib.add({"title": title, "url": url, "file": f"{tid}.ogg", "live": False})
+            lib.add({"title": title, "url": url, "file": f"{tid}.ogg", "live": False, **meta})
 
         log.info("[slot %s] prêt : %s", index, title)
         await self.manager.players[index].notify_added()

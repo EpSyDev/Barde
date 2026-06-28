@@ -1,0 +1,10 @@
+[Unit]
+Description=Mise a jour de yt-dlp puis redemarrage de Barde
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# pip lance en tant qu'ubuntu (proprietaire du venv), restart en root.
+ExecStart=/usr/sbin/runuser -u ubuntu -- /home/ubuntu/Barde/venv/bin/pip install -U yt-dlp
+ExecStart=/bin/systemctl restart barde

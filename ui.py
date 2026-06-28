@@ -147,6 +147,7 @@ class PanelView(discord.ui.View):
             ("🗂️ Gérer la file", discord.ButtonStyle.secondary, "manage", 2),
             ("🗑️ Vider", discord.ButtonStyle.danger, "clear", 2),
             ("🔄 Rafraîchir", discord.ButtonStyle.secondary, "refresh", 2),
+            ("📢 Publier le jukebox dans le salon", discord.ButtonStyle.success, "publish", 3),
         ]
         for label, style, action, row in actions:
             btn = discord.ui.Button(
@@ -198,6 +199,13 @@ class PanelView(discord.ui.View):
                 )
                 return
 
+            if action == "publish":
+                await player.publish_public()
+                await interaction.response.send_message(
+                    f"📢 Jukebox publié dans **{player.slot.name}**.", ephemeral=True
+                )
+                return
+
             if action == "playpause":
                 if player.is_playing:
                     await player.pause()
@@ -215,6 +223,7 @@ class PanelView(discord.ui.View):
                 await player.stop()
                 player.library.clear()
 
+            await player.refresh_public()
             self._sync_select()
             await interaction.response.edit_message(embed=self._embed(), view=self)
 
@@ -307,6 +316,7 @@ class ManageView(discord.ui.View):
                 self.sel = lib.move(self.sel, +1)
             self._build()
             await interaction.response.edit_message(embed=self.embed(), view=self)
+            await self._player().refresh_public()
             await self.manager.refresh_panel()
 
         return callback

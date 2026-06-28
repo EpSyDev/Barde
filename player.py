@@ -7,6 +7,7 @@ import discord
 import yt_dlp
 
 import config
+from public import PublicView, build_public_embed
 
 log = logging.getLogger("bot.player")
 
@@ -29,6 +30,7 @@ class VoicePlayer:
         self._epoch = 0
         self._current = None
         self._lock = asyncio.Lock()
+        self.public_message = None
 
     # --- État exposé au panneau ---
     @property
@@ -96,6 +98,50 @@ class VoicePlayer:
         """Appelé par le baker quand une piste est prête."""
         if self.active and not self.is_playing and self.library.tracks:
             await self._play_at(len(self.library.tracks) - 1)
+        await self.refresh_public()
+
+    # --- Jukebox public ---
+    async def publish_public(self):
+        channel = self.bot.get_channel(self.slot.channel_id)
+        if channel is None:
+            return
+        if self.public_message:
+            try:
+                await self.public_message.delete()
+            except discord.HTTPException:
+                pass
+        self.public_message = await channel.send(
+            embed=build_public_embed(self),
+            view=PublicView(self.manager, self.slot.index),
+        )
+        self.library.public_message_id = self.public_message.id
+        self.library.save()
+
+    async def refresh_public(self):
+        if not self.public_message:
+            return
+        try:
+            await self.public_message.edit(
+                embed=build_public_embed(self),
+                view=PublicView(self.manager, self.slot.index),
+            )
+        except discord.HTTPException:
+            self.public_message = None
+
+    async def restore_public(self):
+        mid = self.library.public_message_id
+        channel = self.bot.get_channel(self.slot.channel_id)
+        if not mid or channel is None:
+            return
+        try:
+            msg = await channel.fetch_message(mid)
+            await msg.edit(
+                embed=build_public_embed(self),
+                view=PublicView(self.manager, self.slot.index),
+            )
+            self.public_message = msg
+        except discord.HTTPException:
+            self.public_message = None
 
     async def skip(self):
         nxt = self._next_pos()
@@ -164,6 +210,7 @@ class VoicePlayer:
             self._current = track
             self.paused = False
             log.info("[%s] ▶ %s", self.slot.name, track.get("title"))
+        await self.refresh_public()
 
     def _make_after(self, epoch):
         def after(error):

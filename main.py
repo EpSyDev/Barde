@@ -43,6 +43,7 @@ class ChannelClient(discord.Client):
             await self.player.start()
         except Exception as exc:  # noqa: BLE001
             log.error("[%s] autostart : %s", self.player.slot.name, exc)
+        await self.player.restore_public()
 
 
 class PrimaryBot(commands.Bot):
@@ -78,6 +79,7 @@ class PrimaryBot(commands.Bot):
             await self.player.start()
         except Exception as exc:  # noqa: BLE001
             log.error("[%s] autostart : %s", self.player.slot.name, exc)
+        await self.player.restore_public()
 
 
 async def _run_client(client, token, name):
@@ -87,6 +89,33 @@ async def _run_client(client, token, name):
         log.error("[%s] token invalide — bot ignoré.", name)
     except Exception as exc:  # noqa: BLE001
         log.error("[%s] arrêt : %s", name, exc)
+
+
+async def _watchdog(manager):
+    """Surveille les salons : reconnecte/relance un bot qui a décroché."""
+    await asyncio.sleep(90)
+    stalls = {}
+    while True:
+        await asyncio.sleep(30)
+        for idx, p in manager.players.items():
+            try:
+                if not p.active or not p.library.tracks:
+                    stalls[idx] = 0
+                    continue
+                if p.voice is None or not p.voice.is_connected():
+                    log.warning("[%s] watchdog : reconnexion", p.slot.name)
+                    stalls[idx] = 0
+                    await p.start()
+                elif not p.is_playing and not p.paused:
+                    stalls[idx] = stalls.get(idx, 0) + 1
+                    if stalls[idx] >= 2:        # ~60 s de silence anormal
+                        log.warning("[%s] watchdog : relance lecture", p.slot.name)
+                        stalls[idx] = 0
+                        await p.start()
+                else:
+                    stalls[idx] = 0
+            except Exception as exc:  # noqa: BLE001
+                log.error("watchdog [%s] : %s", p.slot.name, exc)
 
 
 async def main():
@@ -112,6 +141,7 @@ async def main():
         runners.append(_run_client(client, token, name))
 
     manager.baker.start()
+    asyncio.create_task(_watchdog(manager))
     await asyncio.gather(*runners)
 
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Planifie la mise a jour hebdomadaire de yt-dlp
+
+[Timer]
+# Tous les dimanches a 4h du matin.
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

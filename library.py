@@ -15,9 +15,10 @@ class Library:
         self.dir = config.MEDIA_DIR / f"slot_{index}"
         self.dir.mkdir(parents=True, exist_ok=True)
         self._manifest = self.dir / "manifest.json"
-        self.tracks = []        # [{title, url, file|None, live: bool}]
+        self.tracks = []        # [{title, url, file|None, live, thumb, duration}]
         self.shuffle = False
         self.pos = 0            # dernière position lue (reprise au reboot)
+        self.public_message_id = None   # message jukebox posté dans le salon
         self._load()
 
     def _load(self):
@@ -27,11 +28,17 @@ class Library:
                 self.tracks = data.get("tracks", [])
                 self.shuffle = data.get("shuffle", False)
                 self.pos = data.get("pos", 0)
+                self.public_message_id = data.get("public_message_id")
             except (json.JSONDecodeError, OSError):
                 log.error("[slot %s] manifest illisible", self.index)
 
     def save(self):
-        data = {"shuffle": self.shuffle, "pos": self.pos, "tracks": self.tracks}
+        data = {
+            "shuffle": self.shuffle,
+            "pos": self.pos,
+            "public_message_id": self.public_message_id,
+            "tracks": self.tracks,
+        }
         self._manifest.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
