@@ -34,6 +34,7 @@ class VoicePlayer:
         self.public_message = None
         self._seek_offset = 0
         self._play_started = 0.0
+        self.dj_cooldowns: dict = {}   # user_id → timestamp dernière proposition
 
     # --- État exposé au panneau ---
     @property
@@ -58,6 +59,19 @@ class VoicePlayer:
         if not self.is_playing and not self.paused:
             return 0
         return int(self._seek_offset + (time.time() - self._play_started))
+
+    async def _update_status(self, title: str | None):
+        try:
+            if title:
+                await self.bot.change_presence(
+                    activity=discord.Activity(
+                        type=discord.ActivityType.listening, name=title[:128]
+                    )
+                )
+            else:
+                await self.bot.change_presence(activity=None)
+        except Exception:  # noqa: BLE001
+            pass
 
     async def seek(self, seconds: int):
         """Saute à la position `seconds` dans la piste courante."""
@@ -174,6 +188,7 @@ class VoicePlayer:
             self.voice.stop()
         self.paused = False
         self._current = None
+        await self._update_status(None)
 
     async def pause(self):
         if self.voice and self.voice.is_playing():
@@ -232,6 +247,7 @@ class VoicePlayer:
             log.info("[%s] ▶ %s%s", self.slot.name, track.get("title"),
                      f" (seek {seek}s)" if seek else "")
         await self.refresh_public()
+        await self._update_status(self.current_title)
 
     def _make_after(self, epoch):
         def after(error):

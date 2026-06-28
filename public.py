@@ -1,7 +1,10 @@
 """Jukebox public : embed posté dans le chat du salon vocal, les membres présents choisissent."""
 import logging
+import time
 
 import discord
+
+import config
 
 log = logging.getLogger("bot.public")
 
@@ -91,6 +94,41 @@ class SeekModal(discord.ui.Modal):
         )
 
 
+class DjModal(discord.ui.Modal):
+    """Modal de proposition de piste (salon DJ uniquement)."""
+
+    def __init__(self, player):
+        super().__init__(title=f"Proposer une piste — {player.slot.name}")
+        self.player = player
+        self.url_input = discord.ui.TextInput(
+            label="Lien YouTube",
+            placeholder="https://www.youtube.com/watch?v=...",
+            required=True,
+            max_length=400,
+        )
+        self.add_item(self.url_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        now = time.time()
+        remaining = int(config.DJ_COOLDOWN - (now - self.player.dj_cooldowns.get(user_id, 0)))
+        if remaining > 0:
+            m, s = divmod(remaining, 60)
+            await interaction.response.send_message(
+                f"⏳ Tu pourras proposer une nouvelle piste dans **{m}min {s:02d}s**.",
+                ephemeral=True,
+            )
+            return
+        self.player.dj_cooldowns[user_id] = now
+        await self.player.manager.baker.enqueue(
+            self.player.slot.index, self.url_input.value.strip()
+        )
+        await interaction.response.send_message(
+            "🎵 Piste proposée ! Elle apparaîtra dans la file dès le téléchargement terminé.",
+            ephemeral=True,
+        )
+
+
 class PublicView(discord.ui.View):
     """Sélecteur de piste + seek, ouvert aux membres présents dans le salon vocal."""
 
@@ -135,6 +173,16 @@ class PublicView(discord.ui.View):
         seek_btn.callback = self._on_seek
         self.add_item(seek_btn)
 
+        if config.DJ_SLOT and self.index == config.DJ_SLOT:
+            dj_btn = discord.ui.Button(
+                label="➕ Proposer une piste",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"public:{self.index}:dj",
+                row=1,
+            )
+            dj_btn.callback = self._on_dj
+            self.add_item(dj_btn)
+
     def _check_vc(self, interaction: discord.Interaction):
         player = self._player()
         member = interaction.user
@@ -164,3 +212,11 @@ class PublicView(discord.ui.View):
             )
             return
         await interaction.response.send_modal(SeekModal(self._player()))
+
+    async def _on_dj(self, interaction: discord.Interaction):
+        if not self._check_vc(interaction):
+            await interaction.response.send_message(
+                "🔇 Rejoins le salon vocal pour proposer une piste.", ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(DjModal(self._player()))

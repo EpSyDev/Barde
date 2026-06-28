@@ -18,6 +18,10 @@ ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0) or None
 NORMALIZE = os.getenv("NORMALIZE_AUDIO", "1").strip().lower() not in ("0", "false", "")
 # Cible loudnorm en LUFS (-20 = discret/voix Discord, -16 = streaming standard, -14 = YouTube)
 LOUDNORM_I = int(os.getenv("LOUDNORM_I") or -20)
+# Index du salon DJ (membres peuvent proposer des pistes). 0 = désactivé.
+DJ_SLOT = int(os.getenv("DJ_SLOT") or 0) or None
+# Délai minimum entre deux propositions d'un même membre (secondes).
+DJ_COOLDOWN = int(os.getenv("DJ_COOLDOWN") or 600)
 # Nombre max de pistes importées d'une playlist d'un coup.
 PLAYLIST_LIMIT = int(os.getenv("PLAYLIST_LIMIT") or 100)
 
