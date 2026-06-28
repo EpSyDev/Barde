@@ -103,11 +103,10 @@ class VoicePlayer:
             if my_epoch != self._epoch:
                 return  # une autre lecture a pris le relais pendant l'extraction
 
-            # from_probe détecte le codec : si la source est déjà en opus,
-            # FFmpeg le copie sans ré-encoder (CPU quasi nul). Sinon il
-            # ré-encode en repli.
-            source = await discord.FFmpegOpusAudio.from_probe(
+            # Ré-encodage opus : son propre (la copie directe craque).
+            source = discord.FFmpegOpusAudio(
                 stream_url,
+                bitrate=96,
                 executable=config.FFMPEG_PATH,
                 **FFMPEG_OPTIONS,
             )
