@@ -158,15 +158,21 @@ class PanelView(discord.ui.View):
     def _embed(self):
         return build_panel_embed(self.manager, self.selected)
 
+    def _sync_select(self):
+        """Aligne l'option 'par défaut' du menu sur le salon sélectionné."""
+        for child in self.children:
+            if isinstance(child, discord.ui.Select) and child.custom_id == "panel:select":
+                for opt in child.options:
+                    opt.default = (opt.value == str(self.selected))
+
     async def _on_select(self, interaction: discord.Interaction):
         if not is_admin(interaction):
             await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
             return
         self.selected = int(interaction.data["values"][0])
         self.manager.set_panel(interaction.message, self)
-        # Pas de view= : on garde les composants tels quels (le menu conserve
-        # le choix de l'utilisateur au lieu de revenir au 1er salon).
-        await interaction.response.edit_message(embed=self._embed())
+        self._sync_select()
+        await interaction.response.edit_message(embed=self._embed(), view=self)
 
     def _make_cb(self, action):
         async def callback(interaction: discord.Interaction):
@@ -206,7 +212,8 @@ class PanelView(discord.ui.View):
                 await player.stop()
                 player.library.clear()
 
-            await interaction.response.edit_message(embed=self._embed())
+            self._sync_select()
+            await interaction.response.edit_message(embed=self._embed(), view=self)
 
         return callback
 
