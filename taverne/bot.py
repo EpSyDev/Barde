@@ -60,8 +60,8 @@ class TaverneBot(discord.Client):
 def main():
     if not config.PNJ_TOKEN:
         raise SystemExit("PNJ_TOKEN absent du .env — bot ARG non lancé.")
-    if not config.GROK_API_KEY:
-        raise SystemExit("GROK_API_KEY absente du .env — les PNJ seraient muets.")
+    if not config.GROQ_API_KEY:
+        raise SystemExit("GROQ_API_KEY absente du .env — les PNJ seraient muets.")
     db.init()
     TaverneBot().run(config.PNJ_TOKEN)
 

@@ -22,13 +22,14 @@ Chaque membre a **sa propre conversation** avec chaque PNJ (mémoire des 6 derni
 - **Activer « MESSAGE CONTENT INTENT »** (obligatoire, sinon le bot ne lit rien)
 - Inviter le bot avec les permissions : *Lire les messages*, *Gérer les webhooks*, *Envoyer des messages*
 
-### 2. Clé Grok (gratuite)
-- https://console.x.ai → API Keys → `GROK_API_KEY` dans `.env`
+### 2. Clé GROQ (gratuite — Llama, free tier)
+- https://console.groq.com → API Keys → `GROQ_API_KEY` dans `.env`
+- (GROQ ≠ Grok/xAI : c'est un fournisseur d'inférence Llama gratuit)
 
 ### 3. Variables `.env` à ajouter
 ```
 PNJ_TOKEN=...
-GROK_API_KEY=...
+GROQ_API_KEY=...
 # ID de chaque salon où vit un PNJ (clic droit salon → Copier l'identifiant) :
 PNJ_AUBERGISTE_CHANNEL=
 PNJ_PYTHIE_CHANNEL=

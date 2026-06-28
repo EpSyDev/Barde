@@ -14,10 +14,15 @@ load_dotenv()
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 PNJ_TOKEN = os.getenv("PNJ_TOKEN", "").strip()    # token du 5e bot, dédié à l'ARG
 
-# --- Grok (xAI) — compatible OpenAI ---
-GROK_API_KEY = os.getenv("GROK_API_KEY", "").strip()
-GROK_BASE_URL = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
-GROK_MODEL = os.getenv("GROK_MODEL", "grok-3-mini")
+# --- GROQ (inférence Llama, free tier) — compatible OpenAI ---
+# Clé gratuite sur https://console.groq.com . Fallback auto sur le petit modèle si quota.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODELS = [
+    m.strip() for m in os.getenv(
+        "GROQ_MODELS", "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+    ).split(",") if m.strip()
+]
 
 # Longueur max de réponse d'un PNJ (caractères) et fenêtre de contexte (messages).
 PNJ_MAX_CHARS = int(os.getenv("PNJ_MAX_CHARS") or 600)
