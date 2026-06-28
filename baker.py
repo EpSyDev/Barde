@@ -155,7 +155,7 @@ class Baker:
         normalize = config.NORMALIZE and (duration is None or duration <= 1800)
         if normalize:
             ok = await self._run_ffmpeg(src, dst, [
-                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-af", f"loudnorm=I={config.LOUDNORM_I}:TP=-1.5:LRA=11",
                 "-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2",
                 "-threads", "1",
             ])
