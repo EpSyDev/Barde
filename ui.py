@@ -1,4 +1,4 @@
-"""Panneau /panel : sélecteur de salon + boutons (ajout, lecture, file, aléatoire...)."""
+"""Panneau /panel : sélecteur de salon + boutons, embed aéré, auto-rafraîchi."""
 import logging
 
 import discord
@@ -18,54 +18,74 @@ def is_admin(interaction: discord.Interaction) -> bool:
     return False
 
 
+def _bar(pct, width=12):
+    pct = max(0, min(100, int(pct)))
+    filled = round(pct / 100 * width)
+    return "▓" * filled + "░" * (width - filled)
+
+
+def _status_line(manager, index):
+    """Ligne d'activité : téléchargement en cours, ou file d'attente."""
+    pct = manager.baker.progress.get(index)
+    if pct is not None:
+        return f"⏳ Téléchargement  `{_bar(pct)}`  {pct}%"
+    pend = manager.baker.pending(index)
+    if pend:
+        return f"⏳ En préparation… ({pend} en file)"
+    return None
+
+
 def build_panel_embed(manager, selected=None) -> discord.Embed:
     if selected is None and manager.indexes:
         selected = manager.indexes[0]
 
     embed = discord.Embed(
-        title="🎛️  Panneau des Bardes",
-        description="Sélectionne un salon, puis pilote-le avec les boutons.",
+        title="🎛️  Panneau des Bardes",
+        description="*Choisis un salon dans le menu, puis pilote-le avec les boutons.*\n​",
         color=0x5865F2,
     )
+
     for index in manager.indexes:
         p = manager.get(index)
         lib = p.library
         if p.is_playing and not p.paused:
-            etat = "▶️"
+            etat = "🟢 En lecture"
         elif p.paused:
-            etat = "⏸️"
+            etat = "🟠 En pause"
         else:
-            etat = "⏹️"
-        mode = "🔀" if lib.shuffle else "🔁"
-        pend = manager.baker.pending(index)
-        prep = f" · ⏳{pend}" if pend else ""
-        flag = " ⬅️" if index == selected else ""
-        embed.add_field(
-            name=f"{etat} {p.slot.name}{flag}",
-            value=(
-                f"<#{p.slot.channel_id}>\n"
-                f"🎵 {p.current_title or '—'}\n"
-                f"{mode} {len(lib.tracks)} piste(s){prep}"
-            ),
-            inline=True,
+            etat = "🔴 Arrêté"
+        mode = "🔀 Aléatoire" if lib.shuffle else "🔁 Boucle"
+        flag = "  ⬅️ **sélectionné**" if index == selected else ""
+
+        value = (
+            f"📺 <#{p.slot.channel_id}>\n"
+            f"🎶 **{p.current_title or '—'}**\n"
+            f"🗂️ {len(lib.tracks)} piste(s) • {mode} • {etat}"
         )
+        status = _status_line(manager, index)
+        if status:
+            value += f"\n{status}"
+        value += "\n​"   # espace en bas pour aérer
+
+        embed.add_field(name=f"🎷 Salon {index} — {p.slot.name}{flag}", value=value, inline=False)
 
     if selected:
         p = manager.get(selected)
         lines = []
         for i, t in enumerate(p.library.tracks[:12]):
-            mark = "▶️ " if t is p.current else f"`{i + 1:>2}.` "
-            live = " 🔴" if t.get("live") else ""
-            lines.append(f"{mark}{t['title'][:55]}{live}")
+            mark = "▶️ " if t is p.current else f"`{i + 1:>2}.` "
+            live = " 🔴 live" if t.get("live") else ""
+            lines.append(f"{mark}{t['title'][:58]}{live}")
         more = len(p.library.tracks) - 12
         if more > 0:
-            lines.append(f"*… +{more} autres*")
+            lines.append(f"*… et {more} autre(s)*")
         embed.add_field(
-            name=f"📋 File — {p.slot.name}",
-            value="\n".join(lines) or "*Vide — clique ➕ Ajouter*",
+            name=f"📋 File d'attente — {p.slot.name}",
+            value="\n".join(lines) or "*Vide — clique ➕ Ajouter pour lancer une musique.*",
             inline=False,
         )
-    embed.set_footer(text="Bardes · radios locales (lecture sans ré-encodage)")
+
+    embed.set_footer(text="Bardes • radios locales • lecture sans ré-encodage (≈ 0 CPU)")
     return embed
 
 
@@ -87,16 +107,10 @@ class UrlModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self.manager.baker.enqueue(self.index, self.url.value.strip())
         await interaction.followup.send(
-            "⏳ Préparation lancée — la piste rejoindra la file dès qu'elle est prête.",
+            "⏳ Préparation lancée — la progression s'affiche sur le panneau, "
+            "et la piste démarrera dès qu'elle est prête.",
             ephemeral=True,
         )
-        if self.panel_message:
-            try:
-                await self.panel_message.edit(
-                    embed=build_panel_embed(self.manager, self.index)
-                )
-            except discord.HTTPException:
-                pass
 
 
 class PanelView(discord.ui.View):
@@ -108,13 +122,14 @@ class PanelView(discord.ui.View):
 
     def _build(self):
         select = discord.ui.Select(
-            placeholder="Choisir un salon…",
+            placeholder="🎷 Choisir un salon à piloter…",
             custom_id="panel:select",
             row=0,
             options=[
                 discord.SelectOption(
                     label=f"Salon {i} · {self.manager.get(i).slot.name}"[:100],
                     value=str(i),
+                    emoji="🎶",
                     default=(i == self.selected),
                 )
                 for i in self.manager.indexes
@@ -125,23 +140,22 @@ class PanelView(discord.ui.View):
 
         actions = [
             ("➕ Ajouter", discord.ButtonStyle.success, "add", 1),
-            ("⏯️", discord.ButtonStyle.primary, "playpause", 1),
-            ("⏭️", discord.ButtonStyle.secondary, "skip", 1),
-            ("⏹️", discord.ButtonStyle.danger, "stop", 1),
+            ("⏯️ Lecture / Pause", discord.ButtonStyle.primary, "playpause", 1),
+            ("⏭️ Suivant", discord.ButtonStyle.secondary, "skip", 1),
+            ("⏹️ Stop", discord.ButtonStyle.danger, "stop", 1),
             ("🔀 Aléatoire", discord.ButtonStyle.secondary, "shuffle", 2),
-            ("📋 File", discord.ButtonStyle.secondary, "queue", 2),
+            ("📋 Voir la file", discord.ButtonStyle.secondary, "queue", 2),
             ("🗑️ Vider", discord.ButtonStyle.danger, "clear", 2),
-            ("🔄", discord.ButtonStyle.secondary, "refresh", 2),
+            ("🔄 Rafraîchir", discord.ButtonStyle.secondary, "refresh", 2),
         ]
         for label, style, action, row in actions:
             btn = discord.ui.Button(
-                label=label, style=style, row=row,
-                custom_id=f"panel:{action}",
+                label=label, style=style, row=row, custom_id=f"panel:{action}",
             )
             btn.callback = self._make_cb(action)
             self.add_item(btn)
 
-    def _refresh_embed(self):
+    def _embed(self):
         return build_panel_embed(self.manager, self.selected)
 
     async def _on_select(self, interaction: discord.Interaction):
@@ -149,7 +163,8 @@ class PanelView(discord.ui.View):
             await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
             return
         self.selected = int(interaction.data["values"][0])
-        await interaction.response.edit_message(embed=self._refresh_embed(), view=self)
+        self.manager.set_panel(interaction.message, self)
+        await interaction.response.edit_message(embed=self._embed(), view=self)
 
     def _make_cb(self, action):
         async def callback(interaction: discord.Interaction):
@@ -159,6 +174,7 @@ class PanelView(discord.ui.View):
             if self.selected is None:
                 await interaction.response.send_message("Aucun salon configuré.", ephemeral=True)
                 return
+            self.manager.set_panel(interaction.message, self)
             player = self.manager.get(self.selected)
 
             if action == "add":
@@ -188,10 +204,7 @@ class PanelView(discord.ui.View):
                 await player.stop()
                 player.library.clear()
 
-            if interaction.response.is_done():
-                await interaction.message.edit(embed=self._refresh_embed())
-            else:
-                await interaction.response.edit_message(embed=self._refresh_embed(), view=self)
+            await interaction.response.edit_message(embed=self._embed(), view=self)
 
         return callback
 
@@ -199,11 +212,11 @@ class PanelView(discord.ui.View):
         lines = []
         for i, t in enumerate(player.library.tracks):
             mark = "▶️" if t is player.current else f"{i + 1}."
-            live = " 🔴(live)" if t.get("live") else ""
+            live = " 🔴 (live)" if t.get("live") else ""
             lines.append(f"{mark} {t['title']}{live}")
         text = "\n".join(lines) or "*File vide.*"
         embed = discord.Embed(
-            title=f"📋 File — {player.slot.name}",
+            title=f"📋 File complète — {player.slot.name}",
             description=text[:4000],
             color=0x5865F2,
         )

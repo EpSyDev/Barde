@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import time
 import uuid
 
 import yt_dlp
@@ -17,10 +18,14 @@ class Baker:
     def __init__(self, manager):
         self.manager = manager
         self.queue = asyncio.Queue()
-        self._pending = {}     # index -> nb de jobs en attente/en cours
+        self._pending = {}        # index -> nb de jobs en attente/en cours
+        self.progress = {}        # index -> % de téléchargement en cours
         self._task = None
+        self._loop = None
+        self._last_refresh = 0.0
 
     def start(self):
+        self._loop = asyncio.get_running_loop()
         self._task = asyncio.create_task(self._worker())
 
     def pending(self, index):
@@ -29,6 +34,7 @@ class Baker:
     async def enqueue(self, index, url):
         self._pending[index] = self._pending.get(index, 0) + 1
         await self.queue.put((index, url))
+        await self.manager.refresh_panel()
 
     async def _worker(self):
         while True:
@@ -39,15 +45,38 @@ class Baker:
                 log.error("[slot %s] préparation échouée (%s) : %s", index, url, exc)
             finally:
                 self._pending[index] = max(0, self._pending.get(index, 0) - 1)
+                self.progress.pop(index, None)
                 self.queue.task_done()
+                await self.manager.refresh_panel()
 
-    async def _ydl(self, url, download, outtmpl=None):
+    def _hook(self, index):
+        def hook(d):
+            status = d.get("status")
+            if status == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                if total:
+                    self.progress[index] = int(d.get("downloaded_bytes", 0) * 100 / total)
+                    self._throttled_refresh()
+            elif status == "finished":
+                self.progress[index] = 100
+                self._throttled_refresh()
+        return hook
+
+    def _throttled_refresh(self):
+        now = time.monotonic()
+        if self._loop and now - self._last_refresh >= 2:
+            self._last_refresh = now
+            asyncio.run_coroutine_threadsafe(self.manager.refresh_panel(), self._loop)
+
+    async def _ydl(self, url, download, outtmpl=None, index=None):
         loop = asyncio.get_running_loop()
 
         def run():
             opts = config.ytdl_base_opts()
             if download:
                 opts["outtmpl"] = outtmpl
+                if index is not None:
+                    opts["progress_hooks"] = [self._hook(index)]
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=download)
                 if "entries" in info:
@@ -60,14 +89,15 @@ class Baker:
         lib = self.manager.libraries[index]
         info, _ = await self._ydl(url, download=False)
         title = info.get("title", "Inconnu")
+        await self.manager.refresh_panel()
 
         if info.get("is_live"):
-            # Un live ne se télécharge pas : on le jouera en streaming.
             lib.add({"title": title, "url": url, "file": None, "live": True})
         else:
             tid = uuid.uuid4().hex[:12]
             _, downloaded = await self._ydl(
-                url, download=True, outtmpl=str(lib.dir / f"{tid}.%(ext)s")
+                url, download=True,
+                outtmpl=str(lib.dir / f"{tid}.%(ext)s"), index=index,
             )
             out = str(lib.dir / f"{tid}.ogg")
             await self._remux(downloaded, out)
@@ -82,10 +112,8 @@ class Baker:
         await self.manager.players[index].notify_added()
 
     async def _remux(self, src, dst):
-        """Copie l'audio opus dans un conteneur ogg (sans ré-encoder)."""
         if await self._run_ffmpeg(src, dst, ["-c:a", "copy"]):
             return
-        # Repli : ré-encodage si la copie échoue (source non-opus).
         await self._run_ffmpeg(
             src, dst,
             ["-c:a", "libopus", "-b:a", "96k", "-ar", "48000", "-ac", "2"],

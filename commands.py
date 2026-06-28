@@ -20,10 +20,13 @@ class MusicCog(commands.Cog):
                 "⛔ Réservé aux administrateurs.", ephemeral=True
             )
             return
+        view = PanelView(self.bot.manager)
         await interaction.response.send_message(
-            embed=build_panel_embed(self.bot.manager),
-            view=PanelView(self.bot.manager),
+            embed=build_panel_embed(self.bot.manager, view.selected),
+            view=view,
         )
+        message = await interaction.original_response()
+        self.bot.manager.set_panel(message, view)
 
 
 async def setup(bot):
