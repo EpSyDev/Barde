@@ -2,10 +2,12 @@
 
 Quand un PNJ gardien émet [[SOLVED]], le moteur appelle `trigger_solve`. Selon le
 PNJ, on attribue un rôle (qui ouvre l'arc suivant via les permissions Discord) ou on
-ouvre un salon profond au seul joueur qui a réussi.
+ouvre un salon profond au seul joueur qui a réussi. Dans tous les cas, le joueur
+reçoit un message privé qui annonce sa progression (pas de spoiler dans le salon).
 """
 import logging
 import os
+from dataclasses import dataclass
 
 import discord
 
@@ -13,15 +15,42 @@ from . import config, db
 
 log = logging.getLogger("taverne.quests")
 
-# persona.key  →  action déclenchée quand le joueur résout l'épreuve.
-#   ("role",  role_id)        : attribue un rôle (débloque tout l'arc suivant)
-#   ("open",  persona_key)    : ouvre le salon de ce PNJ au seul joueur (lieu profond)
-ON_SOLVE: dict[str, tuple[str, object]] = {
-    "ermite":     ("open", "archiviste"),         # forêt → biblio interdite (perso)
-    "archiviste": ("role", config.ROLE_ARC1),     # Arc I terminé → ouvre Arc II
-    "mineur":     ("role", config.ROLE_ARC2),     # Arc II terminé → ouvre Arc III
-    "marin":      ("open", "ombre"),              # port → passage souterrain (perso)
-    "ombre":      ("role", config.ROLE_ARC3),     # Arc III terminé → ouvre la Cave
+
+@dataclass(frozen=True)
+class Outcome:
+    kind: str       # "role" (attribue un rôle) | "open" (ouvre un salon au joueur)
+    target: object  # role_id (int) si "role", persona_key (str) si "open"
+    dm: str         # message privé annonçant la progression
+
+
+# persona.key  →  ce qui se passe quand le joueur résout son épreuve.
+ON_SOLVE: dict[str, Outcome] = {
+    "ermite": Outcome(
+        "open", "archiviste",
+        "🔮 *L'Ermite hoche lentement la tête.* « Tu as percé mon énigme, voyageur. "
+        "Les portes de la **Bibliothèque interdite** te sont désormais ouvertes — "
+        "l'Archiviste t'y attend. »",
+    ),
+    "archiviste": Outcome(
+        "role", config.ROLE_ARC1,
+        "🗝️ *Le savoir t'a été confié.* Tu reçois le titre de **Disciple de la Ruse**. "
+        "L'**Arc II — la Force** s'ouvre à ta marche.",
+    ),
+    "mineur": Outcome(
+        "role", config.ROLE_ARC2,
+        "⚔️ *La roche gronde en ton honneur.* Tu deviens **Brave de la Taverne**. "
+        "L'**Arc III — l'Ombre** t'est désormais accessible.",
+    ),
+    "marin": Outcome(
+        "open", "ombre",
+        "🌊 *Le Marin Maudit baisse les yeux.* « Tu as gagné ma confiance. Le **passage "
+        "souterrain** se révèle à toi… mais prends garde à ce qui s'y terre. »",
+    ),
+    "ombre": Outcome(
+        "role", config.ROLE_ARC3,
+        "🐉 *Un frisson parcourt la taverne.* Tu deviens **Élu de l'Hydre**. "
+        "La **Cave scellée** s'ouvre enfin devant toi…",
+    ),
 }
 
 
@@ -38,46 +67,65 @@ def _channel_id_of(persona_key: str) -> int | None:
 async def trigger_solve(member: discord.Member, persona_key: str):
     """Exécute l'action de progression liée à la résolution de l'épreuve d'un PNJ."""
     db.set_flag(member.id, f"solved:{persona_key}")
-    action = ON_SOLVE.get(persona_key)
-    if action is None:
+    outcome = ON_SOLVE.get(persona_key)
+    if outcome is None:
         return
-    kind, target = action
-    if kind == "role":
-        await _grant_role(member, int(target))
-    elif kind == "open":
-        await _open_channel(member, str(target))
+
+    if outcome.kind == "role":
+        ok = await _grant_role(member, int(outcome.target))
+    elif outcome.kind == "open":
+        ok = await _open_channel(member, str(outcome.target))
+    else:
+        ok = False
+
+    if ok:
+        await _notify(member, outcome.dm)
 
 
-async def _grant_role(member: discord.Member, role_id: int):
+async def _notify(member: discord.Member, text: str):
+    """Message privé au joueur. Échoue silencieusement si ses DM sont fermés."""
+    try:
+        await member.send(text)
+    except discord.Forbidden:
+        log.warning("DM refusé par %s (DM fermés) — déblocage fait quand même.", member)
+    except discord.HTTPException as exc:
+        log.error("DM à %s : %s", member, exc)
+
+
+async def _grant_role(member: discord.Member, role_id: int) -> bool:
     role = member.guild.get_role(role_id)
     if role is None:
         log.error("Rôle %s introuvable.", role_id)
-        return
+        return False
     try:
         await member.add_roles(role, reason="Progression ARG")
         log.info("Rôle « %s » attribué à %s", role.name, member)
+        return True
     except discord.Forbidden:
         log.error("Pas la permission d'attribuer « %s » (hiérarchie ?).", role.name)
     except discord.HTTPException as exc:
         log.error("add_roles : %s", exc)
+    return False
 
 
-async def _open_channel(member: discord.Member, persona_key: str):
+async def _open_channel(member: discord.Member, persona_key: str) -> bool:
     cid = _channel_id_of(persona_key)
     if cid is None:
         log.error("Salon de « %s » non configuré — rien à ouvrir.", persona_key)
-        return
+        return False
     channel = member.guild.get_channel(cid)
     if channel is None:
         log.error("Salon %s introuvable.", cid)
-        return
+        return False
     try:
         await channel.set_permissions(
             member, view_channel=True, send_messages=True,
             reason="Progression ARG",
         )
         log.info("Salon #%s ouvert à %s", channel, member)
+        return True
     except discord.Forbidden:
         log.error("Pas la permission d'ouvrir #%s.", channel)
     except discord.HTTPException as exc:
         log.error("set_permissions : %s", exc)
+    return False
