@@ -263,7 +263,6 @@ class NotifChannelView(discord.ui.View):
         self.manager = manager
         select = discord.ui.ChannelSelect(
             placeholder="Choisir le salon de notification…",
-            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
         )
@@ -275,6 +274,13 @@ class NotifChannelView(discord.ui.View):
             await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
             return
         channel_id = int(interaction.data["values"][0])
+        channel = interaction.client.get_channel(channel_id)
+        if not hasattr(channel, "send"):
+            await interaction.response.edit_message(
+                content="⚠️ Ce salon ne peut pas recevoir de message. Choisis un salon textuel.",
+                view=self,
+            )
+            return
         self.manager.settings.set("notif_channel_id", channel_id)
         await interaction.response.edit_message(
             content=f"✅ Salon de notif réglé sur <#{channel_id}>.", view=None
