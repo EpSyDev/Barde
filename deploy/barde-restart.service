@@ -1,0 +1,6 @@
+[Unit]
+Description=Redemarrage quotidien de Barde (hygiene process 24/7)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart barde

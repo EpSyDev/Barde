@@ -263,7 +263,7 @@ class NotifChannelView(discord.ui.View):
         self.manager = manager
         select = discord.ui.ChannelSelect(
             placeholder="Choisir le salon de notification…",
-            channel_types=[discord.ChannelType.text],
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
         )

@@ -1,0 +1,10 @@
+[Unit]
+Description=Planifie le redemarrage quotidien de Barde a 5h
+
+[Timer]
+# Tous les jours a 5h du matin (UTC).
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
