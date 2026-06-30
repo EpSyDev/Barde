@@ -1,5 +1,6 @@
 """Registre des salons : players, librairies, baker."""
 from baker import Baker
+from settings import Settings
 
 
 class Slot:
@@ -16,6 +17,9 @@ class PlayerManager:
         self.baker = Baker(self)
         self.panel_message = None
         self.panel_view = None
+        self.settings = Settings()
+        self.primary_bot = None          # bot principal : poste les notifs de suggestion
+        self.suggest_cooldowns = {}      # user_id → timestamp dernière suggestion
 
     def add(self, player):
         self.players[player.slot.index] = player
@@ -42,6 +46,24 @@ class PlayerManager:
             await self.panel_message.edit(embed=build_panel_embed(self, selected))
         except Exception:  # noqa: BLE001
             pass
+
+    async def post_suggestion(self, suggester, url, origin_index) -> bool:
+        """Poste une suggestion (via le bot principal) dans le salon de notif configuré."""
+        notif_id = self.settings.get("notif_channel_id")
+        if not notif_id or self.primary_bot is None:
+            return False
+        channel = self.primary_bot.get_channel(int(notif_id))
+        if channel is None:
+            return False
+        from suggestions import NotifValidationView, build_suggestion_embed
+        try:
+            await channel.send(
+                embed=build_suggestion_embed(self, suggester, url, origin_index),
+                view=NotifValidationView(self),
+            )
+        except Exception:  # noqa: BLE001
+            return False
+        return True
 
     async def stop_all(self):
         for player in self.players.values():

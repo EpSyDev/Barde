@@ -150,6 +150,7 @@ class PanelView(discord.ui.View):
             ("🔄 Rafraîchir", discord.ButtonStyle.secondary, "refresh", 2),
             ("⏩ Position", discord.ButtonStyle.secondary, "seek", 3),
             ("📢 Publier le jukebox dans le salon", discord.ButtonStyle.success, "publish", 3),
+            ("📮 Salon de notif", discord.ButtonStyle.secondary, "notifchan", 4),
         ]
         for label, style, action, row in actions:
             btn = discord.ui.Button(
@@ -211,6 +212,19 @@ class PanelView(discord.ui.View):
                     )
                 return
 
+            if action == "notifchan":
+                cur = self.manager.settings.get("notif_channel_id")
+                txt = (
+                    f"Salon actuel : <#{cur}>" if cur
+                    else "Aucun salon de notif configuré pour l'instant."
+                )
+                await interaction.response.send_message(
+                    f"📮 {txt}\nChoisis le salon qui recevra les suggestions des membres :",
+                    view=NotifChannelView(self.manager),
+                    ephemeral=True,
+                )
+                return
+
             if action == "publish":
                 await player.publish_public()
                 await interaction.response.send_message(
@@ -240,6 +254,32 @@ class PanelView(discord.ui.View):
             await interaction.response.edit_message(embed=self._embed(), view=self)
 
         return callback
+
+class NotifChannelView(discord.ui.View):
+    """Sélecteur natif de salon pour les notifs de suggestion (éphémère)."""
+
+    def __init__(self, manager):
+        super().__init__(timeout=180)
+        self.manager = manager
+        select = discord.ui.ChannelSelect(
+            placeholder="Choisir le salon de notification…",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+        )
+        select.callback = self._on_pick
+        self.add_item(select)
+
+    async def _on_pick(self, interaction: discord.Interaction):
+        if not is_admin(interaction):
+            await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
+            return
+        channel_id = int(interaction.data["values"][0])
+        self.manager.settings.set("notif_channel_id", channel_id)
+        await interaction.response.edit_message(
+            content=f"✅ Salon de notif réglé sur <#{channel_id}>.", view=None
+        )
+
 
 class ManageView(discord.ui.View):
     """Gestion de la file d'un salon : retirer / monter / descendre une piste (éphémère)."""

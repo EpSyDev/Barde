@@ -56,6 +56,9 @@ class PrimaryBot(commands.Bot):
 
     async def setup_hook(self):
         await setup_commands(self)
+        # Vue persistante des notifs de suggestion (boutons Accepter / Refuser).
+        from suggestions import NotifValidationView
+        self.add_view(NotifValidationView(self.manager))
         try:
             if config.GUILD_ID:
                 guild = discord.Object(id=config.GUILD_ID)
@@ -133,6 +136,7 @@ async def main():
         library = Library(index)
         if position == 0:
             client = PrimaryBot(manager)   # 1er = bot panneau
+            manager.primary_bot = client   # poste les notifs de suggestion
         else:
             client = ChannelClient()
         player = VoicePlayer(client, slot, library, manager)

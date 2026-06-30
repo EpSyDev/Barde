@@ -22,6 +22,8 @@ LOUDNORM_I = int(os.getenv("LOUDNORM_I") or -20)
 DJ_SLOT = int(os.getenv("DJ_SLOT") or 0) or None
 # Délai minimum entre deux propositions d'un même membre (secondes).
 DJ_COOLDOWN = int(os.getenv("DJ_COOLDOWN") or 600)
+# Délai minimum entre deux suggestions (soumises à validation) d'un même membre.
+SUGGEST_COOLDOWN = int(os.getenv("SUGGEST_COOLDOWN") or 300)
 # Nombre max de pistes importées d'une playlist d'un coup.
 PLAYLIST_LIMIT = int(os.getenv("PLAYLIST_LIMIT") or 100)
 

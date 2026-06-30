@@ -129,6 +129,47 @@ class DjModal(discord.ui.Modal):
         )
 
 
+class SuggestModal(discord.ui.Modal):
+    """Modal de suggestion (soumise à validation admin, ouverte à tous)."""
+
+    def __init__(self, manager, index):
+        super().__init__(title="Suggérer une musique")
+        self.manager = manager
+        self.index = index
+        self.url_input = discord.ui.TextInput(
+            label="Lien de la musique (YouTube…)",
+            placeholder="https://www.youtube.com/watch?v=...",
+            required=True,
+            max_length=400,
+        )
+        self.add_item(self.url_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        now = time.time()
+        last = self.manager.suggest_cooldowns.get(interaction.user.id, 0)
+        remaining = int(config.SUGGEST_COOLDOWN - (now - last))
+        if remaining > 0:
+            m, s = divmod(remaining, 60)
+            await interaction.response.send_message(
+                f"⏳ Patiente encore **{m}min {s:02d}s** avant une nouvelle suggestion.",
+                ephemeral=True,
+            )
+            return
+        ok = await self.manager.post_suggestion(
+            interaction.user, self.url_input.value.strip(), self.index
+        )
+        if not ok:
+            await interaction.response.send_message(
+                "⚠️ Aucun salon de notification n'est configuré. Préviens un admin.",
+                ephemeral=True,
+            )
+            return
+        self.manager.suggest_cooldowns[interaction.user.id] = now
+        await interaction.response.send_message(
+            "✅ Ta suggestion a été transmise aux organisateurs. Merci !", ephemeral=True
+        )
+
+
 class PublicView(discord.ui.View):
     """Sélecteur de piste + seek, ouvert aux membres présents dans le salon vocal."""
 
@@ -172,6 +213,15 @@ class PublicView(discord.ui.View):
         )
         seek_btn.callback = self._on_seek
         self.add_item(seek_btn)
+
+        suggest_btn = discord.ui.Button(
+            label="🎵 Suggérer une muzik",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"public:{self.index}:suggest",
+            row=2,
+        )
+        suggest_btn.callback = self._on_suggest
+        self.add_item(suggest_btn)
 
         if config.DJ_SLOT and self.index == config.DJ_SLOT:
             dj_btn = discord.ui.Button(
@@ -220,3 +270,6 @@ class PublicView(discord.ui.View):
             )
             return
         await interaction.response.send_modal(DjModal(self._player()))
+
+    async def _on_suggest(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SuggestModal(self.manager, self.index))
