@@ -27,13 +27,41 @@ async def _get_webhook(channel: discord.TextChannel) -> discord.Webhook | None:
         return None
 
 
-async def speak(channel: discord.TextChannel, persona, content: str):
-    """Fait parler un PNJ dans le salon, avec son nom et son avatar."""
+async def speak_as(
+    channel: discord.TextChannel,
+    name: str,
+    avatar_url: str | None,
+    content: str,
+    *,
+    mention: "discord.abc.Snowflake | None" = None,
+) -> bool:
+    """Fait parler une voix arbitraire (nom + avatar) dans le salon, via webhook.
+
+    `mention` : si fourni, ce membre est réellement notifié (@). Sinon, aucune
+    mention n'est résolue (les `<@id>` éventuels restent inertes). Renvoie True si envoyé.
+    """
     hook = await _get_webhook(channel)
     if hook is None:
-        return
-    avatar = os.getenv(persona.avatar_env, "").strip() or None
+        return False
+    allowed = (
+        discord.AllowedMentions(everyone=False, roles=False, users=[mention])
+        if mention is not None
+        else discord.AllowedMentions.none()
+    )
     try:
-        await hook.send(content=content, username=persona.name, avatar_url=avatar)
+        await hook.send(
+            content=content,
+            username=name,
+            avatar_url=(avatar_url or None),
+            allowed_mentions=allowed,
+        )
+        return True
     except discord.HTTPException as exc:
-        log.error("Envoi webhook (%s) : %s", persona.name, exc)
+        log.error("speak_as (%s) : %s", name, exc)
+        return False
+
+
+async def speak(channel: discord.TextChannel, persona, content: str):
+    """Fait parler un PNJ dans le salon de quête, avec son nom et son avatar."""
+    avatar = os.getenv(persona.avatar_env, "").strip() or None
+    await speak_as(channel, persona.name, avatar, content)

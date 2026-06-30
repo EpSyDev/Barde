@@ -8,7 +8,7 @@ import logging
 
 import discord
 
-from . import config, db, personas
+from . import ambient, config, db, personas
 from .engine import handle_message
 
 logging.basicConfig(
@@ -32,6 +32,7 @@ class TaverneBot(discord.Client):
             max_messages=None,
         )
         self.routes: dict[int, personas.Persona] = {}
+        self.ambient = ambient.Ambient(self)
 
     async def on_ready(self):
         self.routes = personas.by_channel_id()
@@ -44,9 +45,15 @@ class TaverneBot(discord.Client):
             for cid, p in self.routes.items():
                 log.info("PNJ actif : %s ← salon %s", p.name, cid)
         log.info("Taverne connectée : %s", self.user)
+        await self.ambient.startup_check()
+        self.ambient.start()
 
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.webhook_id:
+            return
+        # Salon « coin des voyageurs » : mode ambiance (et pas de routage PNJ).
+        if config.AMBIENT_CHANNEL and message.channel.id == config.AMBIENT_CHANNEL:
+            await self.ambient.handle_message(message)
             return
         persona = self.routes.get(message.channel.id)
         if persona is None:
