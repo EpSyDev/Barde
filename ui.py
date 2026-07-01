@@ -220,7 +220,7 @@ class PanelView(discord.ui.View):
                 )
                 await interaction.response.send_message(
                     f"📮 {txt}\nChoisis le salon qui recevra les suggestions des membres :",
-                    view=NotifChannelView(self.manager),
+                    view=NotifChannelView(self.manager, interaction.guild),
                     ephemeral=True,
                 )
                 return
@@ -255,16 +255,41 @@ class PanelView(discord.ui.View):
 
         return callback
 
-class NotifChannelView(discord.ui.View):
-    """Sélecteur natif de salon pour les notifs de suggestion (éphémère)."""
+def _messageable_channels(guild):
+    """Salons où le bot peut poster, triés par catégorie puis position (menu construit à la main)."""
+    me = guild.me
+    chans = []
+    for ch in guild.channels:
+        if isinstance(ch, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel)):
+            perms = ch.permissions_for(me)
+            if perms.view_channel and perms.send_messages:
+                chans.append(ch)
+    chans.sort(key=lambda c: (
+        c.category.position if c.category else -1,
+        getattr(c, "position", 0),
+    ))
+    return chans
 
-    def __init__(self, manager):
+
+class NotifChannelView(discord.ui.View):
+    """Sélecteur de salon (construit à partir des salons réellement visibles par le bot)."""
+
+    def __init__(self, manager, guild):
         super().__init__(timeout=180)
         self.manager = manager
-        select = discord.ui.ChannelSelect(
+        chans = _messageable_channels(guild)
+        options = [
+            discord.SelectOption(
+                label=f"#{ch.name}"[:100],
+                value=str(ch.id),
+                description=(ch.category.name[:100] if ch.category else None),
+            )
+            for ch in chans[:25]
+        ]
+        select = discord.ui.Select(
             placeholder="Choisir le salon de notification…",
-            min_values=1,
-            max_values=1,
+            options=options or [discord.SelectOption(label="(aucun salon accessible)", value="-1")],
+            disabled=not options,
         )
         select.callback = self._on_pick
         self.add_item(select)
@@ -274,11 +299,10 @@ class NotifChannelView(discord.ui.View):
             await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
             return
         channel_id = int(interaction.data["values"][0])
-        channel = interaction.client.get_channel(channel_id)
-        if not hasattr(channel, "send"):
+        if channel_id < 0:
             await interaction.response.edit_message(
-                content="⚠️ Ce salon ne peut pas recevoir de message. Choisis un salon textuel.",
-                view=self,
+                content="⚠️ Aucun salon accessible. Vérifie que Barde#4266 a « Voir le salon » + « Envoyer des messages ».",
+                view=None,
             )
             return
         self.manager.settings.set("notif_channel_id", channel_id)
