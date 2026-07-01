@@ -256,7 +256,7 @@ class PanelView(discord.ui.View):
         return callback
 
 def _messageable_channels(guild):
-    """Salons où le bot peut poster, triés par catégorie puis position (menu construit à la main)."""
+    """Salons où le bot peut réellement poster (view + send)."""
     me = guild.me
     chans = []
     for ch in guild.channels:
@@ -264,47 +264,84 @@ def _messageable_channels(guild):
             perms = ch.permissions_for(me)
             if perms.view_channel and perms.send_messages:
                 chans.append(ch)
-    chans.sort(key=lambda c: (
-        c.category.position if c.category else -1,
-        getattr(c, "position", 0),
-    ))
     return chans
 
 
 class NotifChannelView(discord.ui.View):
-    """Sélecteur de salon (construit à partir des salons réellement visibles par le bot)."""
+    """Sélecteur de salon en 2 temps (catégorie → salon) pour dépasser la limite de 25."""
 
     def __init__(self, manager, guild):
         super().__init__(timeout=180)
         self.manager = manager
-        chans = _messageable_channels(guild)
-        options = [
+        self.guild = guild
+        self.selected_cat = None
+        # Regroupe les salons accessibles par catégorie (0 = sans catégorie).
+        self.groups = {}
+        for ch in _messageable_channels(guild):
+            cat = ch.category
+            key = cat.id if cat else 0
+            name = cat.name if cat else "Sans catégorie"
+            self.groups.setdefault(key, [name, []])[1].append(ch)
+        self._build()
+
+    def _cat_pos(self, cid):
+        cat = self.guild.get_channel(cid)
+        return getattr(cat, "position", 999)
+
+    def _build(self):
+        self.clear_items()
+        cats = sorted(self.groups.items(), key=lambda kv: (kv[0] == 0, self._cat_pos(kv[0])))
+        cat_options = [
             discord.SelectOption(
-                label=f"#{ch.name}"[:100],
-                value=str(ch.id),
-                description=(ch.category.name[:100] if ch.category else None),
+                label=name[:100],
+                value=str(cid),
+                description=f"{len(chs)} salon(s)",
+                default=(cid == self.selected_cat),
             )
-            for ch in chans[:25]
-        ]
-        select = discord.ui.Select(
-            placeholder="Choisir le salon de notification…",
-            options=options or [discord.SelectOption(label="(aucun salon accessible)", value="-1")],
-            disabled=not options,
+            for cid, (name, chs) in cats
+        ][:25]
+        cat_select = discord.ui.Select(
+            placeholder="1) Choisir une catégorie…",
+            options=cat_options or [discord.SelectOption(label="(aucun salon accessible)", value="-1")],
+            disabled=not cat_options,
+            row=0,
         )
-        select.callback = self._on_pick
-        self.add_item(select)
+        cat_select.callback = self._on_cat
+        self.add_item(cat_select)
+
+        if self.selected_cat is not None and self.selected_cat in self.groups:
+            chs = sorted(self.groups[self.selected_cat][1], key=lambda c: getattr(c, "position", 0))
+            ch_select = discord.ui.Select(
+                placeholder="2) Choisir le salon…",
+                options=[
+                    discord.SelectOption(label=f"#{c.name}"[:100], value=str(c.id))
+                    for c in chs[:25]
+                ],
+                row=1,
+            )
+            ch_select.callback = self._on_pick
+            self.add_item(ch_select)
+
+    async def _on_cat(self, interaction: discord.Interaction):
+        if not is_admin(interaction):
+            await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
+            return
+        val = int(interaction.data["values"][0])
+        if val < 0:
+            await interaction.response.edit_message(
+                content="⚠️ Aucun salon accessible. Vérifie que Barde#4266 a « Voir le salon » + « Envoyer des messages ».",
+                view=None,
+            )
+            return
+        self.selected_cat = val
+        self._build()
+        await interaction.response.edit_message(view=self)
 
     async def _on_pick(self, interaction: discord.Interaction):
         if not is_admin(interaction):
             await interaction.response.send_message("⛔ Réservé aux admins.", ephemeral=True)
             return
         channel_id = int(interaction.data["values"][0])
-        if channel_id < 0:
-            await interaction.response.edit_message(
-                content="⚠️ Aucun salon accessible. Vérifie que Barde#4266 a « Voir le salon » + « Envoyer des messages ».",
-                view=None,
-            )
-            return
         self.manager.settings.set("notif_channel_id", channel_id)
         await interaction.response.edit_message(
             content=f"✅ Salon de notif réglé sur <#{channel_id}>.", view=None
