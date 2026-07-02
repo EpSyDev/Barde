@@ -1,6 +1,7 @@
 """Point d'entrée : lance un bot par salon (4 connexions vocales en parallèle)."""
 import asyncio
 import logging
+import shutil
 
 import discord
 from discord.ext import commands
@@ -10,6 +11,7 @@ from commands import setup as setup_commands
 from library import Library
 from manager import PlayerManager, Slot
 from player import VoicePlayer
+from temp import PoolBot, TempManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -128,6 +130,9 @@ async def main():
         )
 
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    # Purge les fichiers des salons temporaires d'une session précédente.
+    shutil.rmtree(config.MEDIA_DIR / "temp", ignore_errors=True)
+
     manager = PlayerManager()
     runners = []
 
@@ -143,6 +148,13 @@ async def main():
         client.player = player
         manager.add(player)
         runners.append(_run_client(client, token, name))
+
+    # Bots « flottants » du pool pour les salons temporaires (TempVoice).
+    manager.temp = TempManager(manager)
+    for i, token in enumerate(config.POOL_TOKENS, start=1):
+        bot = PoolBot(manager, intents=intents, **_LIGHT)
+        manager.temp.register_bot(bot)
+        runners.append(_run_client(bot, token, f"pool-{i}"))
 
     manager.baker.start()
     asyncio.create_task(_watchdog(manager))

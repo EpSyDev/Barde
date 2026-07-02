@@ -82,3 +82,11 @@ for i in range(1, 5):
     if token and cid:
         name = os.getenv(f"CHANNEL_{i}_NAME", f"Salon {i}")
         SLOTS.append((i, token, cid, name))
+
+# --- Bots « flottants » du pool : salons temporaires (TempVoice), sans salon fixe ---
+# TOKEN_5..TOKEN_12 → chaque token = 1 salon temporaire pouvant jouer en simultané.
+POOL_TOKENS = []
+for i in range(5, 13):
+    token = os.getenv(f"TOKEN_{i}", "").strip()
+    if token:
+        POOL_TOKENS.append(token)

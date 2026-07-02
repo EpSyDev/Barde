@@ -20,6 +20,7 @@ class PlayerManager:
         self.settings = Settings()
         self.primary_bot = None          # bot principal : poste les notifs de suggestion
         self.suggest_cooldowns = {}      # user_id → timestamp dernière suggestion
+        self.temp = None                 # TempManager : salons temporaires (pool de bots)
 
     def add(self, player):
         self.players[player.slot.index] = player

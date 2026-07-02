@@ -87,6 +87,35 @@ class Baker:
             "thumb": info.get("thumbnail"),
         }
 
+    async def fetch(self, url, dest_dir):
+        """Télécharge UNE piste vers dest_dir (salons temporaires, hors système radio).
+
+        Retourne un dict track {title,url,file,live,duration,thumb} ou None si échec.
+        """
+        info, _ = await self._ydl(url, download=False)
+        meta = {
+            "title": info.get("title", "Inconnu"),
+            "url": url,
+            "duration": info.get("duration"),
+            "thumb": info.get("thumbnail"),
+        }
+        if info.get("is_live"):
+            return {**meta, "file": None, "live": True}
+        tid = uuid.uuid4().hex[:12]
+        _, downloaded = await self._ydl(
+            url, download=True, outtmpl=str(dest_dir / f"{tid}.%(ext)s"),
+        )
+        out = str(dest_dir / f"{tid}.ogg")
+        await self._process(downloaded, out, duration=info.get("duration"))
+        if downloaded and os.path.exists(downloaded) and downloaded != out:
+            try:
+                os.remove(downloaded)
+            except OSError:
+                pass
+        if not os.path.exists(out):
+            return None
+        return {**meta, "file": out, "live": False}
+
     # --- Extraction ---
     async def _list_entries(self, url):
         """Retourne la liste des vidéos (déplie une playlist, sinon 1 seule URL)."""
