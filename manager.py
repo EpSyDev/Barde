@@ -55,10 +55,14 @@ class PlayerManager:
         channel = self.primary_bot.get_channel(int(notif_id))
         if channel is None:
             return False
+        try:
+            meta = await self.baker.probe(url)
+        except Exception:  # noqa: BLE001
+            meta = None      # lien invalide/injoignable : on notifie quand même avec l'URL
         from suggestions import NotifValidationView, build_suggestion_embed
         try:
             await channel.send(
-                embed=build_suggestion_embed(self, suggester, url, origin_index),
+                embed=build_suggestion_embed(self, suggester, url, origin_index, meta),
                 view=NotifValidationView(self),
             )
         except Exception:  # noqa: BLE001

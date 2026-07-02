@@ -8,13 +8,25 @@ from ui import is_admin
 log = logging.getLogger("bot.suggestions")
 
 
-def build_suggestion_embed(manager, suggester, url, origin_index) -> discord.Embed:
+def build_suggestion_embed(manager, suggester, url, origin_index, meta=None) -> discord.Embed:
+    from public import fmt_duration
     player = manager.get(origin_index)
     name = player.slot.name if player else f"Salon {origin_index}"
+    meta = meta or {}
     embed = discord.Embed(
         title="🎵 Nouvelle suggestion musicale",
         color=0xF1C40F,
     )
+    title = meta.get("title")
+    if title:
+        live = " 🔴 live" if meta.get("live") else ""
+        embed.description = f"## {title}{live}"
+        if meta.get("duration"):
+            embed.add_field(name="Durée", value=fmt_duration(meta["duration"]), inline=True)
+        if meta.get("thumb"):
+            embed.set_thumbnail(url=meta["thumb"])
+    else:
+        embed.description = "*(titre indisponible — lien peut-être invalide)*"
     embed.add_field(name="Proposé par", value=suggester.mention, inline=True)
     embed.add_field(name="Salon d'origine", value=name, inline=True)
     embed.add_field(name="Lien", value=url, inline=False)

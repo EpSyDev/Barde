@@ -155,17 +155,18 @@ class SuggestModal(discord.ui.Modal):
                 ephemeral=True,
             )
             return
+        await interaction.response.defer(ephemeral=True, thinking=True)
         ok = await self.manager.post_suggestion(
             interaction.user, self.url_input.value.strip(), self.index
         )
         if not ok:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ Aucun salon de notification n'est configuré. Préviens un admin.",
                 ephemeral=True,
             )
             return
         self.manager.suggest_cooldowns[interaction.user.id] = now
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "✅ Ta suggestion a été transmise aux organisateurs. Merci !", ephemeral=True
         )
 

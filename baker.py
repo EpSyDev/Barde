@@ -77,6 +77,16 @@ class Baker:
             self._last_refresh = now
             asyncio.run_coroutine_threadsafe(self.manager.refresh_panel(), self._loop)
 
+    async def probe(self, url):
+        """Métadonnées légères d'une URL (titre/durée), sans téléchargement."""
+        info, _ = await self._ydl(url, download=False)
+        return {
+            "title": info.get("title"),
+            "duration": info.get("duration"),
+            "live": bool(info.get("is_live")),
+            "thumb": info.get("thumbnail"),
+        }
+
     # --- Extraction ---
     async def _list_entries(self, url):
         """Retourne la liste des vidéos (déplie une playlist, sinon 1 seule URL)."""
