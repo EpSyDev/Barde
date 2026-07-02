@@ -59,6 +59,10 @@ def ytdl_base_opts() -> dict:
         "noplaylist": True,
         "default_search": "auto",
         "source_address": "0.0.0.0",
+        # Ré-essais auto sur erreurs transitoires (403 ponctuels de YouTube, etc.).
+        "retries": 5,
+        "fragment_retries": 5,
+        "extractor_retries": 3,
         # Solveur JS (deno) pour les challenges de signature YouTube.
         "remote_components": ["ejs:github"],
         # Privilégie l'opus (copie sans ré-encodage côté lecture).
