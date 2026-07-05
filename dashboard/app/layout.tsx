@@ -16,6 +16,7 @@ const garamond = EB_Garamond({
 export const metadata: Metadata = {
   title: "La Taverne de Gaming — Régie des Bardes",
   description: "Panneau de contrôle des radios de la Taverne du Gaming.",
+  icons: { icon: "/logo1.webp", shortcut: "/logo1.webp", apple: "/logo1.webp" },
 };
 
 export default function RootLayout({

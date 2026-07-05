@@ -77,30 +77,26 @@ h3 {
 
 .sidebar-brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 6px 8px 18px;
+  gap: 6px;
+  padding: 8px 8px 20px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--panel-edge);
 }
 
-.sidebar-brand .crest {
-  font-size: 1.8rem;
-  color: var(--gold-bright);
-  text-shadow: 0 0 16px var(--ember-glow);
-}
-
-.crest-title {
-  font-family: var(--font-title), serif;
-  font-size: 1.05rem;
-  color: var(--gold-bright);
-  letter-spacing: 0.04em;
+.brand-logo {
+  width: 168px;
+  max-width: 88%;
+  height: auto;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
 }
 
 .crest-sub {
   font-size: 0.74rem;
   color: var(--parchment-dim);
   font-style: italic;
+  letter-spacing: 0.05em;
 }
 
 .nav {

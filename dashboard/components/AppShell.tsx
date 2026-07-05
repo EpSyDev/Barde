@@ -36,11 +36,9 @@ export default function AppShell({ userName }: { userName: string }) {
     <div className={`app ${open ? "menu-open" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="crest">⚜</span>
-          <div>
-            <div className="crest-title">La Taverne</div>
-            <div className="crest-sub">Panneau du bot</div>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brand-logo" src="/logo1.webp" alt="La Taverne du Gaming" />
+          <span className="crest-sub">Panneau du bot</span>
         </div>
 
         <nav className="nav">
