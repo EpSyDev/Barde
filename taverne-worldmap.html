@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>La Taverne du Gaming — Carte du Monde</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #110d06; color: #e8d5a3; font-family: 'Georgia', serif; padding: 50px 30px; }
+
+h1 { text-align: center; font-size: 2.6em; color: #c9a84c; text-shadow: 0 0 30px rgba(201,168,76,0.4); letter-spacing: 4px; margin-bottom: 8px; }
+.subtitle { text-align: center; color: #8a6a3a; font-style: italic; font-size: 1em; margin-bottom: 60px; }
+.separator { max-width: 1100px; margin: 40px auto; border: none; border-top: 1px solid #c9a84c33; }
+
+/* ── JOURNEY ── */
+.journey { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+/* Nodes */
+.node { width: 100%; border-radius: 10px; padding: 18px 26px; text-align: center; }
+.node .ico { font-size: 1.6em; display: block; margin-bottom: 6px; }
+.node .nom { font-weight: bold; letter-spacing: 1px; }
+.node .pnj { font-size: 0.78em; font-style: italic; margin-top: 5px; }
+.node .info { font-size: 0.7em; margin-top: 3px; }
+
+.node.hub { background: #2c1f0a; border: 3px solid #f0c040; }
+.node.hub .nom { color: #f0c040; font-size: 1.3em; }
+.node.hub .pnj { color: #9a7a50; }
+.node.hub .info { color: #5a4030; }
+
+.node.pythie { background: #1a1508; border: 1px dashed #c9a84c66; margin-top: 14px; }
+.node.pythie .nom { color: #c9a84c; font-size: 0.9em; }
+.node.pythie .pnj { color: #7a6030; }
+
+/* Arc blocks */
+.arc-block { width: 100%; border-radius: 12px; overflow: hidden; margin: 0; }
+.arc-header { padding: 14px 22px; text-align: center; }
+.arc-title { font-size: 1.1em; font-weight: bold; letter-spacing: 2px; }
+.arc-sub { font-size: 0.8em; font-style: italic; margin-top: 3px; opacity: 0.8; }
+
+.arc-I .arc-header  { background: #0d1a2e; border: 2px solid #4a90d9; border-bottom: none; }
+.arc-II .arc-header { background: #2e0d0d; border: 2px solid #e05050; border-bottom: none; }
+.arc-III .arc-header{ background: #1a0d2e; border: 2px solid #9b59b6; border-bottom: none; }
+.arc-I .arc-title   { color: #4a90d9; }
+.arc-II .arc-title  { color: #e05050; }
+.arc-III .arc-title { color: #9b59b6; }
+.arc-I .arc-sub     { color: #3a70b9; }
+.arc-II .arc-sub    { color: #c03030; }
+.arc-III .arc-sub   { color: #7b39a6; }
+
+.arc-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.arc-I .arc-body  { background: #080f1a; border: 2px solid #4a90d9; border-top: none; border-bottom: none; }
+.arc-II .arc-body { background: #1a0808; border: 2px solid #e05050; border-top: none; border-bottom: none; }
+.arc-III .arc-body{ background: #0d0814; border: 2px solid #9b59b6; border-top: none; border-bottom: none; }
+
+/* Location inside arc */
+.loc { border-radius: 8px; padding: 12px 16px; display: flex; gap: 14px; align-items: flex-start; }
+.arc-I .loc  { background: #0d1a2e; border-left: 3px solid #4a90d9; }
+.arc-II .loc { background: #2e0d0d; border-left: 3px solid #e05050; }
+.arc-III .loc{ background: #1a0d2e; border-left: 3px solid #9b59b6; }
+.loc-ico { font-size: 1.4em; flex-shrink: 0; }
+.loc-text { flex: 1; }
+.loc-name { font-weight: bold; font-size: 0.92em; }
+.arc-I .loc-name  { color: #4a90d9; }
+.arc-II .loc-name { color: #e05050; }
+.arc-III .loc-name{ color: #9b59b6; }
+.loc-pnj  { font-size: 0.78em; color: #8a6a3a; font-style: italic; margin-top: 3px; }
+.loc-note { font-size: 0.72em; color: #5a4a30; margin-top: 4px; line-height: 1.5; }
+.loc-note strong { color: #9a8060; }
+.loc-lock { font-size: 0.7em; color: #5a4030; margin-top: 3px; }
+
+/* Small inner arrow */
+.loc-arr { text-align: center; color: #c9a84c66; font-size: 1em; }
+
+/* Key reward */
+.key-row { text-align: center; padding: 12px; }
+.arc-I .key-row  { background: #080f1a; border: 2px solid #4a90d9; border-top: none; border-radius: 0 0 12px 12px; }
+.arc-II .key-row { background: #1a0808; border: 2px solid #e05050; border-top: none; border-radius: 0 0 12px 12px; }
+.arc-III .key-row{ background: #0d0814; border: 2px solid #9b59b6; border-top: none; border-radius: 0 0 12px 12px; }
+.key { display: inline-block; border-radius: 20px; padding: 6px 18px; font-size: 0.85em; font-weight: bold; }
+.arc-I .key  { background: #0d1a2e; color: #4a90d9; border: 1px solid #4a90d9; }
+.arc-II .key { background: #2e0d0d; color: #e05050; border: 1px solid #e05050; }
+.arc-III .key{ background: #1a0d2e; color: #9b59b6; border: 1px solid #9b59b6; }
+
+/* Gate between arcs */
+.gate { width: 100%; background: #1a1309; border: 1px solid #c9a84c33; border-radius: 8px; padding: 10px 18px; text-align: center; font-size: 0.8em; color: #6a5030; font-style: italic; }
+.gate span { color: #c9a84c; }
+
+/* Arrow connector */
+.arr { text-align: center; color: #c9a84c; font-size: 1.8em; line-height: 1.2; }
+.arr.small { font-size: 1.2em; color: #c9a84c66; }
+
+/* Cave & reward */
+.node.cave { background: #2e0a0a; border: 3px solid #e05050; }
+.node.cave .nom { color: #e05050; font-size: 1.15em; }
+.node.cave .pnj { color: #8a4040; }
+.node.cave .info { color: #5a3030; }
+
+.node.reward { background: #2c2408; border: 3px solid #f0c040; }
+.node.reward .nom { color: #f0c040; font-size: 1.15em; }
+.node.reward .pnj { color: #9a8050; }
+
+/* ── NOTE BOXES ── */
+.notes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1100px; margin: 0 auto; }
+.note-card { background: #1a1309; border: 1px solid #c9a84c22; border-radius: 10px; padding: 20px; }
+.note-card h3 { color: #c9a84c; font-size: 0.92em; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid #c9a84c22; padding-bottom: 8px; }
+.note-card ul { padding-left: 18px; }
+.note-card li { font-size: 0.83em; color: #9a8060; line-height: 1.75; }
+.note-card li strong { color: #c9a84c; }
+
+/* ── PNJ TABLE ── */
+.section { max-width: 1100px; margin: 0 auto; }
+.sec-title { color: #c9a84c; font-size: 1.4em; border-bottom: 1px solid #c9a84c33; padding-bottom: 8px; margin-bottom: 22px; letter-spacing: 2px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.87em; }
+th { background: #1e160a; color: #c9a84c; padding: 11px 14px; text-align: left; border: 1px solid #c9a84c33; }
+td { padding: 9px 14px; border: 1px solid #c9a84c1a; vertical-align: top; line-height: 1.5; }
+tr:nth-child(even) td { background: #160f06; }
+tr:nth-child(odd) td { background: #1a1309; }
+td strong { color: #c9a84c; }
+.tag { display: inline-block; font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin-left: 4px; vertical-align: middle; }
+.done { background: #0f2a0f; color: #5cba5c; border: 1px solid #5cba5c44; }
+.todo { background: #2a1a08; color: #c9a84c; border: 1px solid #c9a84c44; }
+
+footer { text-align: center; color: #4a3820; font-size: 0.8em; font-style: italic; margin-top: 70px; line-height: 2; }
+</style>
+</head>
+<body>
+
+<h1>⚔️ La Taverne du Gaming ⚔️</h1>
+<p class="subtitle">Carte du Monde &amp; Cheminement des Quêtes — Document de travail</p>
+
+<!-- JOURNEY -->
+<div class="journey">
+
+  <!-- HUB -->
+  <div class="node hub" style="width:100%;">
+    <span class="ico">🏰</span>
+    <span class="nom">LA TAVERNE DU GAMING</span>
+    <div class="pnj">L'Aubergiste · Le Héraut · Le Marchand des Mondes (2×/semaine) · L'Ombre</div>
+    <div class="info">Point de départ — Hub central — Carrefour des Mondes</div>
+  </div>
+
+  <!-- Pythie (transversal) -->
+  <div class="node pythie" style="width:100%;">
+    <span class="ico">🔮</span>
+    <span class="nom">#la-clairiere-de-la-pythie &nbsp;—&nbsp; Accès permanent</span>
+    <div class="pnj">La Pythie · Parle toujours en vers · Ses prophéties prennent sens au fil des arcs</div>
+  </div>
+
+  <div class="arr">↓</div>
+
+  <!-- ══ ARC I ══ -->
+  <div class="arc-block arc-I" style="width:100%;">
+    <div class="arc-header">
+      <div class="arc-title">🧠 ARC I — L'ÉPREUVE DE LA RUSE</div>
+      <div class="arc-sub">Énigmes · Puzzles intellectuels · Déchiffrement</div>
+    </div>
+    <div class="arc-body">
+
+      <div class="loc">
+        <span class="loc-ico">🌲</span>
+        <div class="loc-text">
+          <div class="loc-name">#la-foret-des-murmures</div>
+          <div class="loc-pnj">L'Ermite — vieille femme méfiante, parle par proverbes</div>
+          <div class="loc-note">Porte d'entrée. Elle teste la patience avant de parler.<br><strong>Mécanique :</strong> énigme textuelle, réponse collective dans le salon.</div>
+        </div>
+      </div>
+
+      <div class="loc-arr">↓</div>
+
+      <div class="loc">
+        <span class="loc-ico">📚</span>
+        <div class="loc-text">
+          <div class="loc-name">#la-bibliotheque-interdite</div>
+          <div class="loc-pnj">L'Archiviste — froid, précis, teste avant de révéler</div>
+          <div class="loc-note">🔒 Salon caché, débloqué après la forêt.<br><strong>Mécanique :</strong> puzzle en plusieurs étapes, réponse juste = fragment du lore révélé + la Clé.</div>
+          <div class="loc-lock">⚠️ Dépendance : le Marchand des Mondes détient un indice requis ici (apparaît 2×/semaine seulement)</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="key-row">
+      🗝️ <span class="key">Clé de la Ruse obtenue</span>
+    </div>
+  </div>
+
+  <div class="arr small">↓</div>
+  <div class="gate" style="width:100%;">L'Aubergiste s'adresse aux voyageurs : <span>"Vous avez prouvé votre esprit. La route se poursuit... mais elle devient plus sombre."</span></div>
+  <div class="arr small">↓</div>
+
+  <!-- ══ ARC II ══ -->
+  <div class="arc-block arc-II" style="width:100%;">
+    <div class="arc-header">
+      <div class="arc-title">💪 ARC II — L'ÉPREUVE DE LA FORCE</div>
+      <div class="arc-sub">Défis collectifs · Événements · Épreuves de groupe</div>
+    </div>
+    <div class="arc-body">
+
+      <div class="loc">
+        <span class="loc-ico">⛏️</span>
+        <div class="loc-text">
+          <div class="loc-name">#la-mine-abandonnee</div>
+          <div class="loc-pnj">Le Mineur Fou — dérangé, parfois lucide, parle à des voix</div>
+          <div class="loc-note">🔒 Débloqué par la Clé de la Ruse.<br><strong>Mécanique :</strong> il demande un fragment de connaissance appris en Arc I. Qui n'a pas fait Arc I ne peut pas répondre.<br><strong>Le lien :</strong> les arcs ne sont pas parallèles — Arc II requiert Arc I.</div>
+        </div>
+      </div>
+
+      <div class="loc-arr">↓</div>
+
+      <div class="loc">
+        <span class="loc-ico">⚔️</span>
+        <div class="loc-text">
+          <div class="loc-name">#le-champ-de-la-derniere-bataille</div>
+          <div class="loc-pnj">Le Général Fantôme — militaire, code de l'honneur, prisonnier du passé</div>
+          <div class="loc-note">🔒 Ouvert uniquement lors d'un event collectif planifié par les admins.<br><strong>Mécanique :</strong> le Général refuse de parler à moins de X membres présents simultanément. Force la communauté à se rassembler.<br><strong>Durée :</strong> cet event peut ne se déclencher que toutes les 2 semaines.</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="key-row">
+      🗝️ <span class="key">Clé de la Force obtenue</span>
+    </div>
+  </div>
+
+  <div class="arr small">↓</div>
+  <div class="gate" style="width:100%;">Le Héraut proclame : <span>"L'épreuve de la force est accomplie. Mais une dernière ombre se dresse entre vous et la cave."</span></div>
+  <div class="arr small">↓</div>
+
+  <!-- ══ ARC III ══ -->
+  <div class="arc-block arc-III" style="width:100%;">
+    <div class="arc-header">
+      <div class="arc-title">🕵️ ARC III — L'ÉPREUVE DE L'OMBRE</div>
+      <div class="arc-sub">Informations cachées · Filature · Secrets croisés</div>
+    </div>
+    <div class="arc-body">
+
+      <div class="loc">
+        <span class="loc-ico">🌊</span>
+        <div class="loc-text">
+          <div class="loc-name">#le-port-brumeux</div>
+          <div class="loc-pnj">Le Marin Maudit — traumatisé, parle par fragments, méfiant</div>
+          <div class="loc-note">🔒 Débloqué par la Clé de la Force.<br><strong>Mécanique :</strong> il possède une moitié d'un message. L'autre moitié était cachée en Arc I. Les membres doivent retrouver ce fragment dans leurs notes.<br><strong>Le lien :</strong> croise Arc I et Arc III — qui n'a pas tout lu est bloqué.</div>
+        </div>
+      </div>
+
+      <div class="loc-arr">↓</div>
+
+      <div class="loc">
+        <span class="loc-ico">🕳️</span>
+        <div class="loc-text">
+          <div class="loc-name">#le-passage-souterrain</div>
+          <div class="loc-pnj">L'Ombre — jamais vu, répond jamais directement</div>
+          <div class="loc-note">🔒 Dernier salon avant la cave. Salon texte sans images, sans couleur.<br><strong>Mécanique :</strong> L'Ombre pose une seule question. La réponse se trouve dans les 3 arcs combinés. Un seul essai par membre.<br><strong>Atmosphère :</strong> le salon s'auto-supprime au bout de 48h si personne ne répond correctement.</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="key-row">
+      🗝️ <span class="key">Clé de l'Ombre obtenue</span>
+    </div>
+  </div>
+
+  <div class="arr small">↓</div>
+  <div class="gate" style="width:100%;"><span>🗝️ × 3</span> — Les trois clés réunies. La cave peut s'ouvrir.</div>
+  <div class="arr">↓</div>
+
+  <!-- CAVE -->
+  <div class="node cave" style="width:100%;">
+    <span class="ico">🐉</span>
+    <span class="nom">LA CAVE DE L'HYDRE</span>
+    <div class="pnj">L'Hydre à 3 Têtes · Boss final collectif · Accessible uniquement aux 3 clés réunies</div>
+    <div class="info">Chaque tête correspond à une épreuve traversée. Les vaincre toutes = la récompense.</div>
+  </div>
+
+  <div class="arr">↓</div>
+
+  <!-- REWARD -->
+  <div class="node reward" style="width:100%;">
+    <span class="ico">🏆</span>
+    <span class="nom">LA RÉCOMPENSE</span>
+    <div class="pnj">Rôle "Champion de la Taverne" · Salon #la-salle-des-champions · Fragment de lore — l'origine de la taverne révélée</div>
+  </div>
+
+</div><!-- /journey -->
+
+<hr class="separator">
+
+<!-- MECANIQUE DUREE -->
+<div class="section">
+  <div class="sec-title">⏳ MÉCANIQUES QUI FONT DURER</div>
+  <div class="notes-grid">
+    <div class="note-card">
+      <h3>🔒 PORTES TEMPORELLES</h3>
+      <ul>
+        <li>Le <strong>Marchand des Mondes</strong> n'apparaît que 2×/semaine — bloquer un indice clé sur lui</li>
+        <li>Le <strong>Champ de Bataille</strong> ne s'ouvre que lors d'un event planifié (toutes les 2 semaines max)</li>
+        <li>L'<strong>Ombre</strong> dans le Passage Souterrain disparaît après 48h si pas de réponse — recommencer</li>
+        <li>La <strong>Pythie</strong> ne répond que 3× par semaine, puis elle "dort"</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h3>👥 PORTES COLLECTIVES</h3>
+      <ul>
+        <li>Le <strong>Général Fantôme</strong> exige X membres présents simultanément — impossible solo</li>
+        <li>Certaines énigmes nécessitent des <strong>rôles différents</strong> pour être complètes (ex : un membre de chaque Terre d'Origine)</li>
+        <li>La <strong>Clé de l'Ombre</strong> ne peut être forgée qu'à plusieurs — chaque membre apporte un fragment</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h3>🔗 DÉPENDANCES CROISÉES</h3>
+      <ul>
+        <li>Arc II est <strong>verrouillé</strong> sans la Clé de la Ruse</li>
+        <li>Arc III est <strong>verrouillé</strong> sans la Clé de la Force</li>
+        <li>Le Port Brumeux requiert un <strong>fragment trouvé en Arc I</strong> — les membres qui ont sauté doivent revenir</li>
+        <li>La question finale de l'Ombre ne peut être répondue qu'avec <strong>les 3 arcs combinés</strong></li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h3>🎭 AMBIANCE PERMANENTE</h3>
+      <ul>
+        <li>La <strong>Pythie</strong> poste des prophéties cryptiques — certaines concernent des événements futurs, d'autres sont des leurres</li>
+        <li>L'<strong>Ombre</strong> glisse des rumeurs anonymes dans la taverne — indices ou pièges</li>
+        <li>L'<strong>Aubergiste</strong> réagit à la progression collective — ses phrases changent selon l'avancement</li>
+        <li>Des <strong>messages cachés</strong> dans les descriptions de salons, images, noms de canaux</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<hr class="separator">
+
+<!-- PNJ TABLE -->
+<div class="section">
+  <div class="sec-title">📜 LES PERSONNAGES (PNJ)</div>
+  <table>
+    <tr><th>Personnage</th><th>Lieu</th><th>Arc</th><th>Personnalité IA (Grok)</th><th>Statut</th></tr>
+    <tr><td><strong>L'Aubergiste</strong></td><td>La Taverne</td><td>Transversal</td><td>Sage, bienveillant, sait tout, ne dit jamais tout. Ses mots changent selon l'avancement.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>Le Héraut</strong></td><td>La Taverne</td><td>Transversal</td><td>Solennel, épique. Lance les quêtes et annonce les gates franchis.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>Le Marchand des Mondes</strong></td><td>La Taverne (2×/sem)</td><td>Arc I (clé)</td><td>Mystérieux, marchande les secrets. Détient un indice bloquant pour l'Archiviste.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>L'Ombre</strong></td><td>Taverne + Passage</td><td>Arc III (final)</td><td>Jamais visible. Répond par des questions. Pose la question ultime dans le Passage.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>La Pythie</strong></td><td>La Clairière</td><td>Transversal</td><td>Parle uniquement en vers. Effrayante. 3 réponses/semaine max.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>L'Ermite</strong></td><td>Forêt des Murmures</td><td>Arc I — Entrée</td><td>Méfiante, parle par proverbes. Teste la patience avant d'ouvrir le chemin.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>L'Archiviste</strong></td><td>Bibliothèque Interdite</td><td>Arc I — Final</td><td>Froid, précis. Exige la connaissance et l'indice du Marchand avant de céder la Clé.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>Le Mineur Fou</strong></td><td>Mine Abandonnée</td><td>Arc II — Entrée</td><td>Dérangé, parfois lucide. Pose une question dont la réponse vient d'Arc I.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>Le Général Fantôme</strong></td><td>Champ de Bataille</td><td>Arc II — Final</td><td>Militaire, honneur. N'apparaît que si X membres sont là. Event collectif obligatoire.</td><td><span class="tag todo">À coder</span></td></tr>
+    <tr><td><strong>Le Marin Maudit</strong></td><td>Port Brumeux</td><td>Arc III — Entrée</td><td>Traumatisé, parle par fragments. Sa moitié de message croise un fragment d'Arc I.</td><td><span class="tag todo">À coder</span></td></tr>
+  </table>
+</div>
+
+<hr class="separator">
+
+<!-- LORE CARDS -->
+<div class="section">
+  <div class="sec-title">🖊️ LORE — POSÉ / À DÉFINIR</div>
+  <div class="notes-grid">
+    <div class="note-card">
+      <h3>✅ POSÉ</h3>
+      <ul>
+        <li>La Taverne du Gaming = carrefour des mondes, territoire neutre</li>
+        <li>4 musiciens (Barde, Ménestrel, Troubadour, Conteur) jouent dans 4 salles</li>
+        <li>Les jeux = les <strong>Terres d'Origine</strong> des membres</li>
+        <li>Ton <strong>épique</strong></li>
+        <li>Progression <strong>linéaire et chaînée</strong> — Arc I → II → III → Cave</li>
+        <li>L'Hydre à 3 têtes dans la cave, gardienne de la récompense</li>
+        <li>Récompense : rôle Champion + salon exclusif + révélation de lore</li>
+        <li>Mécaniques de durée : temps, collectif, dépendances croisées</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h3>❓ À DÉFINIR</h3>
+      <ul>
+        <li><strong>L'origine de la taverne</strong> — qui l'a construite ? pourquoi ici ?</li>
+        <li><strong>Le secret révélé</strong> après la cave — quelle vérité cachée ?</li>
+        <li><strong>Les Terres d'Origine</strong> — nommer chaque royaume selon vos jeux</li>
+        <li><strong>L'histoire de l'Hydre</strong> — d'où vient-elle ? qui l'a enfermée ?</li>
+        <li><strong>Les énigmes précises</strong> de chaque étape (texte des puzzles)</li>
+        <li><strong>Le fragment croisé</strong> Arc I / Arc III — quelle information relie les deux ?</li>
+        <li><strong>La suite</strong> après la cave — second arc ? nouveau mystère ?</li>
+        <li><strong>X membres requis</strong> pour le Général Fantôme — quel seuil ?</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>La Taverne du Gaming — Document de travail interne</p>
+  <p>Le chemin est long. C'est voulu.</p>
+</footer>
+
+</body>
+</html>
