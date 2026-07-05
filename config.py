@@ -27,6 +27,12 @@ SUGGEST_COOLDOWN = int(os.getenv("SUGGEST_COOLDOWN") or 300)
 # Nombre max de pistes importées d'une playlist d'un coup.
 PLAYLIST_LIMIT = int(os.getenv("PLAYLIST_LIMIT") or 100)
 
+# --- API du dashboard web ---
+# Token partagé avec le frontend Vercel (envoyé côté serveur). Vide = API désactivée.
+WEB_API_TOKEN = os.getenv("WEB_API_TOKEN", "").strip()
+WEB_API_HOST = os.getenv("WEB_API_HOST", "127.0.0.1").strip()
+WEB_API_PORT = int(os.getenv("WEB_API_PORT") or 8080)
+
 
 def _resolve_ffmpeg() -> str:
     """Trouve FFmpeg : variable d'env > PATH système > binaire pip embarqué."""

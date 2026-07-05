@@ -158,6 +158,10 @@ async def main():
 
     manager.baker.start()
     asyncio.create_task(_watchdog(manager))
+
+    from webapi import start_web
+    await start_web(manager)
+
     await asyncio.gather(*runners)
 
 
