@@ -19,10 +19,14 @@ from ..registry import Module, register
 
 log = logging.getLogger("fripouille.welcome")
 
+# Image de fond du dashboard, réutilisée par défaut dans l'embed d'accueil.
+BACKGROUND_URL = "https://taverne-ten.vercel.app/Taverniers.webp"
+
 DEFAULTS = {
     "enabled": False,
     "channel_id": None,
     "message": "Bienvenue à {mention} à la Taverne ! 🍻 Faites-lui bon accueil !",
+    "image_url": BACKGROUND_URL,
 }
 
 
@@ -45,11 +49,19 @@ async def on_arrival(bot, member: discord.Member):
         log.warning("welcome : salon %s introuvable", cfg["channel_id"])
         return
     text = _format(cfg.get("message"), member).strip()
-    if not text:
+    image = (cfg.get("image_url") or "").strip()
+    embed = None
+    if image:
+        # Le ping reste dans le contenu (les mentions dans un embed ne notifient pas) ;
+        # l'embed ne porte que le visuel, à taille d'embed standard.
+        embed = discord.Embed(color=0xC9A44A)
+        embed.set_image(url=image)
+    if not text and embed is None:
         return
     try:
         await channel.send(
-            text,
+            content=text or None,
+            embed=embed,
             allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
         )
     except discord.Forbidden:

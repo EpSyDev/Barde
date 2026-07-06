@@ -5,7 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
 type AutoroleCfg = { enabled: boolean; role_id: string | null };
-type WelcomeCfg = { enabled: boolean; channel_id: string | null; message: string };
+type WelcomeCfg = {
+  enabled: boolean;
+  channel_id: string | null;
+  message: string;
+  image_url: string;
+};
 
 export default function Community() {
   const [roles, setRoles] = useState<Role[] | null>(null);
@@ -40,6 +45,7 @@ export default function Community() {
           enabled: !!wData.enabled,
           channel_id: wData.channel_id != null ? String(wData.channel_id) : null,
           message: wData.message || "",
+          image_url: wData.image_url || "",
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -179,6 +185,33 @@ export default function Community() {
           </p>
         </div>
 
+        <div className="cfg-field">
+          <label htmlFor="wimg">Image de l'embed (URL)</label>
+          <input
+            id="wimg"
+            type="text"
+            value={welcome.image_url}
+            onChange={(e) => setWelcome({ ...welcome, image_url: e.target.value })}
+            placeholder="https://…"
+          />
+          <p className="cfg-hint">
+            Par défaut le fond de la Taverne. Laisse vide pour n'envoyer que le texte.
+          </p>
+          {welcome.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={welcome.image_url}
+              alt=""
+              style={{
+                marginTop: 8,
+                maxWidth: "100%",
+                borderRadius: 8,
+                border: "1px solid var(--panel-edge)",
+              }}
+            />
+          )}
+        </div>
+
         <div className="cfg-actions">
           <button
             className="btn primary"
@@ -187,6 +220,7 @@ export default function Community() {
                 enabled: welcome.enabled,
                 channel_id: welcome.channel_id,
                 message: welcome.message,
+                image_url: welcome.image_url,
               })
             }
             disabled={busy === "welcome" || (welcome.enabled && !welcome.channel_id)}
