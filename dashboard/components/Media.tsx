@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
-type Item = { name: string; url: string; size: number };
+import { BUILTIN_MEDIA, type MediaItem } from "@/lib/media";
 
 export default function Media() {
-  const [items, setItems] = useState<Item[] | null>(null);
+  const [items, setItems] = useState<MediaItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -49,6 +48,7 @@ export default function Media() {
 
   const remove = useCallback(
     async (name: string) => {
+      if (!window.confirm("Supprimer définitivement cette image ?")) return;
       try {
         await fetch("/api/fripouille/media/delete", {
           method: "POST",
@@ -99,18 +99,17 @@ export default function Media() {
         {error && <span className="cfg-err" style={{ marginLeft: 12 }}>{error}</span>}
       </section>
 
-      {items.length === 0 ? (
-        <div className="empty-state">Aucune image pour l'instant.</div>
-      ) : (
-        <div className="media-grid">
-          {items.map((it) => (
-            <div className="media-item" key={it.name}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={it.url} alt="" />
-              <div className="media-actions">
-                <button className="btn" onClick={() => copy(it.url)}>
-                  {copied === it.url ? "✓ Copié" : "Copier l'URL"}
-                </button>
+      <div className="media-grid">
+        {[...BUILTIN_MEDIA, ...items].map((it) => (
+          <div className="media-item" key={it.url}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={it.url} alt="" />
+            {it.builtin && <span className="media-badge">intégrée</span>}
+            <div className="media-actions">
+              <button className="btn" onClick={() => copy(it.url)}>
+                {copied === it.url ? "✓ Copié" : "Copier l'URL"}
+              </button>
+              {!it.builtin && (
                 <button
                   className="btn icon danger"
                   title="Supprimer"
@@ -118,11 +117,11 @@ export default function Media() {
                 >
                   ✕
                 </button>
-              </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

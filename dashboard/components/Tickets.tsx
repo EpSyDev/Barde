@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import MediaPicker from "@/components/MediaPicker";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
@@ -22,6 +23,7 @@ type TicketsCfg = {
   log_channel_id: string | null;
   panel_title: string;
   panel_description: string;
+  panel_image: string;
   button_label: string;
   open_message: string;
   ping_staff: boolean;
@@ -73,6 +75,7 @@ export default function Tickets() {
           log_channel_id: d.log_channel_id != null ? String(d.log_channel_id) : null,
           panel_title: d.panel_title || "",
           panel_description: d.panel_description || "",
+          panel_image: d.panel_image || "",
           button_label: d.button_label || "",
           open_message: d.open_message || "",
           ping_staff: d.ping_staff !== false,
@@ -265,6 +268,11 @@ export default function Tickets() {
             value={cfg.panel_description}
             onChange={(e) => set({ panel_description: e.target.value })}
           />
+        </div>
+
+        <div className="cfg-field">
+          <label>Image du panneau</label>
+          <MediaPicker value={cfg.panel_image} onChange={(v) => set({ panel_image: v })} />
         </div>
 
         <div className="cfg-field">

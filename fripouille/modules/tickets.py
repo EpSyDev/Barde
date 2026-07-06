@@ -38,6 +38,7 @@ DEFAULTS = {
     "log_channel_id": None,       # salon d'archive (transcripts)
     "panel_title": "Besoin d'aide ?",
     "panel_description": "Clique ci-dessous pour ouvrir un ticket. Le staff te répondra ici, en privé.",
+    "panel_image": "",            # grande image de l'embed du panneau (optionnelle)
     "button_label": "Ouvrir un ticket",
     "open_message": "Bonjour {mention} ! Décris ta demande en détail, le staff arrive. 🛎️",
     "ping_staff": True,
@@ -374,6 +375,8 @@ async def apply(bot, cfg):
         description=cfg.get("panel_description") or "",
         color=0xC9A44A,
     )
+    if (cfg.get("panel_image") or "").strip():
+        embed.set_image(url=cfg["panel_image"].strip())
     view = PanelView(bot)
     msg = None
     mid = cfg.get("message_id")

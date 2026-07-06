@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-type Item = { name: string; url: string; size: number };
+import { BUILTIN_MEDIA, type MediaItem } from "@/lib/media";
 
 // Champ d'URL d'image + bouton ouvrant la bibliothèque média pour choisir sans
 // copier-coller. Réutilisé dans les éditeurs d'embed (Messages, Accueil, Départ).
@@ -16,16 +15,18 @@ export default function MediaPicker({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<Item[] | null>(null);
+  const [uploaded, setUploaded] = useState<MediaItem[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || items) return;
+    if (!open || uploaded) return;
     fetch("/api/fripouille/media", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => setItems(d.media || []))
-      .catch(() => setItems([]));
-  }, [open, items]);
+      .then((d) => setUploaded(d.media || []))
+      .catch(() => setUploaded([]));
+  }, [open, uploaded]);
+
+  const items = uploaded ? [...BUILTIN_MEDIA, ...uploaded] : null;
 
   useEffect(() => {
     if (!open) return;
