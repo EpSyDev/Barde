@@ -62,7 +62,9 @@ async def on_arrival(bot, member: discord.Member):
         await channel.send(
             content=text or None,
             embed=embed,
-            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            # Autorise les mentions présentes dans le message : membre (<@id>),
+            # rôle (<@&id>) et @everyone/@here. Ne ping que ce qui est réellement écrit.
+            allowed_mentions=discord.AllowedMentions(users=True, roles=True, everyone=True),
         )
     except discord.Forbidden:
         log.error("welcome : envoi refusé dans #%s", getattr(channel, "name", cfg["channel_id"]))

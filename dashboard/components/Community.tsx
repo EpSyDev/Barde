@@ -182,6 +182,8 @@ export default function Community() {
             Variables : <code>{"{mention}"}</code> ping le membre, <code>{"{name}"}</code>{" "}
             son pseudo, <code>{"{server}"}</code> le serveur, <code>{"{count}"}</code> le
             nombre de membres.
+            <br />
+            Pinguer un rôle : <code>{"<@&ID_DU_RÔLE>"}</code> · tous : <code>@everyone</code>.
           </p>
         </div>
 
