@@ -16,6 +16,7 @@ type Slot = {
   playing: boolean;
   paused: boolean;
   shuffle: boolean;
+  pos: number;
   position: number;
   current: Track | null;
   queue: Track[];
@@ -73,13 +74,34 @@ export default function Dashboard() {
     [load]
   );
 
+  const removeTrack = useCallback(
+    async (index: number, n: number) => {
+      const key = `${index}:rm:${n}`;
+      setBusy((b) => ({ ...b, [key]: true }));
+      try {
+        await fetch(`/api/slot/${index}/track/${n}/remove`, { method: "POST" });
+        await load();
+      } finally {
+        setBusy((b) => ({ ...b, [key]: false }));
+      }
+    },
+    [load]
+  );
+
   if (error && !slots) return <div className="empty-state">{error}</div>;
   if (!slots) return <div className="empty-state">Les bardes accordent leurs luths…</div>;
 
   return (
     <div className="grid">
       {slots.map((s) => (
-        <SlotCard key={s.index} slot={s} act={act} busy={busy} fmt={fmt} />
+        <SlotCard
+          key={s.index}
+          slot={s}
+          act={act}
+          removeTrack={removeTrack}
+          busy={busy}
+          fmt={fmt}
+        />
       ))}
     </div>
   );
@@ -88,11 +110,13 @@ export default function Dashboard() {
 function SlotCard({
   slot,
   act,
+  removeTrack,
   busy,
   fmt,
 }: {
   slot: Slot;
   act: (i: number, a: string, b?: object) => void;
+  removeTrack: (i: number, n: number) => void;
   busy: Record<string, boolean>;
   fmt: (s: number | null | undefined) => string;
 }) {
@@ -230,6 +254,28 @@ function SlotCard({
           </span>
         )}
       </div>
+
+      {slot.queue.length > 0 && (
+        <ul className="queue-list">
+          {slot.queue.map((t, i) => (
+            <li key={i} className={i === slot.pos ? "playing" : ""}>
+              <span className="q-idx">{i === slot.pos ? "▶" : i + 1}</span>
+              <span className="q-title" title={t.title || ""}>
+                {t.title || "—"}
+              </span>
+              <span className="q-dur">{t.live ? "🔴" : fmt(t.duration)}</span>
+              <button
+                className="q-del"
+                title="Retirer de la file"
+                disabled={isBusy(`rm:${i}`)}
+                onClick={() => removeTrack(slot.index, i)}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

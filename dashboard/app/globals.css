@@ -527,6 +527,89 @@ h3 {
   color: var(--ember);
 }
 
+/* --- Liste des pistes (file) avec suppression --- */
+.queue-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.queue-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.queue-list li + li {
+  margin-top: 2px;
+}
+
+.queue-list li:hover {
+  background: rgba(61, 42, 19, 0.35);
+}
+
+.queue-list li.playing {
+  background: rgba(217, 112, 47, 0.14);
+}
+
+.queue-list .q-idx {
+  width: 22px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--parchment-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-list li.playing .q-idx {
+  color: var(--ember);
+}
+
+.queue-list .q-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--parchment);
+}
+
+.queue-list .q-dur {
+  flex-shrink: 0;
+  color: var(--parchment-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-list .q-del {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--parchment-dim);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.queue-list .q-del:hover:not(:disabled) {
+  color: #e79b86;
+  border-color: var(--red);
+}
+
+.queue-list .q-del:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* --- Login --- */
 .login-wrap {
   min-height: 100vh;

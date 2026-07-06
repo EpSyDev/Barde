@@ -72,12 +72,22 @@ def build_panel_embed(manager, selected=None) -> discord.Embed:
 
     if selected:
         p = manager.get(selected)
+        tracks = p.library.tracks
         lines = []
-        for i, t in enumerate(p.library.tracks[:12]):
+        for i, t in enumerate(tracks):
             mark = "▶️ " if t is p.current else f"`{i + 1:>2}.` "
             live = " 🔴 live" if t.get("live") else ""
             lines.append(f"{mark}{t['title'][:58]}{live}")
-        more = len(p.library.tracks) - 12
+        # Affiche autant de pistes que la limite d'un champ Discord l'autorise
+        # (1024 car.) ; le reste renvoie au dashboard pour la file entière.
+        kept, used = [], 0
+        for line in lines:
+            used += len(line) + 1
+            if used > 950:
+                break
+            kept.append(line)
+        more = len(lines) - len(kept)
+        lines = kept
         if more > 0:
             lines.append(f"*… et {more} autre(s)*")
         embed.add_field(
