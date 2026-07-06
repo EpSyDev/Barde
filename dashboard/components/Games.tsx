@@ -4,14 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
-type Category = { id: string; name: string };
-type Game = {
-  id: string;
-  label: string;
-  emoji: string;
-  role_id: string | null;
-  category_id: string | null;
-};
+type Game = { id: string; label: string; role_id: string | null };
 type JeuxCfg = {
   enabled: boolean;
   channel_id: string | null;
@@ -23,15 +16,12 @@ type JeuxCfg = {
 const newGame = (): Game => ({
   id: (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8),
   label: "",
-  emoji: "",
   role_id: null,
-  category_id: null,
 });
 
 export default function Games() {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [categories, setCategories] = useState<Category[] | null>(null);
   const [cfg, setCfg] = useState<JeuxCfg | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -40,20 +30,17 @@ export default function Games() {
   useEffect(() => {
     (async () => {
       try {
-        const [rRes, chRes, catRes, cRes] = await Promise.all([
+        const [rRes, chRes, cRes] = await Promise.all([
           fetch("/api/fripouille/roles", { cache: "no-store" }),
           fetch("/api/fripouille/channels", { cache: "no-store" }),
-          fetch("/api/fripouille/categories", { cache: "no-store" }),
           fetch("/api/fripouille/config/jeux", { cache: "no-store" }),
         ]);
-        if (!rRes.ok || !chRes.ok || !catRes.ok || !cRes.ok) throw new Error();
+        if (!rRes.ok || !chRes.ok || !cRes.ok) throw new Error();
         const rData = await rRes.json();
         const chData = await chRes.json();
-        const catData = await catRes.json();
         const cData = await cRes.json();
         setRoles(rData.roles || []);
         setChannels(chData.channels || []);
-        setCategories(catData.categories || []);
         setCfg({
           enabled: !!cData.enabled,
           channel_id: cData.channel_id != null ? String(cData.channel_id) : null,
@@ -62,9 +49,7 @@ export default function Games() {
           games: (cData.games || []).map((g: Partial<Game>) => ({
             id: g.id || newGame().id,
             label: g.label || "",
-            emoji: g.emoji || "",
             role_id: g.role_id != null ? String(g.role_id) : null,
-            category_id: g.category_id != null ? String(g.category_id) : null,
           })),
         });
       } catch {
@@ -89,9 +74,7 @@ export default function Games() {
         .map((g) => ({
           id: g.id,
           label: g.label.trim(),
-          emoji: g.emoji.trim(),
           role_id: g.role_id,
-          category_id: g.category_id,
         }));
       const res = await fetch("/api/fripouille/config/jeux", {
         method: "POST",
@@ -115,7 +98,7 @@ export default function Games() {
   }, [cfg]);
 
   if (error && !cfg) return <div className="empty-state">{error}</div>;
-  if (!cfg || !roles || !channels || !categories)
+  if (!cfg || !roles || !channels)
     return <div className="empty-state">Chargement de la config…</div>;
 
   const canSave =
@@ -188,14 +171,6 @@ export default function Games() {
             {cfg.games.map((g) => (
               <div className="game-row" key={g.id}>
                 <input
-                  className="game-emoji"
-                  type="text"
-                  value={g.emoji}
-                  onChange={(e) => patchGame(g.id, { emoji: e.target.value })}
-                  placeholder="🎯"
-                  aria-label="Emoji"
-                />
-                <input
                   className="game-label"
                   type="text"
                   value={g.label}
@@ -213,19 +188,6 @@ export default function Games() {
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="game-cat"
-                  value={g.category_id ?? ""}
-                  onChange={(e) => patchGame(g.id, { category_id: e.target.value || null })}
-                  aria-label="Catégorie"
-                >
-                  <option value="">— Catégorie —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
                     </option>
                   ))}
                 </select>
@@ -258,10 +220,9 @@ export default function Games() {
         </div>
 
         <p className="cfg-hint">
-          Si tu lies une <strong>catégorie</strong> à un jeu, le bot la rend privée
-          (@everyone perd « Voir les salons ») et l'ouvre au rôle du jeu — tu n'as rien à
-          régler à la main. Sans catégorie, seul le rôle est attribué. Le rôle de La
-          Fripouille doit rester au-dessus des rôles-jeux.
+          Chaque jeu attribue son rôle au membre qui le choisit. La visibilité de la
+          catégorie du jeu se règle côté Discord (donner « Voir les salons » au rôle). Le
+          rôle de La Fripouille doit rester au-dessus des rôles-jeux.
         </p>
       </section>
     </div>
