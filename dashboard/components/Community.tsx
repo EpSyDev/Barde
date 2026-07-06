@@ -11,12 +11,19 @@ type WelcomeCfg = {
   message: string;
   image_url: string;
 };
+type FarewellCfg = {
+  enabled: boolean;
+  channel_id: string | null;
+  message: string;
+  image_url: string;
+};
 
 export default function Community() {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [channels, setChannels] = useState<Channel[] | null>(null);
   const [auto, setAuto] = useState<AutoroleCfg | null>(null);
   const [welcome, setWelcome] = useState<WelcomeCfg | null>(null);
+  const [farewell, setFarewell] = useState<FarewellCfg | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [okCard, setOkCard] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,17 +31,19 @@ export default function Community() {
   useEffect(() => {
     (async () => {
       try {
-        const [rRes, chRes, aRes, wRes] = await Promise.all([
+        const [rRes, chRes, aRes, wRes, fRes] = await Promise.all([
           fetch("/api/fripouille/roles", { cache: "no-store" }),
           fetch("/api/fripouille/channels", { cache: "no-store" }),
           fetch("/api/fripouille/config/autorole", { cache: "no-store" }),
           fetch("/api/fripouille/config/welcome", { cache: "no-store" }),
+          fetch("/api/fripouille/config/farewell", { cache: "no-store" }),
         ]);
-        if (!rRes.ok || !chRes.ok || !aRes.ok || !wRes.ok) throw new Error();
+        if (!rRes.ok || !chRes.ok || !aRes.ok || !wRes.ok || !fRes.ok) throw new Error();
         const rData = await rRes.json();
         const chData = await chRes.json();
         const aData = await aRes.json();
         const wData = await wRes.json();
+        const fData = await fRes.json();
         setRoles(rData.roles || []);
         setChannels(chData.channels || []);
         setAuto({
@@ -46,6 +55,12 @@ export default function Community() {
           channel_id: wData.channel_id != null ? String(wData.channel_id) : null,
           message: wData.message || "",
           image_url: wData.image_url || "",
+        });
+        setFarewell({
+          enabled: !!fData.enabled,
+          channel_id: fData.channel_id != null ? String(fData.channel_id) : null,
+          message: fData.message || "",
+          image_url: fData.image_url || "",
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -74,7 +89,7 @@ export default function Community() {
   }, []);
 
   if (error && !auto) return <div className="empty-state">{error}</div>;
-  if (!auto || !welcome || !roles || !channels)
+  if (!auto || !welcome || !farewell || !roles || !channels)
     return <div className="empty-state">Chargement de la config…</div>;
 
   const hex = (c: number) =>
@@ -230,6 +245,100 @@ export default function Community() {
             {busy === "welcome" ? "Enregistrement…" : "Enregistrer"}
           </button>
           {okCard === "welcome" && <span className="cfg-ok">✓ Enregistré</span>}
+          {error && <span className="cfg-err">{error}</span>}
+        </div>
+      </section>
+
+      {/* --- Message de départ --- */}
+      <section className="cfg-card">
+        <div className="cfg-card-head">
+          <h2>🚪 Message de départ</h2>
+          <p>Annonce quand un membre quitte le serveur.</p>
+        </div>
+
+        <label className="cfg-toggle">
+          <input
+            type="checkbox"
+            checked={farewell.enabled}
+            onChange={(e) => setFarewell({ ...farewell, enabled: e.target.checked })}
+          />
+          <span className="switch" />
+          <span>Activer l'annonce de départ</span>
+        </label>
+
+        <div className="cfg-field">
+          <label htmlFor="fchan">Salon de l'annonce</label>
+          <select
+            id="fchan"
+            value={farewell.channel_id ?? ""}
+            onChange={(e) => setFarewell({ ...farewell, channel_id: e.target.value || null })}
+          >
+            <option value="">— Choisir un salon —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+                {c.category ? ` (${c.category})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="cfg-field">
+          <label htmlFor="fmsg">Message</label>
+          <textarea
+            id="fmsg"
+            rows={2}
+            value={farewell.message}
+            onChange={(e) => setFarewell({ ...farewell, message: e.target.value })}
+            placeholder="{name} a quitté la Taverne. 👋"
+          />
+          <p className="cfg-hint">
+            Variables : <code>{"{name}"}</code> son pseudo, <code>{"{server}"}</code> le
+            serveur, <code>{"{count}"}</code> le nombre de membres. (Le membre étant parti,
+            il n'est pas pingué.)
+          </p>
+        </div>
+
+        <div className="cfg-field">
+          <label htmlFor="fimg">Image de l'embed (URL)</label>
+          <input
+            id="fimg"
+            type="text"
+            value={farewell.image_url}
+            onChange={(e) => setFarewell({ ...farewell, image_url: e.target.value })}
+            placeholder="https://… (vide = texte seul)"
+          />
+          {farewell.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={farewell.image_url}
+              alt=""
+              style={{
+                marginTop: 8,
+                maxWidth: "100%",
+                borderRadius: 8,
+                border: "1px solid var(--panel-edge)",
+              }}
+            />
+          )}
+        </div>
+
+        <div className="cfg-actions">
+          <button
+            className="btn primary"
+            onClick={() =>
+              saveModule("farewell", {
+                enabled: farewell.enabled,
+                channel_id: farewell.channel_id,
+                message: farewell.message,
+                image_url: farewell.image_url,
+              })
+            }
+            disabled={busy === "farewell" || (farewell.enabled && !farewell.channel_id)}
+          >
+            {busy === "farewell" ? "Enregistrement…" : "Enregistrer"}
+          </button>
+          {okCard === "farewell" && <span className="cfg-ok">✓ Enregistré</span>}
           {error && <span className="cfg-err">{error}</span>}
         </div>
       </section>

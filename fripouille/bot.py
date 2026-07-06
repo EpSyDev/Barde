@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, jeux, messages, welcome
+from .modules import autorole, farewell, jeux, messages, welcome
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -68,6 +68,11 @@ class FripouilleBot(discord.Client):
             return
         if before.pending and not after.pending:
             await self._on_arrival(after)
+
+    async def on_member_remove(self, member: discord.Member):
+        if config.GUILD_ID and member.guild.id != config.GUILD_ID:
+            return
+        await farewell.on_leave(self, member)
 
 
 def main():
