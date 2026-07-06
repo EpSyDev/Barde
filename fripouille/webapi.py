@@ -11,6 +11,9 @@ Routes génériques (le cœur du « moule répétable ») :
 - ``POST /api/config/{module}``  → fusionne, persiste, puis appelle ``apply()`` à chaud
 """
 import logging
+import re
+import uuid
+from pathlib import Path
 
 from aiohttp import web
 
@@ -18,11 +21,23 @@ from . import config, registry
 
 log = logging.getLogger("fripouille.webapi")
 
+# --- Média (images des embeds) ---
+_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_MAX_MEDIA = 8 * 1024 * 1024        # 8 Mo par image
+_NAME_RE = re.compile(r"^[a-f0-9]{32}\.(png|jpg|jpeg|gif|webp)$")
+
+
+def _media_url(name):
+    base = config.PUBLIC_BASE_URL
+    return f"{base}/media/{name}" if base else f"/media/{name}"
+
 
 @web.middleware
 async def _auth(request, handler):
     if request.method == "OPTIONS":            # préflight CORS
         return _cors(web.Response(status=204))
+    if request.path.startswith("/media/"):     # fichiers publics (chargés par Discord)
+        return await handler(request)
     token = request.headers.get("X-Api-Token", "")
     if not config.API_TOKEN or token != config.API_TOKEN:
         return _cors(web.json_response({"error": "unauthorized"}, status=401))
@@ -156,8 +171,57 @@ async def run_action(request):
     return web.json_response(result or {"ok": True})
 
 
+async def media_list(request):
+    config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    items = []
+    for p in sorted(config.MEDIA_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if p.is_file():
+            items.append({"name": p.name, "url": _media_url(p.name), "size": p.stat().st_size})
+    return web.json_response({"media": items})
+
+
+async def media_upload(request):
+    reader = await request.multipart()
+    field = await reader.next()
+    while field is not None and field.name != "file":
+        field = await reader.next()
+    if field is None:
+        raise web.HTTPBadRequest(reason="fichier manquant")
+    ext = Path(field.filename or "").suffix.lower()
+    if ext not in _ALLOWED_EXT:
+        raise web.HTTPBadRequest(reason="format non supporté (png, jpg, gif, webp)")
+
+    config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{uuid.uuid4().hex}{ext}"
+    dest = config.MEDIA_DIR / name
+    size = 0
+    try:
+        with dest.open("wb") as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > _MAX_MEDIA:
+                    raise web.HTTPBadRequest(reason="fichier trop lourd (max 8 Mo)")
+                f.write(chunk)
+    except web.HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+    return web.json_response({"name": name, "url": _media_url(name)})
+
+
+async def media_delete(request):
+    data = await request.json()
+    name = str(data.get("name") or "")
+    if not _NAME_RE.match(name):
+        raise web.HTTPBadRequest(reason="nom invalide")
+    (config.MEDIA_DIR / name).unlink(missing_ok=True)
+    return web.json_response({"ok": True})
+
+
 def build_app(bot):
-    app = web.Application(middlewares=[_auth])
+    app = web.Application(middlewares=[_auth], client_max_size=_MAX_MEDIA + 1024 * 1024)
     app["bot"] = bot
     app.add_routes([
         web.get("/api/health", health),
@@ -168,7 +232,12 @@ def build_app(bot):
         web.get("/api/config/{module}", get_config),
         web.post("/api/config/{module}", set_config),
         web.post("/api/action/{module}/{action}", run_action),
+        web.get("/api/media", media_list),
+        web.post("/api/media/upload", media_upload),
+        web.post("/api/media/delete", media_delete),
     ])
+    config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    app.router.add_static("/media/", str(config.MEDIA_DIR))
     return app
 
 

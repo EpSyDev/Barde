@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).parent.parent          # racine du projet Bot Music
 DATA_DIR = Path(__file__).parent / "data"        # config JSON + état (git-ignoré)
 CONFIG_PATH = DATA_DIR / "config.json"
+MEDIA_DIR = DATA_DIR / "media"                   # images uploadées (servies via le Funnel)
 
 load_dotenv(BASE_DIR / ".env")
 load_dotenv()
@@ -22,3 +23,7 @@ TOKEN = os.getenv("FRIPOUILLE_TOKEN", "").strip()   # token du bot dédié « La
 API_TOKEN = (os.getenv("FRIPOUILLE_API_TOKEN") or os.getenv("WEB_API_TOKEN", "")).strip()
 API_HOST = os.getenv("FRIPOUILLE_API_HOST", "127.0.0.1").strip()
 API_PORT = int(os.getenv("FRIPOUILLE_API_PORT") or 8081)
+
+# Base publique (Funnel Tailscale) pour servir les images des embeds. Doit être
+# joignable par Discord. Défaut = le Funnel du bot musique sur le port 8443 → 8081.
+PUBLIC_BASE_URL = os.getenv("FRIPOUILLE_PUBLIC_BASE", "https://barde.tail2985e8.ts.net:8443").rstrip("/")

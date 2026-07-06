@@ -1211,6 +1211,48 @@ h3 {
   color: #e79b86;
 }
 
+/* --- Bibliothèque média --- */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.media-item {
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.media-item img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  display: block;
+  background: var(--wood-light);
+}
+
+.media-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  align-items: center;
+}
+
+.media-actions .btn {
+  flex: 1;
+  justify-content: center;
+  font-size: 0.78rem;
+  padding: 6px 8px;
+}
+
+.media-actions .btn.icon {
+  flex: 0 0 auto;
+}
+
 .cfg-hint {
   margin-top: 8px;
   font-size: 0.78rem;
