@@ -106,7 +106,6 @@ export default function Community() {
               id="role"
               value={auto.role_id ?? ""}
               onChange={(e) => setAuto({ ...auto, role_id: e.target.value || null })}
-              disabled={!auto.enabled}
             >
               <option value="">— Choisir un rôle —</option>
               {roles.map((r) => (
@@ -153,7 +152,6 @@ export default function Community() {
             id="wchan"
             value={welcome.channel_id ?? ""}
             onChange={(e) => setWelcome({ ...welcome, channel_id: e.target.value || null })}
-            disabled={!welcome.enabled}
           >
             <option value="">— Choisir un salon —</option>
             {channels.map((c) => (
@@ -172,7 +170,6 @@ export default function Community() {
             rows={3}
             value={welcome.message}
             onChange={(e) => setWelcome({ ...welcome, message: e.target.value })}
-            disabled={!welcome.enabled}
             placeholder="Bienvenue à {mention} à la Taverne ! 🍻"
           />
           <p className="cfg-hint">
