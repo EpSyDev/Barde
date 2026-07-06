@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole
+from .modules import autorole, jeux
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -45,6 +45,7 @@ class FripouilleBot(discord.Client):
     async def on_ready(self):
         log.info("La Fripouille connectée : %s", self.user)
         log.info("Modules chargés : %s", ", ".join(registry.all_modules()) or "aucun")
+        await jeux.setup_persistent(self)
 
     async def on_member_join(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:

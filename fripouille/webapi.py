@@ -68,6 +68,23 @@ async def guild_roles(request):
     return web.json_response({"roles": roles})
 
 
+async def guild_channels(request):
+    """Salons texte du serveur (pour choisir où poster un menu)."""
+    bot = request.app["bot"]
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        return web.json_response({"channels": []})
+    chans = [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "category": c.category.name if c.category else None,
+        }
+        for c in sorted(guild.text_channels, key=lambda c: (c.position,))
+    ]
+    return web.json_response({"channels": chans})
+
+
 async def list_config(request):
     bot = request.app["bot"]
     return web.json_response({
@@ -110,6 +127,7 @@ def build_app(bot):
     app.add_routes([
         web.get("/api/health", health),
         web.get("/api/guild/roles", guild_roles),
+        web.get("/api/guild/channels", guild_channels),
         web.get("/api/config", list_config),
         web.get("/api/config/{module}", get_config),
         web.post("/api/config/{module}", set_config),

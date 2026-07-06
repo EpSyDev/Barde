@@ -3,3 +3,4 @@
 Ajouter un module = créer son fichier ici puis l'importer dans cette liste.
 """
 from . import autorole  # noqa: F401
+from . import jeux  # noqa: F401

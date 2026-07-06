@@ -736,6 +736,78 @@ h3 {
   cursor: not-allowed;
 }
 
+.cfg-field input[type="text"],
+.cfg-field textarea {
+  width: 100%;
+  font-family: var(--font-body), serif;
+  font-size: 0.9rem;
+  color: var(--parchment);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.cfg-field input[type="text"]:focus,
+.cfg-field textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.cfg-grid.wide {
+  grid-template-columns: minmax(0, 640px);
+}
+
+/* --- Éditeur de jeux --- */
+.game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.game-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.game-row .game-emoji {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.game-row .game-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-row .game-role {
+  width: 40%;
+  flex-shrink: 0;
+}
+
+.btn.icon.danger {
+  border-color: var(--panel-edge);
+  color: var(--parchment-dim);
+}
+
+.btn.icon.danger:hover {
+  border-color: var(--red);
+  color: #e79b86;
+}
+
+@media (max-width: 560px) {
+  .game-row {
+    flex-wrap: wrap;
+  }
+  .game-row .game-role {
+    width: 100%;
+  }
+}
+
 .cfg-hint {
   margin-top: 8px;
   font-size: 0.78rem;
