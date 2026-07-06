@@ -20,9 +20,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("fripouille")
 
-# Server Members requis (arrivées + attribution de rôles). Pas de cache membres en
-# mémoire : l'événement fournit le Member et l'ajout de rôle n'a pas besoin du cache
-# → empreinte RAM minimale (seul le cache de présence grossirait, non utilisé ici).
+# Server Members requis (arrivées + attribution de rôles). Cache membres limité à
+# `joined` : indispensable pour détecter la transition pending→validé de l'écran de
+# règles (on_member_update a besoin de l'état précédent). Borné aux membres qui
+# rejoignent pendant que le bot tourne — pas de chunk du serveur entier au démarrage.
 intents = discord.Intents.none()
 intents.guilds = True
 intents.members = True
@@ -33,7 +34,7 @@ class FripouilleBot(discord.Client):
         super().__init__(
             intents=intents,
             chunk_guilds_at_startup=False,
-            member_cache_flags=discord.MemberCacheFlags.none(),
+            member_cache_flags=discord.MemberCacheFlags(joined=True, voice=False),
             max_messages=None,
         )
         self.store = ConfigStore()
@@ -49,6 +50,11 @@ class FripouilleBot(discord.Client):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
         await autorole.on_member_join(self, member)
+
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if config.GUILD_ID and after.guild.id != config.GUILD_ID:
+            return
+        await autorole.on_member_update(self, before, after)
 
 
 def main():
