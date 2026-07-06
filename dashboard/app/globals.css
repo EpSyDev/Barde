@@ -716,6 +716,7 @@ h3 {
 .cfg-field select {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   font-family: var(--font-body), serif;
   font-size: 0.9rem;
   color: var(--parchment);
@@ -724,6 +725,12 @@ h3 {
   border-radius: 8px;
   padding: 9px 10px;
   cursor: pointer;
+}
+
+/* Menu déroulant seul dans un champ (salon, etc.) : occupe toute la largeur
+   au lieu de s'étirer sur son option la plus longue et déborder de l'encart. */
+.cfg-field > select {
+  width: 100%;
 }
 
 .cfg-field select:focus {
