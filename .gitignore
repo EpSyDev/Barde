@@ -7,8 +7,8 @@ taverne.db-wal
 taverne.db-shm
 fripouille/data/
 
-# Audio pré-téléchargé (radios)
-media/
+# Audio pré-téléchargé (radios) — uniquement le dossier à la racine
+/media/
 
 # Python
 __pycache__/
