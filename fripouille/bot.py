@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, jeux, messages
+from .modules import autorole, jeux, messages, welcome
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -48,15 +48,26 @@ class FripouilleBot(discord.Client):
         log.info("Modules chargés : %s", ", ".join(registry.all_modules()) or "aucun")
         await jeux.setup_persistent(self)
 
+    async def _on_arrival(self, member: discord.Member):
+        # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
+        await autorole.on_arrival(self, member)
+        await welcome.on_arrival(self, member)
+
     async def on_member_join(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
-        await autorole.on_member_join(self, member)
+        # Écran de règles (Membership Screening) : on attend la validation, gérée
+        # par on_member_update. Sans écran, member.pending est False → arrivée directe.
+        if member.pending:
+            log.info("%s en attente de validation des règles", member)
+            return
+        await self._on_arrival(member)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if config.GUILD_ID and after.guild.id != config.GUILD_ID:
             return
-        await autorole.on_member_update(self, before, after)
+        if before.pending and not after.pending:
+            await self._on_arrival(after)
 
 
 def main():

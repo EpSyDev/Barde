@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+// Vignette fixe de tous les embeds (imposée aussi côté bot).
+const LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp";
+
 type Channel = { id: string; name: string; category: string | null };
 type Embed = {
   title: string;
@@ -123,26 +126,16 @@ function MessageEditor({
             placeholder="Corps de l'embed (les retours à la ligne sont conservés)"
           />
         </div>
-        <div className="field-2col">
-          <div className="cfg-field">
-            <label>Image (URL)</label>
-            <input
-              type="text"
-              value={embed.image_url}
-              onChange={(e) => onEmbed({ image_url: e.target.value })}
-              placeholder="https://…"
-            />
-          </div>
-          <div className="cfg-field">
-            <label>Vignette (URL)</label>
-            <input
-              type="text"
-              value={embed.thumbnail_url}
-              onChange={(e) => onEmbed({ thumbnail_url: e.target.value })}
-              placeholder="https://…"
-            />
-          </div>
+        <div className="cfg-field">
+          <label>Image (URL)</label>
+          <input
+            type="text"
+            value={embed.image_url}
+            onChange={(e) => onEmbed({ image_url: e.target.value })}
+            placeholder="https://…"
+          />
         </div>
+        <p className="cfg-hint">La vignette (logo de la Taverne) est ajoutée automatiquement.</p>
         <div className="cfg-field">
           <label>Pied de page</label>
           <input
@@ -158,8 +151,7 @@ function MessageEditor({
 }
 
 function MessagePreview({ content, embed }: { content: string; embed: Embed }) {
-  const hasEmbed =
-    embed.title || embed.description || embed.image_url || embed.thumbnail_url || embed.footer;
+  const hasEmbed = embed.title || embed.description || embed.image_url || embed.footer;
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
@@ -173,10 +165,8 @@ function MessagePreview({ content, embed }: { content: string; embed: Embed }) {
                 <div className="preview-embed-desc">{embed.description}</div>
               )}
             </div>
-            {embed.thumbnail_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className="preview-embed-thumb" src={embed.thumbnail_url} alt="" />
-            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="preview-embed-thumb" src={LOGO_URL} alt="" />
           </div>
           {embed.image_url && (
             // eslint-disable-next-line @next/next/no-img-element

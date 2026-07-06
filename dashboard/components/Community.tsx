@@ -3,29 +3,43 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Role = { id: string; name: string; color: number };
+type Channel = { id: string; name: string; category: string | null };
 type AutoroleCfg = { enabled: boolean; role_id: string | null };
+type WelcomeCfg = { enabled: boolean; channel_id: string | null; message: string };
 
 export default function Community() {
   const [roles, setRoles] = useState<Role[] | null>(null);
-  const [cfg, setCfg] = useState<AutoroleCfg | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [channels, setChannels] = useState<Channel[] | null>(null);
+  const [auto, setAuto] = useState<AutoroleCfg | null>(null);
+  const [welcome, setWelcome] = useState<WelcomeCfg | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [okCard, setOkCard] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [rRes, cRes] = await Promise.all([
+        const [rRes, chRes, aRes, wRes] = await Promise.all([
           fetch("/api/fripouille/roles", { cache: "no-store" }),
+          fetch("/api/fripouille/channels", { cache: "no-store" }),
           fetch("/api/fripouille/config/autorole", { cache: "no-store" }),
+          fetch("/api/fripouille/config/welcome", { cache: "no-store" }),
         ]);
-        if (!rRes.ok || !cRes.ok) throw new Error();
+        if (!rRes.ok || !chRes.ok || !aRes.ok || !wRes.ok) throw new Error();
         const rData = await rRes.json();
-        const cData = await cRes.json();
+        const chData = await chRes.json();
+        const aData = await aRes.json();
+        const wData = await wRes.json();
         setRoles(rData.roles || []);
-        setCfg({
-          enabled: !!cData.enabled,
-          role_id: cData.role_id != null ? String(cData.role_id) : null,
+        setChannels(chData.channels || []);
+        setAuto({
+          enabled: !!aData.enabled,
+          role_id: aData.role_id != null ? String(aData.role_id) : null,
+        });
+        setWelcome({
+          enabled: !!wData.enabled,
+          channel_id: wData.channel_id != null ? String(wData.channel_id) : null,
+          message: wData.message || "",
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -33,35 +47,36 @@ export default function Community() {
     })();
   }, []);
 
-  const save = useCallback(async () => {
-    if (!cfg) return;
-    setSaving(true);
-    setSaved(false);
+  const saveModule = useCallback(async (module: string, body: object) => {
+    setBusy(module);
+    setOkCard(null);
     setError(null);
     try {
-      const res = await fetch("/api/fripouille/config/autorole", {
+      const res = await fetch(`/api/fripouille/config/${module}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: cfg.enabled, role_id: cfg.role_id }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      setOkCard(module);
+      setTimeout(() => setOkCard((c) => (c === module ? null : c)), 2500);
     } catch {
       setError("Échec de l'enregistrement.");
     } finally {
-      setSaving(false);
+      setBusy(null);
     }
-  }, [cfg]);
+  }, []);
 
-  if (error && !cfg) return <div className="empty-state">{error}</div>;
-  if (!cfg || !roles) return <div className="empty-state">Chargement de la config…</div>;
+  if (error && !auto) return <div className="empty-state">{error}</div>;
+  if (!auto || !welcome || !roles || !channels)
+    return <div className="empty-state">Chargement de la config…</div>;
 
   const hex = (c: number) =>
     c ? `#${c.toString(16).padStart(6, "0")}` : "var(--parchment-dim)";
 
   return (
     <div className="cfg-grid">
+      {/* --- Rôle d'arrivée --- */}
       <section className="cfg-card">
         <div className="cfg-card-head">
           <h2>🚪 Rôle d'arrivée</h2>
@@ -71,8 +86,8 @@ export default function Community() {
         <label className="cfg-toggle">
           <input
             type="checkbox"
-            checked={cfg.enabled}
-            onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+            checked={auto.enabled}
+            onChange={(e) => setAuto({ ...auto, enabled: e.target.checked })}
           />
           <span className="switch" />
           <span>Activer l'attribution automatique</span>
@@ -81,21 +96,17 @@ export default function Community() {
         <div className="cfg-field">
           <label htmlFor="role">Rôle à attribuer</label>
           <div className="select-wrap">
-            {cfg.role_id && (
+            {auto.role_id && (
               <span
                 className="role-swatch"
-                style={{
-                  background: hex(
-                    roles.find((r) => r.id === cfg.role_id)?.color ?? 0
-                  ),
-                }}
+                style={{ background: hex(roles.find((r) => r.id === auto.role_id)?.color ?? 0) }}
               />
             )}
             <select
               id="role"
-              value={cfg.role_id ?? ""}
-              onChange={(e) => setCfg({ ...cfg, role_id: e.target.value || null })}
-              disabled={!cfg.enabled}
+              value={auto.role_id ?? ""}
+              onChange={(e) => setAuto({ ...auto, role_id: e.target.value || null })}
+              disabled={!auto.enabled}
             >
               <option value="">— Choisir un rôle —</option>
               {roles.map((r) => (
@@ -105,22 +116,87 @@ export default function Community() {
               ))}
             </select>
           </div>
-          {roles.length === 0 && (
-            <p className="cfg-hint">
-              Aucun rôle attribuable trouvé (le bot voit-il bien le serveur ?).
-            </p>
-          )}
         </div>
 
         <div className="cfg-actions">
           <button
             className="btn primary"
-            onClick={save}
-            disabled={saving || (cfg.enabled && !cfg.role_id)}
+            onClick={() => saveModule("autorole", { enabled: auto.enabled, role_id: auto.role_id })}
+            disabled={busy === "autorole" || (auto.enabled && !auto.role_id)}
           >
-            {saving ? "Enregistrement…" : "Enregistrer"}
+            {busy === "autorole" ? "Enregistrement…" : "Enregistrer"}
           </button>
-          {saved && <span className="cfg-ok">✓ Enregistré</span>}
+          {okCard === "autorole" && <span className="cfg-ok">✓ Enregistré</span>}
+        </div>
+      </section>
+
+      {/* --- Message d'accueil --- */}
+      <section className="cfg-card">
+        <div className="cfg-card-head">
+          <h2>👋 Message d'accueil</h2>
+          <p>Annonce l'arrivée d'un nouveau membre pour que la communauté l'accueille.</p>
+        </div>
+
+        <label className="cfg-toggle">
+          <input
+            type="checkbox"
+            checked={welcome.enabled}
+            onChange={(e) => setWelcome({ ...welcome, enabled: e.target.checked })}
+          />
+          <span className="switch" />
+          <span>Activer l'annonce d'arrivée</span>
+        </label>
+
+        <div className="cfg-field">
+          <label htmlFor="wchan">Salon de l'annonce</label>
+          <select
+            id="wchan"
+            value={welcome.channel_id ?? ""}
+            onChange={(e) => setWelcome({ ...welcome, channel_id: e.target.value || null })}
+            disabled={!welcome.enabled}
+          >
+            <option value="">— Choisir un salon —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+                {c.category ? ` (${c.category})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="cfg-field">
+          <label htmlFor="wmsg">Message</label>
+          <textarea
+            id="wmsg"
+            rows={3}
+            value={welcome.message}
+            onChange={(e) => setWelcome({ ...welcome, message: e.target.value })}
+            disabled={!welcome.enabled}
+            placeholder="Bienvenue à {mention} à la Taverne ! 🍻"
+          />
+          <p className="cfg-hint">
+            Variables : <code>{"{mention}"}</code> ping le membre, <code>{"{name}"}</code>{" "}
+            son pseudo, <code>{"{server}"}</code> le serveur, <code>{"{count}"}</code> le
+            nombre de membres.
+          </p>
+        </div>
+
+        <div className="cfg-actions">
+          <button
+            className="btn primary"
+            onClick={() =>
+              saveModule("welcome", {
+                enabled: welcome.enabled,
+                channel_id: welcome.channel_id,
+                message: welcome.message,
+              })
+            }
+            disabled={busy === "welcome" || (welcome.enabled && !welcome.channel_id)}
+          >
+            {busy === "welcome" ? "Enregistrement…" : "Enregistrer"}
+          </button>
+          {okCard === "welcome" && <span className="cfg-ok">✓ Enregistré</span>}
           {error && <span className="cfg-err">{error}</span>}
         </div>
       </section>

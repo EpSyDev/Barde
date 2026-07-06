@@ -23,6 +23,9 @@ log = logging.getLogger("fripouille.messages")
 
 DEFAULTS = {"recurring": []}
 
+# Vignette fixe de tous les embeds (logo de la Taverne).
+LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp"
+
 UNIT_SECONDS = {
     "minutes": 60,
     "hours": 3600,
@@ -52,7 +55,7 @@ def _build_message(data):
     e = data.get("embed") or {}
     has_embed = any(
         (e.get(k) or "").strip()
-        for k in ("title", "description", "image_url", "thumbnail_url", "footer")
+        for k in ("title", "description", "image_url", "footer")
     )
     embed = None
     if has_embed:
@@ -63,8 +66,8 @@ def _build_message(data):
         )
         if (e.get("image_url") or "").strip():
             embed.set_image(url=e["image_url"].strip())
-        if (e.get("thumbnail_url") or "").strip():
-            embed.set_thumbnail(url=e["thumbnail_url"].strip())
+        # Vignette fixe (logo Taverne) sur tous les embeds.
+        embed.set_thumbnail(url=LOGO_URL)
         if (e.get("footer") or "").strip():
             embed.set_footer(text=e["footer"].strip())
     return content, embed

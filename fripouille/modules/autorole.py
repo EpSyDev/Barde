@@ -43,18 +43,7 @@ async def _grant(bot, member: discord.Member):
         )
 
 
-async def on_member_join(bot, member: discord.Member):
-    # Serveur avec écran de règles (Membership Screening) : le membre arrive
-    # « en attente » (pending). On n'attribue qu'une fois les règles validées,
-    # via on_member_update — sinon le rôle ne « prend » pas. Sans écran de règles,
-    # member.pending est False et on attribue tout de suite.
-    if member.pending:
-        log.info("autorole : %s en attente de validation des règles", member)
-        return
+async def on_arrival(bot, member: discord.Member):
+    """Attribue le rôle d'arrivée (appelé une fois le membre réellement arrivé —
+    la gestion de l'écran de règles est faite en amont dans bot.py)."""
     await _grant(bot, member)
-
-
-async def on_member_update(bot, before: discord.Member, after: discord.Member):
-    # Transition pending → validé : le membre vient de passer l'écran de règles.
-    if before.pending and not after.pending:
-        await _grant(bot, after)

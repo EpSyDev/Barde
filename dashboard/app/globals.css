@@ -1037,6 +1037,16 @@ h3 {
   font-style: italic;
 }
 
+.cfg-hint code {
+  font-family: ui-monospace, monospace;
+  font-style: normal;
+  font-size: 0.72rem;
+  color: var(--gold);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 .cfg-actions {
   display: flex;
   align-items: center;
