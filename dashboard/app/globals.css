@@ -587,11 +587,13 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+.queue-list .q-move,
 .queue-list .q-del {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
   line-height: 1;
+  font-size: 0.7rem;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -600,13 +602,19 @@ h3 {
   transition: color 0.12s ease, border-color 0.12s ease;
 }
 
+.queue-list .q-move:hover:not(:disabled) {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+
 .queue-list .q-del:hover:not(:disabled) {
   color: #e79b86;
   border-color: var(--red);
 }
 
+.queue-list .q-move:disabled,
 .queue-list .q-del:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 

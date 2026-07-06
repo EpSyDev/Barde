@@ -88,6 +88,24 @@ export default function Dashboard() {
     [load]
   );
 
+  const moveTrack = useCallback(
+    async (index: number, n: number, dir: "up" | "down") => {
+      const key = `${index}:mv:${n}`;
+      setBusy((b) => ({ ...b, [key]: true }));
+      try {
+        await fetch(`/api/slot/${index}/track/${n}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dir }),
+        });
+        await load();
+      } finally {
+        setBusy((b) => ({ ...b, [key]: false }));
+      }
+    },
+    [load]
+  );
+
   if (error && !slots) return <div className="empty-state">{error}</div>;
   if (!slots) return <div className="empty-state">Les bardes accordent leurs luths…</div>;
 
@@ -99,6 +117,7 @@ export default function Dashboard() {
           slot={s}
           act={act}
           removeTrack={removeTrack}
+          moveTrack={moveTrack}
           busy={busy}
           fmt={fmt}
         />
@@ -111,12 +130,14 @@ function SlotCard({
   slot,
   act,
   removeTrack,
+  moveTrack,
   busy,
   fmt,
 }: {
   slot: Slot;
   act: (i: number, a: string, b?: object) => void;
   removeTrack: (i: number, n: number) => void;
+  moveTrack: (i: number, n: number, dir: "up" | "down") => void;
   busy: Record<string, boolean>;
   fmt: (s: number | null | undefined) => string;
 }) {
@@ -264,6 +285,22 @@ function SlotCard({
                 {t.title || "—"}
               </span>
               <span className="q-dur">{t.live ? "🔴" : fmt(t.duration)}</span>
+              <button
+                className="q-move"
+                title="Monter"
+                disabled={i === 0 || isBusy(`mv:${i}`)}
+                onClick={() => moveTrack(slot.index, i, "up")}
+              >
+                ▲
+              </button>
+              <button
+                className="q-move"
+                title="Descendre"
+                disabled={i === slot.queue.length - 1 || isBusy(`mv:${i}`)}
+                onClick={() => moveTrack(slot.index, i, "down")}
+              >
+                ▼
+              </button>
               <button
                 className="q-del"
                 title="Retirer de la file"

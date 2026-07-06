@@ -135,6 +135,21 @@ async def remove_track(request):
     return web.json_response({"ok": True})
 
 
+async def move_track(request):
+    player = _get_player(request)
+    try:
+        n = int(request.match_info["n"])
+    except ValueError:
+        raise web.HTTPBadRequest(reason="index piste invalide")
+    data = await request.json()
+    delta = {"up": -1, "down": 1}.get(data.get("dir"))
+    if delta is None:
+        raise web.HTTPBadRequest(reason="direction invalide (up/down)")
+    new_pos = player.library.move(n, delta)
+    await player.refresh_public()
+    return web.json_response({"ok": True, "pos": new_pos})
+
+
 async def clear(request):
     player = _get_player(request)
     player.library.clear()
@@ -168,6 +183,7 @@ def build_app(manager):
         web.post("/api/slot/{index}/shuffle", shuffle),
         web.post("/api/slot/{index}/add", add),
         web.post("/api/slot/{index}/track/{n}/remove", remove_track),
+        web.post("/api/slot/{index}/track/{n}/move", move_track),
         web.post("/api/slot/{index}/clear", clear),
         web.get("/api/settings", get_settings),
         web.post("/api/settings", set_settings),
