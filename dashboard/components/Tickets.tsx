@@ -5,12 +5,20 @@ import { useCallback, useEffect, useState } from "react";
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
 type Category = { id: string; name: string };
-type Reason = { id: string; label: string; emoji: string; intro: string };
+type Reason = {
+  id: string;
+  label: string;
+  emoji: string;
+  intro: string;
+  category_id: string | null;
+  staff_role_id: string | null;
+};
 type TicketsCfg = {
   enabled: boolean;
   panel_channel_id: string | null;
   category_id: string | null;
-  staff_role_id: string | null;
+  staff_roles: string[];
+  max_open: number;
   log_channel_id: string | null;
   panel_title: string;
   panel_description: string;
@@ -26,6 +34,8 @@ const newReason = (): Reason => ({
   label: "",
   emoji: "",
   intro: "",
+  category_id: null,
+  staff_role_id: null,
 });
 
 export default function Tickets() {
@@ -58,7 +68,8 @@ export default function Tickets() {
           enabled: !!d.enabled,
           panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
           category_id: d.category_id != null ? String(d.category_id) : null,
-          staff_role_id: d.staff_role_id != null ? String(d.staff_role_id) : null,
+          staff_roles: (d.staff_roles || []).map(String),
+          max_open: Number(d.max_open) || 1,
           log_channel_id: d.log_channel_id != null ? String(d.log_channel_id) : null,
           panel_title: d.panel_title || "",
           panel_description: d.panel_description || "",
@@ -71,6 +82,8 @@ export default function Tickets() {
             label: r.label || "",
             emoji: r.emoji || "",
             intro: r.intro || "",
+            category_id: r.category_id != null ? String(r.category_id) : null,
+            staff_role_id: r.staff_role_id != null ? String(r.staff_role_id) : null,
           })),
         });
       } catch {
@@ -93,7 +106,14 @@ export default function Tickets() {
     try {
       const reasons = cfg.reasons
         .filter((r) => r.label.trim())
-        .map((r) => ({ id: r.id, label: r.label.trim(), emoji: r.emoji.trim(), intro: r.intro }));
+        .map((r) => ({
+          id: r.id,
+          label: r.label.trim(),
+          emoji: r.emoji.trim(),
+          intro: r.intro,
+          category_id: r.category_id,
+          staff_role_id: r.staff_role_id,
+        }));
       const res = await fetch("/api/fripouille/config/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,8 +145,9 @@ export default function Tickets() {
     </>
   );
 
-  const canSave =
-    !cfg.enabled || (!!cfg.panel_channel_id && !!cfg.category_id && !!cfg.staff_role_id);
+  const hasCategory = !!cfg.category_id || cfg.reasons.some((r) => r.category_id);
+  const hasStaff = cfg.staff_roles.length > 0 || cfg.reasons.some((r) => r.staff_role_id);
+  const canSave = !cfg.enabled || (!!cfg.panel_channel_id && hasCategory && hasStaff);
 
   return (
     <div className="cfg-grid wide">
@@ -157,7 +178,7 @@ export default function Tickets() {
             </select>
           </div>
           <div className="cfg-field">
-            <label>Catégorie des tickets</label>
+            <label>Catégorie par défaut</label>
             <select
               value={cfg.category_id ?? ""}
               onChange={(e) => set({ category_id: e.target.value || null })}
@@ -172,20 +193,50 @@ export default function Tickets() {
           </div>
         </div>
 
-        <div className="field-2col">
-          <div className="cfg-field">
-            <label>Rôle staff</label>
-            <select
-              value={cfg.staff_role_id ?? ""}
-              onChange={(e) => set({ staff_role_id: e.target.value || null })}
-            >
-              <option value="">— Choisir un rôle —</option>
-              {roles.map((r) => (
+        <div className="cfg-field">
+          <label>Rôles staff (accès à tous les tickets + ping)</label>
+          {cfg.staff_roles.length > 0 && (
+            <div className="chips">
+              {cfg.staff_roles.map((rid) => (
+                <span className="chip" key={rid}>
+                  {roles.find((r) => r.id === rid)?.name || rid}
+                  <button
+                    onClick={() => set({ staff_roles: cfg.staff_roles.filter((x) => x !== rid) })}
+                    title="Retirer"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select
+            value=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v && !cfg.staff_roles.includes(v)) set({ staff_roles: [...cfg.staff_roles, v] });
+            }}
+          >
+            <option value="">+ Ajouter un rôle staff…</option>
+            {roles
+              .filter((r) => !cfg.staff_roles.includes(r.id))
+              .map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
-            </select>
+          </select>
+        </div>
+
+        <div className="field-2col">
+          <div className="cfg-field">
+            <label>Tickets ouverts max par membre</label>
+            <input
+              type="number"
+              min={1}
+              value={cfg.max_open}
+              onChange={(e) => set({ max_open: Math.max(1, Number(e.target.value) || 1) })}
+            />
           </div>
           <div className="cfg-field">
             <label>Salon d'archive (transcripts)</label>
@@ -289,6 +340,36 @@ export default function Tickets() {
                   onChange={(e) => patchReason(r.id, { intro: e.target.value })}
                   placeholder="Message d'accueil de ce motif (variables {mention}, {name})…"
                 />
+                <div className="field-2col">
+                  <div className="cfg-field">
+                    <label>Catégorie du motif</label>
+                    <select
+                      value={r.category_id ?? ""}
+                      onChange={(e) => patchReason(r.id, { category_id: e.target.value || null })}
+                    >
+                      <option value="">— (catégorie par défaut) —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="cfg-field">
+                    <label>Rôle staff du motif</label>
+                    <select
+                      value={r.staff_role_id ?? ""}
+                      onChange={(e) => patchReason(r.id, { staff_role_id: e.target.value || null })}
+                    >
+                      <option value="">— (rôles staff globaux) —</option>
+                      {roles.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

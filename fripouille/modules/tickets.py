@@ -32,8 +32,9 @@ TRANSCRIPT_LIMIT = 1000     # messages max archivés (borne mémoire/temps)
 DEFAULTS = {
     "enabled": False,
     "panel_channel_id": None,     # salon où poster le panneau
-    "category_id": None,          # catégorie où créer les tickets
-    "staff_role_id": None,        # rôle staff (accès aux tickets)
+    "category_id": None,          # catégorie par défaut (fallback si le motif n'en a pas)
+    "staff_roles": [],            # rôles staff globaux (voient tous les tickets)
+    "max_open": 1,                # tickets ouverts max par membre
     "log_channel_id": None,       # salon d'archive (transcripts)
     "panel_title": "Besoin d'aide ?",
     "panel_description": "Clique ci-dessous pour ouvrir un ticket. Le staff te répondra ici, en privé.",
@@ -41,7 +42,8 @@ DEFAULTS = {
     "open_message": "Bonjour {mention} ! Décris ta demande en détail, le staff arrive. 🛎️",
     "ping_staff": True,
     "delete_on_close": True,
-    "reasons": [],                # [{id,label,emoji,intro}]
+    # motif = {id,label,emoji,intro, category_id (sa catégorie), staff_role_id (son rôle)}
+    "reasons": [],
     "message_id": None,           # panneau (géré bot)
     "counter": 0,                 # compteur tickets (géré bot)
 }
@@ -52,16 +54,32 @@ def _cfg(bot):
     return bot.store.get("tickets")
 
 
-def _staff_role(guild, cfg):
-    rid = cfg.get("staff_role_id")
-    return guild.get_role(int(rid)) if rid else None
+def _ids(values):
+    out = []
+    for v in values or []:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _global_staff_ids(cfg):
+    return _ids(cfg.get("staff_roles"))
+
+
+def _all_staff_ids(cfg):
+    """Tous les rôles staff : globaux + spécifiques aux motifs."""
+    ids = set(_global_staff_ids(cfg))
+    ids.update(_ids(r.get("staff_role_id") for r in (cfg.get("reasons") or [])))
+    return ids
 
 
 def _is_staff(member, cfg):
-    staff = _staff_role(member.guild, cfg)
-    if staff is None:
-        return getattr(member.guild_permissions, "manage_channels", False)
-    return staff in getattr(member, "roles", [])
+    if getattr(getattr(member, "guild_permissions", None), "manage_channels", False):
+        return True
+    ids = _all_staff_ids(cfg)
+    return any(r.id in ids for r in getattr(member, "roles", []))
 
 
 def _parse_topic(topic):
@@ -73,12 +91,14 @@ def _parse_topic(topic):
     return opener, claimer
 
 
-def _find_open_ticket(category, opener_id):
-    for ch in category.text_channels:
+def _count_open(guild, opener_id):
+    """Nombre de tickets ouverts par ce membre (tous salons/catégories confondus)."""
+    n = 0
+    for ch in guild.text_channels:
         o, _ = _parse_topic(ch.topic)
         if o == opener_id:
-            return ch
-    return None
+            n += 1
+    return n
 
 
 def _fmt(text, member):
@@ -171,17 +191,24 @@ async def open_ticket(interaction, reason_id):
     guild = interaction.guild
     if guild is None:
         return
-    category = bot.get_channel(int(cfg["category_id"])) if cfg.get("category_id") else None
+
+    reason_obj = next(
+        (r for r in (cfg.get("reasons") or []) if r.get("id") == reason_id), None
+    )
+    # Catégorie : celle du motif, sinon la catégorie par défaut.
+    cat_id = (reason_obj.get("category_id") if reason_obj else None) or cfg.get("category_id")
+    category = bot.get_channel(int(cat_id)) if cat_id else None
     if not isinstance(category, discord.CategoryChannel):
         await interaction.response.send_message(
             "Tickets mal configurés (catégorie manquante). Préviens un admin.", ephemeral=True
         )
         return
 
-    existing = _find_open_ticket(category, interaction.user.id)
-    if existing:
+    max_open = max(1, int(cfg.get("max_open") or 1))
+    if _count_open(guild, interaction.user.id) >= max_open:
         await interaction.response.send_message(
-            f"Tu as déjà un ticket ouvert : {existing.mention}", ephemeral=True
+            f"Tu as déjà {max_open} ticket(s) ouvert(s). Ferme-en un avant d'en rouvrir.",
+            ephemeral=True,
         )
         return
 
@@ -189,7 +216,17 @@ async def open_ticket(interaction, reason_id):
     counter = int(cfg.get("counter") or 0) + 1
     bot.store.set("tickets", {"counter": counter})
 
-    staff = _staff_role(guild, cfg)
+    # Rôles staff : globaux + le rôle spécifique du motif.
+    motif_role = None
+    if reason_obj and reason_obj.get("staff_role_id"):
+        try:
+            motif_role = guild.get_role(int(reason_obj["staff_role_id"]))
+        except (TypeError, ValueError):
+            motif_role = None
+    role_ids = set(_global_staff_ids(cfg))
+    if motif_role:
+        role_ids.add(motif_role.id)
+
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         interaction.user: discord.PermissionOverwrite(
@@ -199,8 +236,10 @@ async def open_ticket(interaction, reason_id):
             view_channel=True, send_messages=True, manage_channels=True
         ),
     }
-    if staff:
-        overwrites[staff] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    for rid in role_ids:
+        role = guild.get_role(rid)
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
     try:
         channel = await guild.create_text_channel(
@@ -215,16 +254,21 @@ async def open_ticket(interaction, reason_id):
         )
         return
 
-    reason_obj = next(
-        (r for r in (cfg.get("reasons") or []) if r.get("id") == reason_id), None
-    )
     intro = _fmt((reason_obj.get("intro") if reason_obj else "") or cfg.get("open_message"), interaction.user)
     embed = discord.Embed(title=f"🎫 Ticket #{counter:04d}", description=intro, color=0xC9A44A)
     embed.add_field(name="Ouvert par", value=interaction.user.mention, inline=True)
     if reason_obj:
         embed.add_field(name="Motif", value=reason_obj["label"], inline=True)
 
-    content = staff.mention if (cfg.get("ping_staff") and staff) else None
+    # Ping : le rôle du motif s'il existe, sinon tous les rôles staff globaux.
+    content = None
+    if cfg.get("ping_staff"):
+        if motif_role:
+            content = motif_role.mention
+        else:
+            mentions = [guild.get_role(rid).mention for rid in _global_staff_ids(cfg) if guild.get_role(rid)]
+            content = " ".join(mentions) or None
+
     await channel.send(
         content=content, embed=embed, view=TicketControls(),
         allowed_mentions=discord.AllowedMentions(roles=True, users=True, everyone=False),

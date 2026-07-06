@@ -1177,6 +1177,40 @@ h3 {
   width: 100%;
 }
 
+/* --- Puces (rôles staff) --- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  font-size: 0.82rem;
+  color: var(--parchment);
+  background: rgba(61, 42, 19, 0.5);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+}
+
+.chip button {
+  border: none;
+  background: transparent;
+  color: var(--parchment-dim);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 2px;
+}
+
+.chip button:hover {
+  color: #e79b86;
+}
+
 .cfg-hint {
   margin-top: 8px;
   font-size: 0.78rem;
