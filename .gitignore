@@ -5,6 +5,7 @@ cookies.txt
 taverne.db
 taverne.db-wal
 taverne.db-shm
+fripouille/data/
 
 # Audio pré-téléchargé (radios)
 media/

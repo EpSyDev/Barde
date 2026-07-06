@@ -1,0 +1,15 @@
+[Unit]
+Description=La Fripouille — bot d'intendance Discord (plateforme communaute)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Barde
+ExecStart=/home/ubuntu/Barde/venv/bin/python -m fripouille.bot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
