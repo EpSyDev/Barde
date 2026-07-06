@@ -1,11 +1,17 @@
 import NextAuth from "next-auth";
 import Discord from "next-auth/providers/discord";
 
-// Filet de sécurité Vercel : avec next-auth beta + server actions, la détection
-// automatique de l'hôte échoue parfois (`new URL` → erreur "Configuration").
-// On garantit une URL de base valide en prod ; le local garde son AUTH_URL.
-if (!process.env.AUTH_URL && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-  process.env.AUTH_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+// Filet de sécurité Vercel : avec next-auth beta.25 + server actions, la
+// détection automatique de l'hôte échoue (`new URL` → TypeError "Invalid URL"
+// → erreur "Configuration" au login). On garantit une URL de base valide, sans
+// dépendre d'aucune variable Vercel. Le local garde son AUTH_URL (.env.local).
+if (!process.env.AUTH_URL) {
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prod) {
+    process.env.AUTH_URL = `https://${prod}`;
+  } else if (process.env.VERCEL) {
+    process.env.AUTH_URL = "https://taverne-ten.vercel.app";
+  }
 }
 
 // Liste blanche : seuls ces IDs Discord peuvent entrer (toi + le fonda).
