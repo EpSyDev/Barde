@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Dashboard from "@/components/Dashboard";
+import Community from "@/components/Community";
 import { logout } from "@/app/actions";
 
 type Section = {
@@ -15,6 +16,7 @@ type Section = {
 // Le menu grandira au fil des fonctionnalités du bot.
 const SECTIONS: Section[] = [
   { id: "bardes", label: "Bardes", icon: "🎵", hint: "Régie musicale", ready: true },
+  { id: "communaute", label: "Communauté", icon: "🛡️", hint: "Rôles & accueil", ready: true },
   { id: "embeds", label: "Embeds & annonces", icon: "📜", hint: "Messages du Discord", ready: false },
   { id: "taverniers", label: "Taverniers", icon: "🧙", hint: "PNJ & ambiance", ready: false },
   { id: "reglages", label: "Réglages", icon: "⚙", hint: "Configuration du bot", ready: false },
@@ -90,6 +92,8 @@ export default function AppShell({ userName }: { userName: string }) {
 
         {active === "bardes" ? (
           <Dashboard />
+        ) : active === "communaute" ? (
+          <Community />
         ) : (
           <div className="soon-panel">
             <div className="soon-icon">{section.icon}</div>

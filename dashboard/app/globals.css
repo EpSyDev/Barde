@@ -598,3 +598,163 @@ h3 {
   color: var(--parchment-dim);
   font-style: italic;
 }
+
+/* --- Pages de configuration (Communauté, etc.) --- */
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.cfg-card {
+  border-radius: 14px;
+  padding: 20px 20px 18px;
+  background:
+    linear-gradient(180deg, rgba(61, 42, 19, 0.35), rgba(0, 0, 0, 0.2)),
+    var(--panel);
+  border: 1px solid var(--panel-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 150, 0.06),
+    0 10px 24px var(--shadow);
+}
+
+.cfg-card-head {
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.cfg-card-head h2 {
+  font-size: 1.05rem;
+  color: var(--gold);
+}
+
+.cfg-card-head p {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--parchment-dim);
+  font-style: italic;
+}
+
+.cfg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-bottom: 18px;
+}
+
+.cfg-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.cfg-toggle .switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  height: 22px;
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--panel-edge);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.cfg-toggle .switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--parchment-dim);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.cfg-toggle input:checked + .switch {
+  background: linear-gradient(180deg, #7a3c1c, #5a2c14);
+  border-color: rgba(217, 112, 47, 0.6);
+}
+
+.cfg-toggle input:checked + .switch::after {
+  transform: translateX(20px);
+  background: var(--gold-bright);
+}
+
+.cfg-field {
+  margin-bottom: 20px;
+}
+
+.cfg-field > label {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--parchment-dim);
+  margin-bottom: 8px;
+}
+
+.select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.role-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.cfg-field select {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body), serif;
+  font-size: 0.9rem;
+  color: var(--parchment);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.cfg-field select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.cfg-field select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cfg-hint {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--parchment-dim);
+  font-style: italic;
+}
+
+.cfg-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cfg-ok {
+  color: var(--green);
+  font-size: 0.85rem;
+}
+
+.cfg-err {
+  color: var(--red);
+  font-size: 0.85rem;
+}

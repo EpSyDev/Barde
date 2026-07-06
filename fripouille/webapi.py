@@ -50,6 +50,24 @@ async def health(request):
     })
 
 
+async def guild_roles(request):
+    """Rôles du serveur (pour peupler les menus déroulants du dashboard).
+
+    Exclut @everyone et les rôles gérés (bots/intégrations), non attribuables.
+    Triés du plus haut au plus bas dans la hiérarchie.
+    """
+    bot = request.app["bot"]
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        return web.json_response({"roles": []})
+    roles = [
+        {"id": str(r.id), "name": r.name, "color": r.color.value}
+        for r in sorted(guild.roles, key=lambda r: r.position, reverse=True)
+        if not r.is_default() and not r.managed
+    ]
+    return web.json_response({"roles": roles})
+
+
 async def list_config(request):
     bot = request.app["bot"]
     return web.json_response({
@@ -91,6 +109,7 @@ def build_app(bot):
     app["bot"] = bot
     app.add_routes([
         web.get("/api/health", health),
+        web.get("/api/guild/roles", guild_roles),
         web.get("/api/config", list_config),
         web.get("/api/config/{module}", get_config),
         web.post("/api/config/{module}", set_config),
