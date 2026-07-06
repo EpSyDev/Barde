@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import MediaPicker from "@/components/MediaPicker";
 
 // Vignette fixe de tous les embeds (imposée aussi côté bot).
 const LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp";
@@ -127,13 +128,8 @@ function MessageEditor({
           />
         </div>
         <div className="cfg-field">
-          <label>Image (URL)</label>
-          <input
-            type="text"
-            value={embed.image_url}
-            onChange={(e) => onEmbed({ image_url: e.target.value })}
-            placeholder="https://…"
-          />
+          <label>Image</label>
+          <MediaPicker value={embed.image_url} onChange={(v) => onEmbed({ image_url: v })} />
         </div>
         <p className="cfg-hint">La vignette (logo de la Taverne) est ajoutée automatiquement.</p>
         <div className="cfg-field">

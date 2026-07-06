@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import MediaPicker from "@/components/MediaPicker";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
@@ -203,13 +204,10 @@ export default function Community() {
         </div>
 
         <div className="cfg-field">
-          <label htmlFor="wimg">Image de l'embed (URL)</label>
-          <input
-            id="wimg"
-            type="text"
+          <label htmlFor="wimg">Image de l'embed</label>
+          <MediaPicker
             value={welcome.image_url}
-            onChange={(e) => setWelcome({ ...welcome, image_url: e.target.value })}
-            placeholder="https://…"
+            onChange={(v) => setWelcome({ ...welcome, image_url: v })}
           />
           <p className="cfg-hint">
             Par défaut le fond de la Taverne. Laisse vide pour n'envoyer que le texte.
@@ -300,13 +298,11 @@ export default function Community() {
         </div>
 
         <div className="cfg-field">
-          <label htmlFor="fimg">Image de l'embed (URL)</label>
-          <input
-            id="fimg"
-            type="text"
+          <label htmlFor="fimg">Image de l'embed</label>
+          <MediaPicker
             value={farewell.image_url}
-            onChange={(e) => setFarewell({ ...farewell, image_url: e.target.value })}
-            placeholder="https://… (vide = texte seul)"
+            onChange={(v) => setFarewell({ ...farewell, image_url: v })}
+            placeholder="Vide = texte seul"
           />
           {farewell.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
