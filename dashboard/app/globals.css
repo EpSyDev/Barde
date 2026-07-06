@@ -618,6 +618,29 @@ h3 {
   cursor: not-allowed;
 }
 
+.queue-list .q-to {
+  flex-shrink: 0;
+  height: 22px;
+  max-width: 46px;
+  padding: 0 2px;
+  font-size: 0.72rem;
+  color: var(--parchment-dim);
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.queue-list .q-to:hover:not(:disabled) {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+
+.queue-list .q-to:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* --- Login --- */
 .login-wrap {
   min-height: 100vh;

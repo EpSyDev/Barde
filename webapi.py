@@ -150,6 +150,43 @@ async def move_track(request):
     return web.json_response({"ok": True, "pos": new_pos})
 
 
+async def move_track_to_slot(request):
+    """Bascule la piste n du salon source vers le salon {dst} (déplace le fichier)."""
+    manager = request.app["manager"]
+    src = _get_player(request)
+    try:
+        n = int(request.match_info["n"])
+        dst_index = int(request.match_info["dst"])
+    except ValueError:
+        raise web.HTTPBadRequest(reason="paramètres invalides")
+    dst = manager.get(dst_index)
+    if dst is None or dst_index == src.slot.index:
+        raise web.HTTPBadRequest(reason="salon cible invalide")
+
+    slib, dlib = src.library, dst.library
+    if not (0 <= n < len(slib.tracks)):
+        raise web.HTTPBadRequest(reason="index piste invalide")
+    track = slib.tracks[n]
+
+    # Déplace le fichier physique vers le dossier du salon cible (même disque).
+    if track.get("file"):
+        src_path = slib.dir / track["file"]
+        dst_path = dlib.dir / track["file"]
+        try:
+            if src_path.exists() and not dst_path.exists():
+                src_path.rename(dst_path)
+            elif src_path.exists():
+                src_path.unlink(missing_ok=True)   # même piste déjà présente côté cible
+        except OSError as exc:  # noqa: BLE001
+            log.error("bascule piste : %s", exc)
+
+    slib.detach(n)                 # retire sans supprimer le fichier (déjà déplacé)
+    dlib.add(dict(track))
+    await src.refresh_public()
+    await dst.refresh_public()
+    return web.json_response({"ok": True})
+
+
 async def clear(request):
     player = _get_player(request)
     player.library.clear()
@@ -184,6 +221,7 @@ def build_app(manager):
         web.post("/api/slot/{index}/add", add),
         web.post("/api/slot/{index}/track/{n}/remove", remove_track),
         web.post("/api/slot/{index}/track/{n}/move", move_track),
+        web.post("/api/slot/{index}/track/{n}/to/{dst}", move_track_to_slot),
         web.post("/api/slot/{index}/clear", clear),
         web.get("/api/settings", get_settings),
         web.post("/api/settings", set_settings),

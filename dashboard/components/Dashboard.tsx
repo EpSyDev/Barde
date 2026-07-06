@@ -106,6 +106,20 @@ export default function Dashboard() {
     [load]
   );
 
+  const moveToSlot = useCallback(
+    async (src: number, n: number, dst: number) => {
+      const key = `${src}:to:${n}`;
+      setBusy((b) => ({ ...b, [key]: true }));
+      try {
+        await fetch(`/api/slot/${src}/track/${n}/to/${dst}`, { method: "POST" });
+        await load();
+      } finally {
+        setBusy((b) => ({ ...b, [key]: false }));
+      }
+    },
+    [load]
+  );
+
   if (error && !slots) return <div className="empty-state">{error}</div>;
   if (!slots) return <div className="empty-state">Les bardes accordent leurs luths…</div>;
 
@@ -115,9 +129,11 @@ export default function Dashboard() {
         <SlotCard
           key={s.index}
           slot={s}
+          allSlots={slots}
           act={act}
           removeTrack={removeTrack}
           moveTrack={moveTrack}
+          moveToSlot={moveToSlot}
           busy={busy}
           fmt={fmt}
         />
@@ -128,16 +144,20 @@ export default function Dashboard() {
 
 function SlotCard({
   slot,
+  allSlots,
   act,
   removeTrack,
   moveTrack,
+  moveToSlot,
   busy,
   fmt,
 }: {
   slot: Slot;
+  allSlots: Slot[];
   act: (i: number, a: string, b?: object) => void;
   removeTrack: (i: number, n: number) => void;
   moveTrack: (i: number, n: number, dir: "up" | "down") => void;
+  moveToSlot: (src: number, n: number, dst: number) => void;
   busy: Record<string, boolean>;
   fmt: (s: number | null | undefined) => string;
 }) {
@@ -301,6 +321,27 @@ function SlotCard({
               >
                 ▼
               </button>
+              {allSlots.length > 1 && (
+                <select
+                  className="q-to"
+                  value=""
+                  disabled={isBusy(`to:${i}`)}
+                  title="Basculer vers un autre salon"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) moveToSlot(slot.index, i, Number(v));
+                  }}
+                >
+                  <option value="">⇄</option>
+                  {allSlots
+                    .filter((s) => s.index !== slot.index)
+                    .map((s) => (
+                      <option key={s.index} value={s.index}>
+                        → {s.name}
+                      </option>
+                    ))}
+                </select>
+              )}
               <button
                 className="q-del"
                 title="Retirer de la file"

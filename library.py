@@ -53,6 +53,15 @@ class Library:
             self._unlink(t)
             self.save()
 
+    def detach(self, i):
+        """Retire la piste i SANS supprimer son fichier (pour la basculer vers un
+        autre salon). Renvoie la piste retirée, ou None."""
+        if 0 <= i < len(self.tracks):
+            t = self.tracks.pop(i)
+            self.save()
+            return t
+        return None
+
     def move(self, i, delta):
         """Déplace la piste i de delta (-1 = monter, +1 = descendre). Retourne la nouvelle position."""
         j = i + delta
