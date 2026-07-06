@@ -6,5 +6,6 @@ from . import autorole  # noqa: F401
 from . import farewell  # noqa: F401
 from . import jeux  # noqa: F401
 from . import messages  # noqa: F401
+from . import tempvoice  # noqa: F401
 from . import tickets  # noqa: F401
 from . import welcome  # noqa: F401

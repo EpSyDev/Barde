@@ -6,6 +6,7 @@ import Community from "@/components/Community";
 import Games from "@/components/Games";
 import Messages from "@/components/Messages";
 import Tickets from "@/components/Tickets";
+import Voice from "@/components/Voice";
 import Media from "@/components/Media";
 import { logout } from "@/app/actions";
 
@@ -24,6 +25,7 @@ const SECTIONS: Section[] = [
   { id: "jeux", label: "Rôles-jeux", icon: "🎮", hint: "Menu des jeux", ready: true },
   { id: "messages", label: "Messages", icon: "✉️", hint: "Envois & récurrents", ready: true },
   { id: "tickets", label: "Tickets", icon: "🎫", hint: "Support membres", ready: true },
+  { id: "vocaux", label: "Salons vocaux", icon: "🔊", hint: "Vocaux temporaires", ready: true },
   { id: "media", label: "Média", icon: "🖼️", hint: "Images des embeds", ready: true },
   { id: "taverniers", label: "Taverniers", icon: "🧙", hint: "PNJ & ambiance", ready: false },
   { id: "reglages", label: "Réglages", icon: "⚙", hint: "Configuration du bot", ready: false },
@@ -107,6 +109,8 @@ export default function AppShell({ userName }: { userName: string }) {
           <Messages />
         ) : active === "tickets" ? (
           <Tickets />
+        ) : active === "vocaux" ? (
+          <Voice />
         ) : active === "media" ? (
           <Media />
         ) : (

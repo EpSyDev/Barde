@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, farewell, jeux, messages, tickets, welcome
+from .modules import autorole, farewell, jeux, messages, tempvoice, tickets, welcome
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -24,9 +24,13 @@ log = logging.getLogger("fripouille")
 # `joined` : indispensable pour détecter la transition pending→validé de l'écran de
 # règles (on_member_update a besoin de l'état précédent). Borné aux membres qui
 # rejoignent pendant que le bot tourne — pas de chunk du serveur entier au démarrage.
+# Voice States : requis par le module « Salons vocaux temporaires » (tempvoice) pour
+# détecter les arrivées dans le hub et vider les salons — cache voice activé pour
+# pouvoir compter les membres présents dans chaque salon.
 intents = discord.Intents.none()
 intents.guilds = True
 intents.members = True
+intents.voice_states = True
 
 
 class FripouilleBot(discord.Client):
@@ -34,7 +38,7 @@ class FripouilleBot(discord.Client):
         super().__init__(
             intents=intents,
             chunk_guilds_at_startup=False,
-            member_cache_flags=discord.MemberCacheFlags(joined=True, voice=False),
+            member_cache_flags=discord.MemberCacheFlags(joined=True, voice=True),
             max_messages=None,
         )
         self.store = ConfigStore()
@@ -48,6 +52,7 @@ class FripouilleBot(discord.Client):
         log.info("Modules chargés : %s", ", ".join(registry.all_modules()) or "aucun")
         await jeux.setup_persistent(self)
         await tickets.setup_persistent(self)
+        await tempvoice.cleanup(self)
 
     async def _on_arrival(self, member: discord.Member):
         # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
@@ -74,6 +79,11 @@ class FripouilleBot(discord.Client):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
         await farewell.on_leave(self, member)
+
+    async def on_voice_state_update(self, member, before, after):
+        if config.GUILD_ID and member.guild.id != config.GUILD_ID:
+            return
+        await tempvoice.on_voice(self, member, before, after)
 
 
 def main():

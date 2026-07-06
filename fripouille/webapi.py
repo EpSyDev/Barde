@@ -100,6 +100,23 @@ async def guild_channels(request):
     return web.json_response({"channels": chans})
 
 
+async def guild_voice_channels(request):
+    """Salons vocaux du serveur (pour choisir le hub TempVoice)."""
+    bot = request.app["bot"]
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        return web.json_response({"channels": []})
+    chans = [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "category": c.category.name if c.category else None,
+        }
+        for c in sorted(guild.voice_channels, key=lambda c: (c.position,))
+    ]
+    return web.json_response({"channels": chans})
+
+
 async def guild_categories(request):
     """Catégories du serveur (pour lier un jeu à sa catégorie de salons)."""
     bot = request.app["bot"]
@@ -227,6 +244,7 @@ def build_app(bot):
         web.get("/api/health", health),
         web.get("/api/guild/roles", guild_roles),
         web.get("/api/guild/channels", guild_channels),
+        web.get("/api/guild/voice-channels", guild_voice_channels),
         web.get("/api/guild/categories", guild_categories),
         web.get("/api/config", list_config),
         web.get("/api/config/{module}", get_config),
