@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, jeux
+from .modules import autorole, jeux, messages
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -41,6 +41,7 @@ class FripouilleBot(discord.Client):
 
     async def setup_hook(self):
         await webapi.start_web(self)
+        messages.start_scheduler(self)
 
     async def on_ready(self):
         log.info("La Fripouille connectée : %s", self.user)

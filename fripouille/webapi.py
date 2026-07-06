@@ -134,6 +134,28 @@ async def set_config(request):
     return web.json_response({"ok": True, "config": merged})
 
 
+async def run_action(request):
+    """Déclenche une action ponctuelle d'un module (ex. envoi immédiat d'un message)."""
+    key = request.match_info["module"]
+    action = request.match_info["action"]
+    mod = registry.get(key)
+    if mod is None or action not in mod.actions:
+        raise web.HTTPNotFound(reason="action inconnue")
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise web.HTTPBadRequest(reason="corps JSON attendu (objet)")
+    try:
+        result = await mod.actions[action](request.app["bot"], data)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(reason=str(exc))
+    except web.HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.error("action %s/%s : %s", key, action, exc)
+        raise web.HTTPInternalServerError(reason="échec de l'action")
+    return web.json_response(result or {"ok": True})
+
+
 def build_app(bot):
     app = web.Application(middlewares=[_auth])
     app["bot"] = bot
@@ -145,6 +167,7 @@ def build_app(bot):
         web.get("/api/config", list_config),
         web.get("/api/config/{module}", get_config),
         web.post("/api/config/{module}", set_config),
+        web.post("/api/action/{module}/{action}", run_action),
     ])
     return app
 
