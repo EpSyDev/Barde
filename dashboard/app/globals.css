@@ -780,13 +780,14 @@ h3 {
 }
 
 .game-row .game-label {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
 }
 
-.game-row .game-role {
-  width: 40%;
-  flex-shrink: 0;
+.game-row .game-role,
+.game-row .game-cat {
+  flex: 1 1 130px;
+  min-width: 0;
 }
 
 .btn.icon.danger {
@@ -799,13 +800,8 @@ h3 {
   color: #e79b86;
 }
 
-@media (max-width: 560px) {
-  .game-row {
-    flex-wrap: wrap;
-  }
-  .game-row .game-role {
-    width: 100%;
-  }
+.game-row {
+  flex-wrap: wrap;
 }
 
 .cfg-hint {

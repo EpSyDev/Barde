@@ -85,6 +85,19 @@ async def guild_channels(request):
     return web.json_response({"channels": chans})
 
 
+async def guild_categories(request):
+    """Catégories du serveur (pour lier un jeu à sa catégorie de salons)."""
+    bot = request.app["bot"]
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        return web.json_response({"categories": []})
+    cats = [
+        {"id": str(c.id), "name": c.name}
+        for c in sorted(guild.categories, key=lambda c: c.position)
+    ]
+    return web.json_response({"categories": cats})
+
+
 async def list_config(request):
     bot = request.app["bot"]
     return web.json_response({
@@ -128,6 +141,7 @@ def build_app(bot):
         web.get("/api/health", health),
         web.get("/api/guild/roles", guild_roles),
         web.get("/api/guild/channels", guild_channels),
+        web.get("/api/guild/categories", guild_categories),
         web.get("/api/config", list_config),
         web.get("/api/config/{module}", get_config),
         web.post("/api/config/{module}", set_config),

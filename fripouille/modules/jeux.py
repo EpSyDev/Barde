@@ -29,6 +29,7 @@ DEFAULTS = {
     "channel_id": None,
     "title": "Choisis tes jeux",
     "description": "Sélectionne les jeux auxquels tu joues pour accéder à leurs salons.",
+    # games : liste de { id, label, emoji, role_id, category_id }
     "games": [],
     "message_id": None,
 }
@@ -128,10 +129,43 @@ def _embed(cfg):
     )
 
 
+async def _sync_category_perms(bot, cfg):
+    """Rend privée chaque catégorie liée à un jeu et l'ouvre au rôle correspondant.
+
+    @everyone perd « Voir les salons », le rôle du jeu l'obtient. Les salons de la
+    catégorie héritent (s'ils synchronisent leurs permissions). Idempotent.
+    """
+    for g in cfg.get("games", []):
+        role_id, cat_id = g.get("role_id"), g.get("category_id")
+        if not role_id or not cat_id:
+            continue
+        category = bot.get_channel(int(cat_id))
+        if not isinstance(category, discord.CategoryChannel):
+            continue
+        role = category.guild.get_role(int(role_id))
+        if role is None:
+            continue
+        try:
+            await category.set_permissions(
+                category.guild.default_role, view_channel=False,
+                reason="Rôles-jeux : catégorie privée",
+            )
+            await category.set_permissions(
+                role, view_channel=True,
+                reason="Rôles-jeux : accès au jeu",
+            )
+        except discord.Forbidden:
+            log.error("jeux : permissions refusées sur la catégorie « %s »", category.name)
+
+
 async def apply(bot, cfg):
-    """Répercute la config : (re)poste ou met à jour le menu dans le salon configuré."""
+    """Répercute la config : permissions des catégories + (re)poste le menu."""
+    if not cfg.get("enabled"):
+        return
+    await _sync_category_perms(bot, cfg)
+
     channel_id = cfg.get("channel_id")
-    if not cfg.get("enabled") or not channel_id:
+    if not channel_id:
         return
     channel = bot.get_channel(int(channel_id))
     if channel is None:
