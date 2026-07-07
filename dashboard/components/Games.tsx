@@ -5,18 +5,31 @@ import { useCallback, useEffect, useState } from "react";
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
 type Game = { id: string; label: string; role_id: string | null };
+type Category = {
+  id: string;
+  label: string;
+  emoji: string;
+  description: string;
+  placeholder: string;
+  games: Game[];
+};
 type JeuxCfg = {
   enabled: boolean;
   channel_id: string | null;
   title: string;
   description: string;
-  games: Game[];
+  categories: Category[];
 };
 
-const newGame = (): Game => ({
-  id: (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8),
+const rid = () => (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8);
+const newGame = (): Game => ({ id: rid(), label: "", role_id: null });
+const newCategory = (): Category => ({
+  id: rid(),
   label: "",
-  role_id: null,
+  emoji: "",
+  description: "",
+  placeholder: "",
+  games: [newGame()],
 });
 
 export default function Games() {
@@ -41,16 +54,37 @@ export default function Games() {
         const cData = await cRes.json();
         setRoles(rData.roles || []);
         setChannels(chData.channels || []);
+
+        const mapGame = (g: Partial<Game>): Game => ({
+          id: g.id || rid(),
+          label: g.label || "",
+          role_id: g.role_id != null ? String(g.role_id) : null,
+        });
+        // Reprise de l'ancien format (liste plate `games`) → une catégorie unique.
+        let categories: Category[];
+        if (Array.isArray(cData.categories) && cData.categories.length) {
+          categories = cData.categories.map((c: Partial<Category>) => ({
+            id: c.id || rid(),
+            label: c.label || "",
+            emoji: c.emoji || "",
+            description: c.description || "",
+            placeholder: c.placeholder || "",
+            games: (c.games || []).map(mapGame),
+          }));
+        } else if (Array.isArray(cData.games) && cData.games.length) {
+          categories = [
+            { ...newCategory(), label: "Jeux", games: cData.games.map(mapGame) },
+          ];
+        } else {
+          categories = [];
+        }
+
         setCfg({
           enabled: !!cData.enabled,
           channel_id: cData.channel_id != null ? String(cData.channel_id) : null,
           title: cData.title || "",
           description: cData.description || "",
-          games: (cData.games || []).map((g: Partial<Game>) => ({
-            id: g.id || newGame().id,
-            label: g.label || "",
-            role_id: g.role_id != null ? String(g.role_id) : null,
-          })),
+          categories,
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -58,9 +92,18 @@ export default function Games() {
     })();
   }, []);
 
-  const patchGame = (id: string, patch: Partial<Game>) =>
+  const set = (patch: Partial<JeuxCfg>) => setCfg((c) => (c ? { ...c, ...patch } : c));
+  const patchCat = (cid: string, patch: Partial<Category>) =>
     setCfg((c) =>
-      c ? { ...c, games: c.games.map((g) => (g.id === id ? { ...g, ...patch } : g)) } : c
+      c ? { ...c, categories: c.categories.map((k) => (k.id === cid ? { ...k, ...patch } : k)) } : c
+    );
+  const patchGame = (cid: string, gid: string, patch: Partial<Game>) =>
+    patchCatGames(cid, (games) => games.map((g) => (g.id === gid ? { ...g, ...patch } : g)));
+  const patchCatGames = (cid: string, fn: (games: Game[]) => Game[]) =>
+    setCfg((c) =>
+      c
+        ? { ...c, categories: c.categories.map((k) => (k.id === cid ? { ...k, games: fn(k.games) } : k)) }
+        : c
     );
 
   const save = useCallback(async () => {
@@ -69,13 +112,18 @@ export default function Games() {
     setSaved(false);
     setError(null);
     try {
-      const games = cfg.games
-        .filter((g) => g.label.trim() && g.role_id)
-        .map((g) => ({
-          id: g.id,
-          label: g.label.trim(),
-          role_id: g.role_id,
-        }));
+      const categories = cfg.categories
+        .map((k) => ({
+          id: k.id,
+          label: k.label.trim(),
+          emoji: k.emoji.trim(),
+          description: k.description.trim(),
+          placeholder: k.placeholder.trim(),
+          games: k.games
+            .filter((g) => g.label.trim() && g.role_id)
+            .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id })),
+        }))
+        .filter((k) => k.label && k.games.length);
       const res = await fetch("/api/fripouille/config/jeux", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,7 +132,7 @@ export default function Games() {
           channel_id: cfg.channel_id,
           title: cfg.title.trim(),
           description: cfg.description.trim(),
-          games,
+          categories,
         }),
       });
       if (!res.ok) throw new Error();
@@ -101,9 +149,10 @@ export default function Games() {
   if (!cfg || !roles || !channels)
     return <div className="empty-state">Chargement de la config…</div>;
 
-  const canSave =
-    !cfg.enabled ||
-    (!!cfg.channel_id && cfg.games.some((g) => g.label.trim() && g.role_id));
+  const validCats = cfg.categories.filter(
+    (k) => k.label.trim() && k.games.some((g) => g.label.trim() && g.role_id)
+  );
+  const canSave = !cfg.enabled || (!!cfg.channel_id && validCats.length > 0);
 
   return (
     <div className="cfg-grid wide">
@@ -111,8 +160,9 @@ export default function Games() {
         <div className="cfg-card-head">
           <h2>🎮 Rôles-jeux</h2>
           <p>
-            Un menu déroulant où chaque membre choisit ses jeux et reçoit le rôle qui
-            ouvre l'accès à leurs salons.
+            Range tes jeux en catégories (FPS, MMORPG, Simulation…). Chaque catégorie est
+            postée avec son propre menu déroulant ; le membre y coche ses jeux et reçoit les
+            rôles qui ouvrent l'accès à leurs salons.
           </p>
         </div>
 
@@ -120,18 +170,17 @@ export default function Games() {
           <input
             type="checkbox"
             checked={cfg.enabled}
-            onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+            onChange={(e) => set({ enabled: e.target.checked })}
           />
           <span className="switch" />
-          <span>Publier le menu</span>
+          <span>Publier les menus</span>
         </label>
 
         <div className="cfg-field">
-          <label htmlFor="chan">Salon du menu</label>
+          <label>Salon des menus</label>
           <select
-            id="chan"
             value={cfg.channel_id ?? ""}
-            onChange={(e) => setCfg({ ...cfg, channel_id: e.target.value || null })}
+            onChange={(e) => set({ channel_id: e.target.value || null })}
           >
             <option value="">— Choisir un salon —</option>
             {channels.map((c) => (
@@ -143,72 +192,138 @@ export default function Games() {
           </select>
         </div>
 
-        <div className="cfg-field">
-          <label htmlFor="title">Titre</label>
-          <input
-            id="title"
-            type="text"
-            value={cfg.title}
-            onChange={(e) => setCfg({ ...cfg, title: e.target.value })}
-            placeholder="Choisis tes jeux"
-          />
+        <div className="field-2col">
+          <div className="cfg-field">
+            <label>Titre d'intro (optionnel)</label>
+            <input
+              type="text"
+              value={cfg.title}
+              onChange={(e) => set({ title: e.target.value })}
+              placeholder="Bienvenue sur le serveur !"
+            />
+          </div>
+          <div className="cfg-field">
+            <label>Description d'intro (optionnel)</label>
+            <input
+              type="text"
+              value={cfg.description}
+              onChange={(e) => set({ description: e.target.value })}
+              placeholder="Choisis tes jeux pour débloquer leurs salons."
+            />
+          </div>
         </div>
 
         <div className="cfg-field">
-          <label htmlFor="desc">Description</label>
-          <textarea
-            id="desc"
-            rows={2}
-            value={cfg.description}
-            onChange={(e) => setCfg({ ...cfg, description: e.target.value })}
-            placeholder="Sélectionne les jeux auxquels tu joues…"
-          />
-        </div>
+          <label>Catégories ({cfg.categories.length})</label>
+          <p className="cfg-hint">
+            Chaque catégorie = un bloc (en-tête + menu déroulant), avec jusqu'à 25 jeux.
+          </p>
 
-        <div className="cfg-field">
-          <label>Jeux ({cfg.games.length}/25)</label>
-          <div className="game-list">
-            {cfg.games.map((g) => (
-              <div className="game-row" key={g.id}>
-                <input
-                  className="game-label"
-                  type="text"
-                  value={g.label}
-                  onChange={(e) => patchGame(g.id, { label: e.target.value })}
-                  placeholder="Nom du jeu"
-                  aria-label="Nom du jeu"
-                />
-                <select
-                  className="game-role"
-                  value={g.role_id ?? ""}
-                  onChange={(e) => patchGame(g.id, { role_id: e.target.value || null })}
-                  aria-label="Rôle"
-                >
-                  <option value="">— Rôle —</option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
+          <div className="rec-list">
+            {cfg.categories.map((k) => (
+              <div className="reason-item" key={k.id}>
+                <div className="reason-head">
+                  <input
+                    className="game-emoji"
+                    type="text"
+                    value={k.emoji}
+                    onChange={(e) => patchCat(k.id, { emoji: e.target.value })}
+                    placeholder="🎯"
+                    aria-label="Emoji de la catégorie"
+                  />
+                  <input
+                    className="game-label"
+                    type="text"
+                    value={k.label}
+                    onChange={(e) => patchCat(k.id, { label: e.target.value })}
+                    placeholder="Nom de la catégorie (ex. FPS, MMORPG, Simulation)"
+                    aria-label="Nom de la catégorie"
+                  />
+                  <button
+                    className="btn icon danger"
+                    onClick={() => set({ categories: cfg.categories.filter((x) => x.id !== k.id) })}
+                    title="Supprimer la catégorie"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="field-2col">
+                  <div className="cfg-field">
+                    <label>Description (sous l'en-tête)</label>
+                    <input
+                      type="text"
+                      value={k.description}
+                      onChange={(e) => patchCat(k.id, { description: e.target.value })}
+                      placeholder="Choisis tes FPS favoris"
+                    />
+                  </div>
+                  <div className="cfg-field">
+                    <label>Texte du menu (placeholder)</label>
+                    <input
+                      type="text"
+                      value={k.placeholder}
+                      onChange={(e) => patchCat(k.id, { placeholder: e.target.value })}
+                      placeholder="Sélectionner vos FPS…"
+                    />
+                  </div>
+                </div>
+
+                <label className="cfg-hint" style={{ marginTop: 4 }}>
+                  Jeux ({k.games.length}/25)
+                </label>
+                <div className="game-list">
+                  {k.games.map((g) => (
+                    <div className="game-row" key={g.id}>
+                      <input
+                        className="game-label"
+                        type="text"
+                        value={g.label}
+                        onChange={(e) => patchGame(k.id, g.id, { label: e.target.value })}
+                        placeholder="Nom du jeu"
+                        aria-label="Nom du jeu"
+                      />
+                      <select
+                        className="game-role"
+                        value={g.role_id ?? ""}
+                        onChange={(e) => patchGame(k.id, g.id, { role_id: e.target.value || null })}
+                        aria-label="Rôle"
+                      >
+                        <option value="">— Rôle —</option>
+                        {roles.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn icon danger"
+                        onClick={() => patchCatGames(k.id, (games) => games.filter((x) => x.id !== g.id))}
+                        title="Retirer le jeu"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
-                </select>
-                <button
-                  className="btn icon danger"
-                  onClick={() => setCfg({ ...cfg, games: cfg.games.filter((x) => x.id !== g.id) })}
-                  title="Retirer"
-                >
-                  ✕
-                </button>
+                </div>
+                {k.games.length < 25 && (
+                  <button
+                    className="btn"
+                    onClick={() => patchCatGames(k.id, (games) => [...games, newGame()])}
+                  >
+                    + Ajouter un jeu
+                  </button>
+                )}
               </div>
             ))}
           </div>
-          {cfg.games.length < 25 && (
-            <button
-              className="btn"
-              onClick={() => setCfg({ ...cfg, games: [...cfg.games, newGame()] })}
-            >
-              + Ajouter un jeu
-            </button>
-          )}
+
+          <button
+            className="btn"
+            onClick={() => set({ categories: [...cfg.categories, newCategory()] })}
+          >
+            + Ajouter une catégorie
+          </button>
         </div>
 
         <div className="cfg-actions">
@@ -220,9 +335,10 @@ export default function Games() {
         </div>
 
         <p className="cfg-hint">
-          Chaque jeu attribue son rôle au membre qui le choisit. La visibilité de la
-          catégorie du jeu se règle côté Discord (donner « Voir les salons » au rôle). Le
-          rôle de La Fripouille doit rester au-dessus des rôles-jeux.
+          Chaque jeu attribue son rôle au membre qui le choisit ; un menu ne gère que les
+          rôles de sa catégorie. La visibilité des salons se règle côté Discord (donner
+          « Voir les salons » au rôle du jeu). Le rôle de La Fripouille doit rester au-dessus
+          des rôles-jeux dans la hiérarchie.
         </p>
       </section>
     </div>

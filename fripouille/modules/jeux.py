@@ -1,18 +1,24 @@
-"""Module « Rôles-jeux » : menu déroulant où chaque membre choisit ses jeux et
-reçoit les rôles correspondants — rôles qui, côté Discord, ouvrent l'accès aux
-catégories/salons de ces jeux (à configurer une fois sur la catégorie : @everyone
-sans « Voir les salons », rôle du jeu avec « Voir les salons »).
+"""Module « Rôles-jeux » : le membre choisit ses jeux et reçoit les rôles
+correspondants — rôles qui, côté Discord, ouvrent l'accès aux catégories/salons de
+ces jeux (à configurer une fois : @everyone sans « Voir les salons », rôle du jeu
+avec « Voir les salons »).
+
+Les jeux sont rangés en **catégories** (FPS, MMORPG, Simulation…), éditables depuis
+le dashboard. Chaque catégorie est postée dans le salon comme un bloc : un embed
+d'en-tête (emoji + nom + description) suivi de **son propre menu déroulant**. Un
+message d'intro optionnel (titre/description) coiffe l'ensemble.
 
 Config (éditée depuis le dashboard) :
 - ``enabled``            : module actif.
-- ``channel_id``         : salon où poster le menu.
-- ``title`` / ``description`` : contenu de l'embed.
-- ``games``              : liste de ``{id, label, emoji, role_id}``.
-- ``message_id``         : id du message posté (géré par le bot, pas édité à la main).
+- ``channel_id``         : salon où poster les menus.
+- ``title`` / ``description`` : embed d'intro (optionnel).
+- ``categories``         : liste de ``{id, label, emoji, description, placeholder,
+                           games:[{id, label, role_id}]}``.
+- ``message_ids``        : ids des messages postés (gérés par le bot).
 
-Le menu définit l'ensemble EXACT des rôles-jeux du membre : à chaque validation, les
-rôles-jeux non cochés sont retirés, les cochés ajoutés. Les autres rôles ne sont
-jamais touchés.
+Chaque menu définit l'ensemble EXACT des rôles-jeux **de sa catégorie** : les rôles
+de la catégorie non cochés sont retirés, les cochés ajoutés. Les rôles des autres
+catégories (et tout autre rôle) ne sont jamais touchés.
 """
 import logging
 
@@ -22,53 +28,56 @@ from ..registry import Module, register
 
 log = logging.getLogger("fripouille.jeux")
 
-SELECT_CUSTOM_ID = "jeux:select"
+CUSTOM_PREFIX = "jeux:cat:"     # custom_id du menu = jeux:cat:{category_id}
+COLOR = 0xC9A44A
 
 DEFAULTS = {
     "enabled": False,
     "channel_id": None,
     "title": "Choisis tes jeux",
     "description": "Sélectionne les jeux auxquels tu joues pour accéder à leurs salons.",
-    # games : liste de { id, label, emoji, role_id, category_id }
-    "games": [],
-    "message_id": None,
+    # categories : [{ id, label, emoji, description, placeholder, games:[{id,label,role_id}] }]
+    "categories": [],
+    "message_ids": [],   # géré bot : messages postés dans l'ordre (intro puis catégories)
 }
 
 
-def _game_role_ids(cfg) -> set[int]:
-    ids = set()
-    for g in cfg.get("games", []):
-        rid = g.get("role_id")
-        if rid:
-            try:
-                ids.add(int(rid))
-            except (TypeError, ValueError):
-                pass
-    return ids
-
-
-def _build_options(cfg):
+# --- Helpers config ---
+def _cat_options(cat):
+    """Options du menu d'une catégorie (jeux ayant un rôle), plafonnées à 25."""
     options = []
-    for g in cfg.get("games", []):
+    for g in cat.get("games", []):
         rid = g.get("role_id")
         if not rid:
             continue
-        emoji = (g.get("emoji") or "").strip() or None
         options.append(discord.SelectOption(
             label=(g.get("label") or "Jeu")[:100],
             value=str(rid),
-            emoji=emoji,
         ))
     return options[:25]
 
 
-class GamesSelect(discord.ui.Select):
-    def __init__(self, bot):
-        self.bot = bot
-        options = _build_options(bot.store.get("jeux"))
+def _cat_role_ids(cat) -> set[int]:
+    ids = set()
+    for g in cat.get("games", []):
+        rid = g.get("role_id")
+        if not rid:
+            continue
+        try:
+            ids.add(int(rid))
+        except (TypeError, ValueError):
+            pass
+    return ids
+
+
+# --- Vues ---
+class CategorySelect(discord.ui.Select):
+    def __init__(self, cat):
+        options = _cat_options(cat)
+        label = cat.get("label") or "jeux"
         super().__init__(
-            custom_id=SELECT_CUSTOM_ID,
-            placeholder="Choisis tes jeux…",
+            custom_id=CUSTOM_PREFIX + str(cat.get("id")),
+            placeholder=((cat.get("placeholder") or f"Choisis tes {label}…"))[:150],
             min_values=0,
             max_values=max(1, len(options)),
             options=options or [discord.SelectOption(label="Aucun jeu configuré", value="_none")],
@@ -76,94 +85,122 @@ class GamesSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        member = interaction.user
-        if not isinstance(member, discord.Member) or interaction.guild is None:
-            await interaction.response.send_message("Interaction hors serveur.", ephemeral=True)
-            return
-        cfg = self.bot.store.get("jeux")
-        managed = _game_role_ids(cfg)
-        chosen = {int(v) for v in self.values if v != "_none"} & managed
-        have = {r.id for r in member.roles}
-
-        added, removed, failed = [], [], False
-        for rid in chosen - have:
-            role = interaction.guild.get_role(rid)
-            if role:
-                try:
-                    await member.add_roles(role, reason="Rôles-jeux (La Fripouille)")
-                    added.append(role.name)
-                except discord.Forbidden:
-                    failed = True
-        for rid in (managed & have) - chosen:
-            role = interaction.guild.get_role(rid)
-            if role:
-                try:
-                    await member.remove_roles(role, reason="Rôles-jeux (La Fripouille)")
-                    removed.append(role.name)
-                except discord.Forbidden:
-                    failed = True
-
-        parts = []
-        if added:
-            parts.append("✅ Ajouté : " + ", ".join(added))
-        if removed:
-            parts.append("➖ Retiré : " + ", ".join(removed))
-        if not parts:
-            parts.append("Aucun changement.")
-        if failed:
-            parts.append("⚠️ Certains rôles n'ont pu être modifiés (hiérarchie ?).")
-        await interaction.response.send_message("\n".join(parts), ephemeral=True)
+        await _handle_select(interaction, self.custom_id, self.values)
 
 
-class GamesView(discord.ui.View):
-    def __init__(self, bot):
+class CategoryView(discord.ui.View):
+    def __init__(self, cat):
         super().__init__(timeout=None)
-        self.add_item(GamesSelect(bot))
+        self.add_item(CategorySelect(cat))
 
 
-def _embed(cfg):
-    return discord.Embed(
-        title=cfg.get("title") or "Choisis tes jeux",
-        description=cfg.get("description") or "",
-        color=0xC9A44A,
-    )
+async def _handle_select(interaction, custom_id, values):
+    member = interaction.user
+    if not isinstance(member, discord.Member) or interaction.guild is None:
+        await interaction.response.send_message("Interaction hors serveur.", ephemeral=True)
+        return
+    cat_id = custom_id[len(CUSTOM_PREFIX):]
+    cfg = interaction.client.store.get("jeux")
+    cat = next((c for c in cfg.get("categories", []) if str(c.get("id")) == cat_id), None)
+    if cat is None:
+        await interaction.response.send_message(
+            "Catégorie introuvable (config modifiée depuis ?).", ephemeral=True
+        )
+        return
+
+    managed = _cat_role_ids(cat)                       # rôles de CETTE catégorie
+    chosen = {int(v) for v in values if v != "_none"} & managed
+    have = {r.id for r in member.roles}
+
+    added, removed, failed = [], [], False
+    for rid in chosen - have:
+        role = interaction.guild.get_role(rid)
+        if role:
+            try:
+                await member.add_roles(role, reason="Rôles-jeux (La Fripouille)")
+                added.append(role.name)
+            except discord.Forbidden:
+                failed = True
+    for rid in (managed & have) - chosen:
+        role = interaction.guild.get_role(rid)
+        if role:
+            try:
+                await member.remove_roles(role, reason="Rôles-jeux (La Fripouille)")
+                removed.append(role.name)
+            except discord.Forbidden:
+                failed = True
+
+    parts = []
+    if added:
+        parts.append("✅ Ajouté : " + ", ".join(added))
+    if removed:
+        parts.append("➖ Retiré : " + ", ".join(removed))
+    if not parts:
+        parts.append("Aucun changement.")
+    if failed:
+        parts.append("⚠️ Certains rôles n'ont pu être modifiés (hiérarchie ?).")
+    await interaction.response.send_message("\n".join(parts), ephemeral=True)
 
 
-async def _sync_category_perms(bot, cfg):
-    """Rend privée chaque catégorie liée à un jeu et l'ouvre au rôle correspondant.
-
-    @everyone perd « Voir les salons », le rôle du jeu l'obtient. Les salons de la
-    catégorie héritent (s'ils synchronisent leurs permissions). Idempotent.
-    """
-    for g in cfg.get("games", []):
-        role_id, cat_id = g.get("role_id"), g.get("category_id")
-        if not role_id or not cat_id:
+# --- Rendu du panneau ---
+def _build_blocks(cfg):
+    """Liste ordonnée de (embed, view|None) : intro éventuel puis une catégorie/bloc."""
+    blocks = []
+    title = (cfg.get("title") or "").strip()
+    desc = (cfg.get("description") or "").strip()
+    if title or desc:
+        blocks.append(
+            (discord.Embed(title=title or None, description=desc or None, color=COLOR), None)
+        )
+    for cat in cfg.get("categories", []):
+        if not _cat_options(cat):
             continue
-        category = bot.get_channel(int(cat_id))
-        if not isinstance(category, discord.CategoryChannel):
-            continue
-        role = category.guild.get_role(int(role_id))
-        if role is None:
-            continue
+        emoji = (cat.get("emoji") or "").strip()
+        label = (cat.get("label") or "Jeux").strip()
+        header = f"{emoji} {label}".strip()
+        embed = discord.Embed(
+            title=header,
+            description=(cat.get("description") or "").strip() or None,
+            color=COLOR,
+        )
+        blocks.append((embed, CategoryView(cat)))
+    return blocks
+
+
+async def _reconcile(channel, stored, blocks):
+    """Édite les messages en place si leur nombre n'a pas changé, sinon supprime et
+    repost tout dans l'ordre. Renvoie la nouvelle liste d'ids."""
+    if stored and len(stored) == len(blocks) and blocks:
+        new_ids, ok = [], True
+        for mid, (embed, view) in zip(stored, blocks):
+            try:
+                msg = await channel.fetch_message(int(mid))
+                await msg.edit(embed=embed, view=view)
+                new_ids.append(str(msg.id))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                ok = False
+                break
+        if ok:
+            return new_ids
+
+    # Repost complet : purge des anciens messages puis renvoi dans l'ordre.
+    for mid in stored:
         try:
-            await category.set_permissions(
-                category.guild.default_role, view_channel=False,
-                reason="Rôles-jeux : catégorie privée",
-            )
-            await category.set_permissions(
-                role, view_channel=True,
-                reason="Rôles-jeux : accès au jeu",
-            )
-        except discord.Forbidden:
-            log.error("jeux : permissions refusées sur la catégorie « %s »", category.name)
+            msg = await channel.fetch_message(int(mid))
+            await msg.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+    new_ids = []
+    for embed, view in blocks:
+        sent = await channel.send(embed=embed, view=view)
+        new_ids.append(str(sent.id))
+    return new_ids
 
 
 async def apply(bot, cfg):
-    """Répercute la config : permissions des catégories + (re)poste le menu."""
+    """Répercute la config : (re)poste les blocs de catégories dans le salon."""
     if not cfg.get("enabled"):
         return
-    await _sync_category_perms(bot, cfg)
-
     channel_id = cfg.get("channel_id")
     if not channel_id:
         return
@@ -172,29 +209,22 @@ async def apply(bot, cfg):
         log.warning("jeux : salon %s introuvable", channel_id)
         return
 
-    view = GamesView(bot)
-    embed = _embed(cfg)
-    msg = None
-    message_id = cfg.get("message_id")
-    if message_id:
-        try:
-            msg = await channel.fetch_message(int(message_id))
-        except (discord.NotFound, discord.Forbidden):
-            msg = None
-
-    if msg is not None:
-        await msg.edit(embed=embed, view=view)
-    else:
-        sent = await channel.send(embed=embed, view=view)
-        bot.store.set("jeux", {"message_id": str(sent.id)})
-    bot.add_view(view)
+    blocks = _build_blocks(cfg)
+    new_ids = await _reconcile(channel, list(cfg.get("message_ids") or []), blocks)
+    bot.store.set("jeux", {"message_ids": new_ids})
+    for _embed, view in blocks:
+        if view is not None:
+            bot.add_view(view)
 
 
 async def setup_persistent(bot):
-    """Enregistre la vue persistante au démarrage (menu cliquable après un restart)."""
+    """Réenregistre un menu persistant par catégorie (cliquable après un restart)."""
     cfg = bot.store.get("jeux")
-    if cfg.get("enabled") and cfg.get("games"):
-        bot.add_view(GamesView(bot))
+    if not cfg.get("enabled"):
+        return
+    for cat in cfg.get("categories", []):
+        if _cat_options(cat):
+            bot.add_view(CategoryView(cat))
 
 
 MODULE = register(Module(
