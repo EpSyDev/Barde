@@ -15,6 +15,8 @@ type Entry = {
   origin_label?: string;
   trait: string;
   trait_label?: string;
+  faith?: string;
+  faith_label?: string;
   style: string;
   at: string;
 };
@@ -100,7 +102,7 @@ export default function Registre() {
       [
         e.name, e.user, e.id,
         e.race_label || RACE[e.race] || e.race, e.origin_label || "",
-        e.trait_label || TRAIT[e.trait] || e.trait,
+        e.trait_label || TRAIT[e.trait] || e.trait, e.faith_label || "",
       ]
         .join(" ")
         .toLowerCase()
@@ -111,7 +113,7 @@ export default function Registre() {
   const exportJSON = () =>
     download(JSON.stringify(entries, null, 2), "registre-bapteme.json", "application/json");
   const exportCSV = () => {
-    const head = ["id", "user", "name", "gender", "race", "origin", "trait", "style", "at"];
+    const head = ["id", "user", "name", "gender", "race", "origin", "trait", "faith", "style", "at"];
     const rows = (entries || []).map((e) =>
       head.map((h) => csvCell((e as unknown as Record<string, unknown>)[h])).join(",")
     );
@@ -175,6 +177,7 @@ export default function Registre() {
                   <th>Race</th>
                   <th>Origine</th>
                   <th>Tempérament</th>
+                  <th>Foi</th>
                   <th>Police</th>
                   <th>Membre</th>
                   <th>ID Discord</th>
@@ -190,6 +193,7 @@ export default function Registre() {
                     <td>{e.race_label || RACE[e.race] || e.race || "—"}</td>
                     <td>{e.origin_label || "—"}</td>
                     <td>{e.trait_label || TRAIT[e.trait] || e.trait || "—"}</td>
+                    <td>{e.faith_label || e.faith || "—"}</td>
                     <td>{STYLE[e.style] || e.style}</td>
                     <td>{e.user}</td>
                     <td className="reg-id">{e.id}</td>

@@ -188,8 +188,8 @@ export default function Bapteme() {
         <p className="cfg-hint">
           Les races, origines et tempéraments (et leurs millions de combinaisons de noms) sont
           gérés dans le code (fichier <code>bapteme_data.py</code>) — univers fantasy, 10 races,
-          chacune avec ses origines (sous-catégories), 12 tempéraments, noms genrés. Parcours :
-          race → genre → origine → tempérament → police. Le membre choisit sa police (cursive, gothique,
+          chacune avec ses origines (sous-catégories), 12 tempéraments, noms genrés, et une foi
+          (voie de quête). Parcours : race → genre → origine → tempérament → foi → police. Le membre choisit sa police (cursive, gothique,
           petites capitales…) ; le nom devient son <strong>pseudo serveur stylisé</strong>. La
           Fripouille doit avoir « Gérer les pseudos » et son rôle au-dessus du membre (elle ne
           peut jamais renommer le propriétaire du serveur — limite Discord).

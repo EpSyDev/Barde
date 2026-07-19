@@ -358,6 +358,33 @@ TRAITS = {
 }
 
 
+# --- Fois (voies masquées ; leur vraie nature se révèle en quête) ---
+# Pour l'instant : simple choix stocké. Les accès/chemins par foi viendront ensuite.
+FAITHS = [
+    {"key": "sceau", "label": "l'Ordre du Sceau", "emoji": "🔒",
+     "desc": "Protéger ce qui doit le rester."},
+    {"key": "renard", "label": "la Voie du Renard", "emoji": "🦊",
+     "desc": "La ruse ouvre plus de portes que la force."},
+    {"key": "marteau", "label": "la Voie du Marteau", "emoji": "🔨",
+     "desc": "La force brise tous les sceaux."},
+    {"key": "voile", "label": "la Voie du Voile", "emoji": "🌫️",
+     "desc": "Les ombres murmurent des vérités."},
+    {"key": "libre", "label": "Libre-penseur", "emoji": "🎲",
+     "desc": "Aucun maître, aucun dogme."},
+]
+
+
+def faith_choices():
+    return [(f["key"], f["label"], f.get("emoji"), f.get("desc")) for f in FAITHS]
+
+
+def faith_label(faith_key):
+    for f in FAITHS:
+        if f["key"] == faith_key:
+            return f["label"]
+    return faith_key
+
+
 def race_choices():
     return [(k, v["label"], v.get("emoji")) for k, v in RACES.items()]
 

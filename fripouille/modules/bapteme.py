@@ -90,6 +90,10 @@ def _trait_embed():
     return _step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète.")
 
 
+def _faith_embed():
+    return _step_embed("🕯️ Ta foi ?", "En quoi crois-tu ? Ta voie tracera ton chemin dans la taverne.")
+
+
 class BackButton(discord.ui.Button):
     """Bouton « Retour » générique : rejoue (embed, view) de l'étape précédente."""
     def __init__(self, make_step, row=1):
@@ -190,10 +194,10 @@ class TraitSelect(discord.ui.Select):
         super().__init__(placeholder="Choisis ton tempérament…", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction):
-        name = data.generate(self.race_key, self.origin_key, self.values[0], self.gender)
-        style = RACE_STYLE.get(self.race_key, fancy.STYLE_ORDER[0])
-        view = ResultView(self.race_key, self.gender, self.origin_key, self.values[0], name, style)
-        await interaction.response.edit_message(embed=view.embed(), view=view)
+        await interaction.response.edit_message(
+            embed=_faith_embed(),
+            view=FaithView(self.race_key, self.gender, self.origin_key, self.values[0]),
+        )
 
 
 class TraitView(discord.ui.View):
@@ -201,6 +205,34 @@ class TraitView(discord.ui.View):
         super().__init__(timeout=300)
         self.add_item(TraitSelect(race_key, gender, origin_key))
         self.add_item(BackButton(lambda: (_origin_embed(), OriginView(race_key, gender))))
+
+
+class FaithSelect(discord.ui.Select):
+    def __init__(self, race_key, gender, origin_key, trait_key):
+        self.race_key = race_key
+        self.gender = gender
+        self.origin_key = origin_key
+        self.trait_key = trait_key
+        options = [
+            discord.SelectOption(label=label, value=key, emoji=emoji, description=desc)
+            for key, label, emoji, desc in data.faith_choices()
+        ]
+        super().__init__(placeholder="Choisis ta foi…", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction):
+        name = data.generate(self.race_key, self.origin_key, self.trait_key, self.gender)
+        style = RACE_STYLE.get(self.race_key, fancy.STYLE_ORDER[0])
+        view = ResultView(
+            self.race_key, self.gender, self.origin_key, self.trait_key, self.values[0], name, style
+        )
+        await interaction.response.edit_message(embed=view.embed(), view=view)
+
+
+class FaithView(discord.ui.View):
+    def __init__(self, race_key, gender, origin_key, trait_key):
+        super().__init__(timeout=300)
+        self.add_item(FaithSelect(race_key, gender, origin_key, trait_key))
+        self.add_item(BackButton(lambda: (_trait_embed(), TraitView(race_key, gender, origin_key))))
 
 
 class StyleSelect(discord.ui.Select):
@@ -217,7 +249,7 @@ class StyleSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         p = self.view
-        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, p.name, self.values[0])
+        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, p.faith_key, p.name, self.values[0])
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
@@ -237,17 +269,18 @@ class EditNameModal(discord.ui.Modal, title="Ajuster ton nom"):
     async def on_submit(self, interaction):
         p = self.parent
         name = str(self.field).strip() or p.name
-        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, name, p.style)
+        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, p.faith_key, name, p.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class ResultView(discord.ui.View):
-    def __init__(self, race_key, gender, origin_key, trait_key, name, style):
+    def __init__(self, race_key, gender, origin_key, trait_key, faith_key, name, style):
         super().__init__(timeout=300)
         self.race_key = race_key
         self.gender = gender
         self.origin_key = origin_key
         self.trait_key = trait_key
+        self.faith_key = faith_key
         self.name = name
         self.style = style
         self.add_item(StyleSelect(style))
@@ -257,12 +290,13 @@ class ResultView(discord.ui.View):
 
     @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name, self.style, self.race_key, self.gender, self.origin_key, self.trait_key)
+        await _finalize(interaction, self.name, self.style, self.race_key, self.gender,
+                        self.origin_key, self.trait_key, self.faith_key)
 
     @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary, row=1)
     async def reroll(self, interaction, button):
         name = data.generate(self.race_key, self.origin_key, self.trait_key, self.gender)
-        view = ResultView(self.race_key, self.gender, self.origin_key, self.trait_key, name, self.style)
+        view = ResultView(self.race_key, self.gender, self.origin_key, self.trait_key, self.faith_key, name, self.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
     @discord.ui.button(label="Ajuster", emoji="✏️", style=discord.ButtonStyle.secondary, row=1)
@@ -272,11 +306,12 @@ class ResultView(discord.ui.View):
     @discord.ui.button(label="Retour", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction, button):
         await interaction.response.edit_message(
-            embed=_trait_embed(), view=TraitView(self.race_key, self.gender, self.origin_key),
+            embed=_faith_embed(),
+            view=FaithView(self.race_key, self.gender, self.origin_key, self.trait_key),
         )
 
 
-async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key):
+async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key, faith_key):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
@@ -304,6 +339,8 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         "origin_label": data.origin_label(race_key, origin_key),
         "trait": trait_key,
         "trait_label": data.trait_label(trait_key),
+        "faith": faith_key,
+        "faith_label": data.faith_label(faith_key),
         "style": style,
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
