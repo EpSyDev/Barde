@@ -331,6 +331,24 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         except discord.Forbidden:
             nick_ok = False
 
+    # Rôle de foi : on ne garde qu'un seul rôle de voie → retire les autres, ajoute le bon.
+    faith_note = ""
+    if isinstance(member, discord.Member):
+        chosen_id = data.faith_role_id(faith_key)
+        all_ids = data.all_faith_role_ids()
+        chosen_int = int(chosen_id) if chosen_id else None
+        try:
+            stale = [r for r in member.roles if r.id in all_ids and r.id != chosen_int]
+            if stale:
+                await member.remove_roles(*stale, reason="Baptême : changement de foi")
+            role = member.guild.get_role(chosen_int) if chosen_int else None
+            if role is None and chosen_int:
+                faith_note = "\n*(Rôle de foi introuvable — préviens un admin.)*"
+            elif role and role not in member.roles:
+                await member.add_roles(role, reason="Baptême : foi")
+        except discord.Forbidden:
+            faith_note = "\n*(Je n'ai pas pu poser ton rôle de foi — permission/hiérarchie.)*"
+
     # Registre persistant : ID Discord → identité choisie (pour l'IA des quêtes).
     roster = dict(cfg.get("roster") or {})
     roster[str(member.id)] = {
@@ -374,7 +392,9 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
             "Ton nouveau pseudo est posé. 📜"
             if nick_ok
             else "⚠️ Je n'ai pas pu changer ton pseudo (permission/hiérarchie), mais voici ton nom."
-        ),
+        )
+        + f"\nTu as rejoint **{data.faith_label(faith_key)}**."
+        + faith_note,
         color=COLOR,
     )
     await interaction.response.edit_message(embed=confirm, view=None)

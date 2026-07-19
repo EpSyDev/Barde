@@ -362,22 +362,27 @@ TRAITS = {
 # Pour l'instant : simple choix stocké. Les accès/chemins par foi viendront ensuite.
 FAITHS = [
     {"key": "sceau", "label": "l'Ordre du Sceau", "emoji": "🔒",
+     "role_id": "1528416586120167774",
      "desc": "Protéger ce qui doit le rester.",
      "creed": "Quelque chose dort sous la taverne. L'Ordre veille à ce qu'il ne s'éveille "
               "jamais : discipline, serments, et foi inébranlable envers le Premier."},
     {"key": "renard", "label": "la Voie du Renard", "emoji": "🦊",
+     "role_id": "1528416918434742473",
      "desc": "La ruse ouvre plus de portes que la force.",
      "creed": "Pourquoi forcer une porte qu'on peut convaincre de s'ouvrir ? Les Renards "
               "amassent secrets, faveurs et raccourcis — et paient toujours leurs dettes… un jour."},
     {"key": "marteau", "label": "la Voie du Marteau", "emoji": "🔨",
+     "role_id": "1528417282957512855",
      "desc": "La force brise tous les sceaux.",
      "creed": "Tout sceau finit par céder sous assez de coups. Les fidèles du Marteau ne "
               "négocient pas avec un mur : ils cognent jusqu'à ce qu'il cède."},
     {"key": "voile", "label": "la Voie du Voile", "emoji": "🌫️",
+     "role_id": "1528418114780397588",
      "desc": "Les ombres murmurent des vérités.",
      "creed": "Tends l'oreille : les murs murmurent, et le Voile traduit. Ceux qui l'écoutent "
               "apprennent des vérités que les autres préfèrent ne pas connaître."},
     {"key": "libre", "label": "Libre-penseur", "emoji": "🎲",
+     "role_id": "1528418315280584764",
      "desc": "Aucun maître, aucun dogme.",
      "creed": "Dieux, sceaux, prophéties : du folklore pour veillées d'auberge. Le Libre-penseur "
               "ne doit rien à personne et compte bien le rester."},
@@ -393,6 +398,17 @@ def faith_label(faith_key):
         if f["key"] == faith_key:
             return f["label"]
     return faith_key
+
+
+def faith_role_id(faith_key):
+    for f in FAITHS:
+        if f["key"] == faith_key:
+            return f.get("role_id")
+    return None
+
+
+def all_faith_role_ids():
+    return {int(f["role_id"]) for f in FAITHS if f.get("role_id")}
 
 
 def race_choices():
