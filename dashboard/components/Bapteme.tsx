@@ -13,8 +13,6 @@ type BaptemeCfg = {
   panel_image: string;
   button_label: string;
   event_message: string;
-  dm_message: string;
-  set_nickname: boolean;
 };
 
 export default function Bapteme() {
@@ -44,8 +42,6 @@ export default function Bapteme() {
           panel_image: d.panel_image || "",
           button_label: d.button_label || "",
           event_message: d.event_message || "",
-          dm_message: d.dm_message || "",
-          set_nickname: !!d.set_nickname,
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -99,8 +95,9 @@ export default function Bapteme() {
         <div className="cfg-card-head">
           <h2>🕯️ Baptême</h2>
           <p>
-            Un panneau à bouton : le membre choisit sa race puis son tempérament, le bot lui
-            génère un nom (des millions de combinaisons), l'envoie en MP et annonce l'événement.
+            Un panneau à bouton : le membre choisit sa race, son tempérament puis sa police, le
+            bot lui génère un nom (des millions de combinaisons), le pose en pseudo stylisé et
+            annonce l'événement.
           </p>
         </div>
 
@@ -167,19 +164,6 @@ export default function Bapteme() {
         </div>
 
         <div className="cfg-field">
-          <label>Message privé envoyé au membre</label>
-          <textarea
-            rows={2}
-            value={cfg.dm_message}
-            onChange={(e) => set({ dm_message: e.target.value })}
-            placeholder="Bienvenue, {name} !"
-          />
-          <p className="cfg-hint">
-            Variables : <code>{"{name}"}</code> = nom stylisé (police par race),{" "}
-            <code>{"{name_plain}"}</code> = nom lisible.
-          </p>
-        </div>
-        <div className="cfg-field">
           <label>Message d'événement (salon d'annonce)</label>
           <textarea
             rows={2}
@@ -193,16 +177,6 @@ export default function Bapteme() {
           </p>
         </div>
 
-        <label className="cfg-toggle">
-          <input
-            type="checkbox"
-            checked={cfg.set_nickname}
-            onChange={(e) => set({ set_nickname: e.target.checked })}
-          />
-          <span className="switch" />
-          <span>Poser aussi le nom en pseudo serveur du membre</span>
-        </label>
-
         <div className="cfg-actions">
           <button className="btn primary" onClick={save} disabled={saving || !canSave}>
             {saving ? "Enregistrement…" : "Enregistrer & publier"}
@@ -214,10 +188,10 @@ export default function Bapteme() {
         <p className="cfg-hint">
           Les races et tempéraments (et leurs milliers de combinaisons de noms) sont gérés
           dans le code (fichier <code>bapteme_data.py</code>) — proto actuel : univers fantasy,
-          races Elfe / Nain / Orc / Humain. Chaque race a sa « police » (caractères Unicode
-          stylisés) pour l'immersion : Elfe cursive, Nain gothique gras, Orc gothique, Humain
-          petites capitales. Le pseudo, lui, reste en clair. L'option pseudo requiert « Gérer les
-          pseudos » et le rôle de La Fripouille au-dessus du membre.
+          races Elfe / Nain / Orc / Humain. Le membre choisit sa police (cursive, gothique,
+          petites capitales…) ; le nom devient son <strong>pseudo serveur stylisé</strong>. La
+          Fripouille doit avoir « Gérer les pseudos » et son rôle au-dessus du membre (elle ne
+          peut jamais renommer le propriétaire du serveur — limite Discord).
         </p>
       </section>
     </div>

@@ -52,6 +52,16 @@ STYLES = {
     "smallcaps": SMALLCAPS,
 }
 
+# Libellés + ordre d'affichage (menus dashboard/Discord).
+STYLE_LABELS = {
+    "script": "Cursive",
+    "fraktur": "Gothique",
+    "fraktur_bold": "Gothique gras",
+    "smallcaps": "Petites capitales",
+    "bold": "Gras",
+}
+STYLE_ORDER = ["script", "fraktur", "fraktur_bold", "smallcaps", "bold"]
+
 
 _LIGATURES = {"œ": "oe", "Œ": "Oe", "æ": "ae", "Æ": "Ae"}
 

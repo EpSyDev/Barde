@@ -1,17 +1,17 @@
 """Module « Baptême » : générateur de noms interactif.
 
-Un panneau à bouton dans un salon (#bapteme) → parcours **éphémère** (menus) où le
-membre choisit sa **race** puis son **trait**, le bot génère un nom (moteur
-combinatoire de ``bapteme_data``), le membre **valide** ou **relance**. À la
-validation : nom envoyé en **MP**, message d'**événement** dans le coin des voyageurs,
-et (option) posé en **pseudo serveur**.
+Un panneau à bouton dans un salon (#bapteme) → parcours **éphémère** où le membre
+choisit sa **race**, son **trait**, puis sa **police** (caractères Unicode stylisés).
+Le nom généré (moteur combinatoire de ``bapteme_data``) devient directement son
+**pseudo serveur** stylisé. Un message d'**événement** est posté dans le coin des
+voyageurs. Pas de MP (trop dépendant des réglages de confidentialité des membres).
 
-Config (dashboard) : salon du panneau, salon d'événement, textes de l'embed/MP/event,
-image, option pseudo. Les pools de noms vivent dans ``bapteme_data`` (fichier maintenu
-à la main), pas dans la config — cf. mémoire.
+Config (dashboard) : salon du panneau, salon d'événement, textes/image du panneau,
+message d'événement. Les pools de noms vivent dans ``bapteme_data`` ; les polices
+dans ``fancy`` — cf. mémoire.
 
 Vue persistante : le bouton du panneau (`bapteme:start`). Le parcours d'après est une
-suite de vues éphémères à état (durée de vie = l'interaction), pas besoin de persistance.
+suite de vues éphémères à état (durée de vie = l'interaction).
 """
 import logging
 
@@ -25,14 +25,10 @@ log = logging.getLogger("fripouille.bapteme")
 
 START_ID = "bapteme:start"
 COLOR = 0xC9A44A
-NICK_MAX = 32     # limite Discord d'un pseudo
+NICK_MAX = 32     # limite Discord d'un pseudo (en codepoints)
 
-# Chaque race a « sa main » (style Unicode) pour l'immersion — cf. fancy.py.
+# Police proposée par défaut selon la race (l'utilisateur peut en changer).
 RACE_STYLE = {"elfe": "script", "nain": "fraktur_bold", "orc": "fraktur", "humain": "smallcaps"}
-
-
-def _styled(name, race_key):
-    return fancy.stylize(name, RACE_STYLE.get(race_key, ""))
 
 DEFAULTS = {
     "enabled": False,
@@ -46,8 +42,6 @@ DEFAULTS = {
     "panel_image": "",
     "button_label": "Se faire baptiser",
     "event_message": "🕯️ Un nouveau voyageur est baptisé : **{name}** !",
-    "dm_message": "Bienvenue, **{name}**\n`{name_plain}`\nQue ton nom résonne longtemps dans la taverne. 🍺",
-    "set_nickname": False,
     "message_id": None,
 }
 
@@ -56,15 +50,30 @@ def _cfg(bot):
     return bot.store.get("bapteme")
 
 
+def _nick(name, style):
+    """Nom stylisé ajusté à la limite de pseudo (coupe au dernier mot si trop long)."""
+    styled = fancy.stylize(name, style)
+    if len(styled) <= NICK_MAX:
+        return styled
+    cut = name[:NICK_MAX]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return fancy.stylize(cut, style)[:NICK_MAX]
+
+
 def _step_embed(title, description):
     return discord.Embed(title=title, description=description, color=COLOR)
 
 
-def _result_embed(name, race_key):
-    styled = _styled(name, race_key)
+def _result_embed(name, style):
+    styled = fancy.stylize(name, style)
     return discord.Embed(
         title="🪶 Ton nom",
-        description=f"# {styled}\n`{name}`\n\nIl te va comme un gant ? **Valide-le.** Sinon, **relance le sort.**",
+        description=(
+            f"# {styled}\n`{name}`\n\n"
+            "Choisis ta **police** dans le menu, **relance** le sort si le nom ne te plaît "
+            "pas, puis **valide** — il deviendra ton pseudo."
+        ),
         color=COLOR,
     )
 
@@ -102,10 +111,9 @@ class TraitSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         name = data.generate(self.race_key, self.values[0])
-        await interaction.response.edit_message(
-            embed=_result_embed(name, self.race_key),
-            view=ResultView(self.race_key, self.values[0], name),
-        )
+        style = RACE_STYLE.get(self.race_key, fancy.STYLE_ORDER[0])
+        view = ResultView(self.race_key, self.values[0], name, style)
+        await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class TraitView(discord.ui.View):
@@ -114,57 +122,71 @@ class TraitView(discord.ui.View):
         self.add_item(TraitSelect(race_key))
 
 
+class StyleSelect(discord.ui.Select):
+    def __init__(self, current):
+        options = [
+            discord.SelectOption(
+                label=fancy.STYLE_LABELS[s],
+                value=s,
+                default=(s == current),
+            )
+            for s in fancy.STYLE_ORDER
+        ]
+        super().__init__(placeholder="Choisis ta police…", min_values=1, max_values=1, options=options, row=0)
+
+    async def callback(self, interaction):
+        p = self.view
+        view = ResultView(p.race_key, p.trait_key, p.name, self.values[0])
+        await interaction.response.edit_message(embed=view.embed(), view=view)
+
+
 class ResultView(discord.ui.View):
-    def __init__(self, race_key, trait_key, name):
+    def __init__(self, race_key, trait_key, name, style):
         super().__init__(timeout=300)
         self.race_key = race_key
         self.trait_key = trait_key
         self.name = name
+        self.style = style
+        self.add_item(StyleSelect(style))
 
-    @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success)
+    def embed(self):
+        return _result_embed(self.name, self.style)
+
+    @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name, self.race_key)
+        await _finalize(interaction, self.name, self.style)
 
-    @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary, row=1)
     async def reroll(self, interaction, button):
-        self.name = data.generate(self.race_key, self.trait_key)
-        await interaction.response.edit_message(embed=_result_embed(self.name, self.race_key), view=self)
+        name = data.generate(self.race_key, self.trait_key)
+        view = ResultView(self.race_key, self.trait_key, name, self.style)
+        await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
-async def _finalize(interaction, name, race_key):
+async def _finalize(interaction, name, style):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
-    styled = _styled(name, race_key)
+    styled = fancy.stylize(name, style)
 
-    def _fmt(text):
-        # {name} = nom stylisé (immersion) ; {name_plain} = nom lisible ; {mention} = le membre.
-        return (text or "").replace("{name_plain}", name).replace("{name}", styled).replace(
-            "{mention}", member.mention
-        )
-
-    # Option : poser le nom en pseudo serveur — en CLAIR (lisibilité, recherche, mentions).
-    nick_note = ""
-    if cfg.get("set_nickname") and isinstance(member, discord.Member):
+    # Le pseudo serveur devient le nom stylisé (c'est la livraison, plus de MP).
+    nick_ok = True
+    if isinstance(member, discord.Member):
         try:
-            await member.edit(nick=name[:NICK_MAX], reason="Baptême")
+            await member.edit(nick=_nick(name, style), reason="Baptême")
         except discord.Forbidden:
-            nick_note = "\n*(Je n'ai pas pu poser ton pseudo — permission/hiérarchie.)*"
-
-    # MP au membre.
-    dm_ok = True
-    try:
-        await member.send(_fmt(cfg.get("dm_message")))
-    except discord.Forbidden:
-        dm_ok = False
+            nick_ok = False
 
     # Message d'événement dans le coin des voyageurs.
     ev_id = cfg.get("event_channel_id")
     channel = bot.get_channel(int(ev_id)) if ev_id else None
     if channel is not None:
+        text = (cfg.get("event_message") or "").replace("{name_plain}", name).replace(
+            "{name}", styled
+        ).replace("{mention}", member.mention)
         try:
             await channel.send(
-                _fmt(cfg.get("event_message")),
+                text,
                 allowed_mentions=discord.AllowedMentions(users=False, roles=False, everyone=False),
             )
         except discord.Forbidden:
@@ -173,8 +195,11 @@ async def _finalize(interaction, name, race_key):
     confirm = discord.Embed(
         title="🎉 Te voilà baptisé !",
         description=f"# {styled}\n`{name}`\n\n"
-        + ("Ton nom t'attend en message privé. 📜" if dm_ok else "⚠️ Tes MP sont fermés — note-le vite !")
-        + nick_note,
+        + (
+            "Ton nouveau pseudo est posé. 📜"
+            if nick_ok
+            else "⚠️ Je n'ai pas pu changer ton pseudo (permission/hiérarchie), mais voici ton nom."
+        ),
         color=COLOR,
     )
     await interaction.response.edit_message(embed=confirm, view=None)
