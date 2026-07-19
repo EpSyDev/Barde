@@ -362,15 +362,25 @@ TRAITS = {
 # Pour l'instant : simple choix stocké. Les accès/chemins par foi viendront ensuite.
 FAITHS = [
     {"key": "sceau", "label": "l'Ordre du Sceau", "emoji": "🔒",
-     "desc": "Protéger ce qui doit le rester."},
+     "desc": "Protéger ce qui doit le rester.",
+     "creed": "Quelque chose dort sous la taverne. L'Ordre veille à ce qu'il ne s'éveille "
+              "jamais : discipline, serments, et foi inébranlable envers le Premier."},
     {"key": "renard", "label": "la Voie du Renard", "emoji": "🦊",
-     "desc": "La ruse ouvre plus de portes que la force."},
+     "desc": "La ruse ouvre plus de portes que la force.",
+     "creed": "Pourquoi forcer une porte qu'on peut convaincre de s'ouvrir ? Les Renards "
+              "amassent secrets, faveurs et raccourcis — et paient toujours leurs dettes… un jour."},
     {"key": "marteau", "label": "la Voie du Marteau", "emoji": "🔨",
-     "desc": "La force brise tous les sceaux."},
+     "desc": "La force brise tous les sceaux.",
+     "creed": "Tout sceau finit par céder sous assez de coups. Les fidèles du Marteau ne "
+              "négocient pas avec un mur : ils cognent jusqu'à ce qu'il cède."},
     {"key": "voile", "label": "la Voie du Voile", "emoji": "🌫️",
-     "desc": "Les ombres murmurent des vérités."},
+     "desc": "Les ombres murmurent des vérités.",
+     "creed": "Tends l'oreille : les murs murmurent, et le Voile traduit. Ceux qui l'écoutent "
+              "apprennent des vérités que les autres préfèrent ne pas connaître."},
     {"key": "libre", "label": "Libre-penseur", "emoji": "🎲",
-     "desc": "Aucun maître, aucun dogme."},
+     "desc": "Aucun maître, aucun dogme.",
+     "creed": "Dieux, sceaux, prophéties : du folklore pour veillées d'auberge. Le Libre-penseur "
+              "ne doit rien à personne et compte bien le rester."},
 ]
 
 

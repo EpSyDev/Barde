@@ -91,7 +91,13 @@ def _trait_embed():
 
 
 def _faith_embed():
-    return _step_embed("🕯️ Ta foi ?", "En quoi crois-tu ? Ta voie tracera ton chemin dans la taverne.")
+    lines = "\n\n".join(
+        f"{f['emoji']} **{f['label']}**\n{f['creed']}" for f in data.FAITHS
+    )
+    return _step_embed(
+        "🕯️ Ta foi ?",
+        "En quoi crois-tu ? Ta voie tracera ton chemin dans la taverne.\n\n" + lines,
+    )
 
 
 class BackButton(discord.ui.Button):
