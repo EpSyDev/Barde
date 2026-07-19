@@ -1384,3 +1384,65 @@ h3 {
   color: var(--red);
   font-size: 0.85rem;
 }
+
+/* --- Registre des baptisés --- */
+.reg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.reg-toolbar input {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+.reg-count {
+  color: var(--parchment-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.reg-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+}
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.reg-table th,
+.reg-table td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--panel-edge);
+}
+.reg-table th {
+  color: var(--gold);
+  font-weight: 600;
+  background: var(--wood-light);
+  position: sticky;
+  top: 0;
+}
+.reg-table tbody tr:hover,
+.reg-table tbody tr:hover {
+  background: rgba(201, 164, 74, 0.06);
+}
+.reg-table td {
+  color: var(--parchment);
+}
+.reg-pseudo {
+  font-size: 1.05rem;
+}
+.reg-id {
+  color: var(--parchment-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}

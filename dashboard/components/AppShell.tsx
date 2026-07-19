@@ -8,6 +8,7 @@ import Messages from "@/components/Messages";
 import Tickets from "@/components/Tickets";
 import Voice from "@/components/Voice";
 import Bapteme from "@/components/Bapteme";
+import Registre from "@/components/Registre";
 import Media from "@/components/Media";
 import { logout } from "@/app/actions";
 
@@ -28,6 +29,7 @@ const SECTIONS: Section[] = [
   { id: "tickets", label: "Tickets", icon: "🎫", hint: "Support membres", ready: true },
   { id: "vocaux", label: "Salons vocaux", icon: "🔊", hint: "Vocaux temporaires", ready: true },
   { id: "bapteme", label: "Baptême", icon: "🕯️", hint: "Générateur de noms", ready: true },
+  { id: "registre", label: "Registre", icon: "📜", hint: "Baptisés", ready: true },
   { id: "media", label: "Média", icon: "🖼️", hint: "Images des embeds", ready: true },
   { id: "taverniers", label: "Taverniers", icon: "🧙", hint: "PNJ & ambiance", ready: false },
   { id: "reglages", label: "Réglages", icon: "⚙", hint: "Configuration du bot", ready: false },
@@ -115,6 +117,8 @@ export default function AppShell({ userName }: { userName: string }) {
           <Voice />
         ) : active === "bapteme" ? (
           <Bapteme />
+        ) : active === "registre" ? (
+          <Registre />
         ) : active === "media" ? (
           <Media />
         ) : (
