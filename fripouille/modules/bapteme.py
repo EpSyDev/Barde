@@ -19,12 +19,20 @@ import discord
 
 from ..registry import Module, register
 from . import bapteme_data as data
+from . import fancy
 
 log = logging.getLogger("fripouille.bapteme")
 
 START_ID = "bapteme:start"
 COLOR = 0xC9A44A
 NICK_MAX = 32     # limite Discord d'un pseudo
+
+# Chaque race a « sa main » (style Unicode) pour l'immersion — cf. fancy.py.
+RACE_STYLE = {"elfe": "script", "nain": "fraktur_bold", "orc": "fraktur", "humain": "smallcaps"}
+
+
+def _styled(name, race_key):
+    return fancy.stylize(name, RACE_STYLE.get(race_key, ""))
 
 DEFAULTS = {
     "enabled": False,
@@ -38,7 +46,7 @@ DEFAULTS = {
     "panel_image": "",
     "button_label": "Se faire baptiser",
     "event_message": "🕯️ Un nouveau voyageur est baptisé : **{name}** !",
-    "dm_message": "Bienvenue, **{name}**. Que ton nom résonne longtemps dans la taverne. 🍺",
+    "dm_message": "Bienvenue, **{name}**\n`{name_plain}`\nQue ton nom résonne longtemps dans la taverne. 🍺",
     "set_nickname": False,
     "message_id": None,
 }
@@ -52,10 +60,11 @@ def _step_embed(title, description):
     return discord.Embed(title=title, description=description, color=COLOR)
 
 
-def _result_embed(name):
+def _result_embed(name, race_key):
+    styled = _styled(name, race_key)
     return discord.Embed(
         title="🪶 Ton nom",
-        description=f"# {name}\n\nIl te va comme un gant ? **Valide-le.** Sinon, **relance le sort.**",
+        description=f"# {styled}\n`{name}`\n\nIl te va comme un gant ? **Valide-le.** Sinon, **relance le sort.**",
         color=COLOR,
     )
 
@@ -94,7 +103,8 @@ class TraitSelect(discord.ui.Select):
     async def callback(self, interaction):
         name = data.generate(self.race_key, self.values[0])
         await interaction.response.edit_message(
-            embed=_result_embed(name), view=ResultView(self.race_key, self.values[0], name)
+            embed=_result_embed(name, self.race_key),
+            view=ResultView(self.race_key, self.values[0], name),
         )
 
 
@@ -113,20 +123,27 @@ class ResultView(discord.ui.View):
 
     @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name)
+        await _finalize(interaction, self.name, self.race_key)
 
     @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary)
     async def reroll(self, interaction, button):
         self.name = data.generate(self.race_key, self.trait_key)
-        await interaction.response.edit_message(embed=_result_embed(self.name), view=self)
+        await interaction.response.edit_message(embed=_result_embed(self.name, self.race_key), view=self)
 
 
-async def _finalize(interaction, name):
+async def _finalize(interaction, name, race_key):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
+    styled = _styled(name, race_key)
 
-    # Option : poser le nom en pseudo serveur.
+    def _fmt(text):
+        # {name} = nom stylisé (immersion) ; {name_plain} = nom lisible ; {mention} = le membre.
+        return (text or "").replace("{name_plain}", name).replace("{name}", styled).replace(
+            "{mention}", member.mention
+        )
+
+    # Option : poser le nom en pseudo serveur — en CLAIR (lisibilité, recherche, mentions).
     nick_note = ""
     if cfg.get("set_nickname") and isinstance(member, discord.Member):
         try:
@@ -137,7 +154,7 @@ async def _finalize(interaction, name):
     # MP au membre.
     dm_ok = True
     try:
-        await member.send((cfg.get("dm_message") or "").replace("{name}", name))
+        await member.send(_fmt(cfg.get("dm_message")))
     except discord.Forbidden:
         dm_ok = False
 
@@ -145,15 +162,17 @@ async def _finalize(interaction, name):
     ev_id = cfg.get("event_channel_id")
     channel = bot.get_channel(int(ev_id)) if ev_id else None
     if channel is not None:
-        text = (cfg.get("event_message") or "").replace("{name}", name).replace("{mention}", member.mention)
         try:
-            await channel.send(text, allowed_mentions=discord.AllowedMentions(users=False, roles=False, everyone=False))
+            await channel.send(
+                _fmt(cfg.get("event_message")),
+                allowed_mentions=discord.AllowedMentions(users=False, roles=False, everyone=False),
+            )
         except discord.Forbidden:
             log.error("bapteme : envoi de l'événement refusé")
 
     confirm = discord.Embed(
         title="🎉 Te voilà baptisé !",
-        description=f"# {name}\n\n"
+        description=f"# {styled}\n`{name}`\n\n"
         + ("Ton nom t'attend en message privé. 📜" if dm_ok else "⚠️ Tes MP sont fermés — note-le vite !")
         + nick_note,
         color=COLOR,

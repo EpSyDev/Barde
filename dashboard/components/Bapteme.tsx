@@ -175,7 +175,8 @@ export default function Bapteme() {
             placeholder="Bienvenue, {name} !"
           />
           <p className="cfg-hint">
-            Variable : <code>{"{name}"}</code> = le nom généré.
+            Variables : <code>{"{name}"}</code> = nom stylisé (police par race),{" "}
+            <code>{"{name_plain}"}</code> = nom lisible.
           </p>
         </div>
         <div className="cfg-field">
@@ -187,8 +188,8 @@ export default function Bapteme() {
             placeholder="🕯️ Un nouveau voyageur est baptisé : {name} !"
           />
           <p className="cfg-hint">
-            Variables : <code>{"{name}"}</code>, <code>{"{mention}"}</code> (le membre — non
-            pingué par défaut).
+            Variables : <code>{"{name}"}</code> (stylisé), <code>{"{name_plain}"}</code>{" "}
+            (lisible), <code>{"{mention}"}</code> (le membre — non pingué par défaut).
           </p>
         </div>
 
@@ -213,8 +214,10 @@ export default function Bapteme() {
         <p className="cfg-hint">
           Les races et tempéraments (et leurs milliers de combinaisons de noms) sont gérés
           dans le code (fichier <code>bapteme_data.py</code>) — proto actuel : univers fantasy,
-          races Elfe / Nain / Orc / Humain. L'option pseudo requiert « Gérer les pseudos » et le
-          rôle de La Fripouille au-dessus du membre.
+          races Elfe / Nain / Orc / Humain. Chaque race a sa « police » (caractères Unicode
+          stylisés) pour l'immersion : Elfe cursive, Nain gothique gras, Orc gothique, Humain
+          petites capitales. Le pseudo, lui, reste en clair. L'option pseudo requiert « Gérer les
+          pseudos » et le rôle de La Fripouille au-dessus du membre.
         </p>
       </section>
     </div>
