@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 import discord
 
+from .. import config
 from ..registry import Module, register
 from . import bapteme_data as data
 from . import fancy
@@ -222,6 +223,46 @@ async def _finalize(interaction, name, style, race_key, trait_key):
     await interaction.response.edit_message(embed=confirm, view=None)
 
 
+# --- Import des baptisés antérieurs au registre ---
+async def backfill(bot, payload):
+    """Reconstruit des fiches pour les membres portant déjà un pseudo stylisé mais
+    absents du registre (baptêmes faits avant l'ajout du roster). Race/tempérament
+    irrécupérables (jamais stockés) → laissés vides ; nom déduit en inversant la police."""
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    if not guild.chunked:
+        await guild.chunk()   # récupère tous les membres (intent Server Members)
+
+    roster = dict(_cfg(bot).get("roster") or {})
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    added = 0
+    for member in guild.members:
+        if member.bot or str(member.id) in roster:
+            continue
+        nick = member.nick
+        if not nick:
+            continue
+        style, plain = fancy.destylize(nick)
+        if style is None:          # pseudo non stylisé → pas un baptisé
+            continue
+        roster[str(member.id)] = {
+            "user": member.name,
+            "name": plain,
+            "pseudo": nick,
+            "race": "",
+            "trait": "",
+            "style": style,
+            "at": now,
+            "source": "import",
+        }
+        added += 1
+
+    if added:
+        bot.store.set("bapteme", {"roster": roster})
+    return {"added": added, "total": len(roster)}
+
+
 # --- Panneau (vue persistante) ---
 class BaptizeButton(discord.ui.Button):
     def __init__(self, label):
@@ -286,4 +327,5 @@ MODULE = register(Module(
     label="Baptême",
     defaults=DEFAULTS,
     apply=apply,
+    actions={"backfill": backfill},
 ))

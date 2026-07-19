@@ -81,3 +81,31 @@ def stylize(text, style):
     if not table:
         return text
     return "".join(table.get(ch, ch) for ch in _strip_accents(text))
+
+
+# Cartes inverses (glyphe stylisé → lettre de base), pour reconnaître/décoder un pseudo.
+_INVERSE = {}
+for _style, _table in STYLES.items():
+    _inv = {}
+    for _plain, _glyph in _table.items():
+        _inv.setdefault(_glyph, _plain)   # minuscule prioritaire (smallcaps A/a → même glyphe)
+    _INVERSE[_style] = _inv
+
+
+def destylize(text):
+    """Détecte la police d'un texte stylisé et renvoie (style, texte_de_base).
+
+    Renvoie (None, text) si aucun glyphe stylisé reconnu. La détection compte les
+    glyphes distinctifs (hors ASCII) de chaque police ; la mieux couverte gagne.
+    """
+    if not text:
+        return None, text
+    scores = {
+        style: sum(1 for ch in text if ord(ch) > 127 and ch in inv)
+        for style, inv in _INVERSE.items()
+    }
+    style = max(scores, key=scores.get)
+    if scores[style] == 0:
+        return None, text
+    inv = _INVERSE[style]
+    return style, "".join(inv.get(ch, ch) for ch in text)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Entry = {
   id: string;
@@ -41,22 +41,50 @@ export default function Registre() {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/fripouille/config/bapteme", { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      const roster = (d.roster || {}) as Record<string, Omit<Entry, "id">>;
+      const list: Entry[] = Object.entries(roster).map(([id, v]) => ({ id, ...v }));
+      list.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+      setEntries(list);
+    } catch {
+      setError("La Fripouille est injoignable.");
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/fripouille/config/bapteme", { cache: "no-store" });
-        if (!res.ok) throw new Error();
-        const d = await res.json();
-        const roster = (d.roster || {}) as Record<string, Omit<Entry, "id">>;
-        const list: Entry[] = Object.entries(roster).map(([id, v]) => ({ id, ...v }));
-        list.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-        setEntries(list);
-      } catch {
-        setError("La Fripouille est injoignable.");
-      }
-    })();
-  }, []);
+    load();
+  }, [load]);
+
+  const importOld = useCallback(async () => {
+    setImporting(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/fripouille/action/bapteme/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setNotice(
+        d.added > 0
+          ? `${d.added} baptisé(s) importé(s) depuis les pseudos.`
+          : "Aucun nouveau pseudo stylisé à importer."
+      );
+      await load();
+    } catch {
+      setNotice("Échec de l'import (bot injoignable ?).");
+    } finally {
+      setImporting(false);
+    }
+  }, [load]);
 
   const filtered = useMemo(() => {
     if (!entries) return [];
@@ -111,6 +139,9 @@ export default function Registre() {
             {filtered.length} / {entries.length}
           </span>
           <div className="reg-actions">
+            <button className="btn" onClick={importOld} disabled={importing}>
+              {importing ? "Import…" : "Importer les anciens"}
+            </button>
             <button className="btn" onClick={exportCSV} disabled={!entries.length}>
               Export CSV
             </button>
@@ -119,6 +150,7 @@ export default function Registre() {
             </button>
           </div>
         </div>
+        {notice && <p className="cfg-hint" style={{ marginTop: "-0.5rem" }}>{notice}</p>}
 
         {entries.length === 0 ? (
           <div className="empty-state">Aucun baptisé pour l'instant.</div>
@@ -142,8 +174,8 @@ export default function Registre() {
                   <tr key={e.id}>
                     <td className="reg-pseudo">{e.pseudo}</td>
                     <td>{e.name}</td>
-                    <td>{RACE[e.race] || e.race}</td>
-                    <td>{TRAIT[e.trait] || e.trait}</td>
+                    <td>{RACE[e.race] || e.race || "—"}</td>
+                    <td>{TRAIT[e.trait] || e.trait || "—"}</td>
                     <td>{STYLE[e.style] || e.style}</td>
                     <td>{e.user}</td>
                     <td className="reg-id">{e.id}</td>
