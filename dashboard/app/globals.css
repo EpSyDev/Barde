@@ -880,6 +880,10 @@ h3 {
   grid-template-columns: minmax(0, 640px);
 }
 
+.cfg-grid.full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* --- Éditeur de jeux --- */
 .game-list {
   display: flex;

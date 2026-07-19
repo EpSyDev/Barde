@@ -8,7 +8,11 @@ type Entry = {
   name: string;
   pseudo: string;
   race: string;
+  race_label?: string;
+  origin?: string;
+  origin_label?: string;
   trait: string;
+  trait_label?: string;
   style: string;
   at: string;
 };
@@ -91,7 +95,11 @@ export default function Registre() {
     const s = q.trim().toLowerCase();
     if (!s) return entries;
     return entries.filter((e) =>
-      [e.name, e.user, e.id, RACE[e.race] || e.race, TRAIT[e.trait] || e.trait]
+      [
+        e.name, e.user, e.id,
+        e.race_label || RACE[e.race] || e.race, e.origin_label || "",
+        e.trait_label || TRAIT[e.trait] || e.trait,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(s)
@@ -101,7 +109,7 @@ export default function Registre() {
   const exportJSON = () =>
     download(JSON.stringify(entries, null, 2), "registre-bapteme.json", "application/json");
   const exportCSV = () => {
-    const head = ["id", "user", "name", "race", "trait", "style", "at"];
+    const head = ["id", "user", "name", "race", "origin", "trait", "style", "at"];
     const rows = (entries || []).map((e) =>
       head.map((h) => csvCell((e as unknown as Record<string, unknown>)[h])).join(",")
     );
@@ -117,7 +125,7 @@ export default function Registre() {
   if (!entries) return <div className="empty-state">Chargement du registre…</div>;
 
   return (
-    <div className="cfg-grid wide">
+    <div className="cfg-grid full">
       <section className="cfg-card">
         <div className="cfg-card-head">
           <h2>📜 Registre des baptisés</h2>
@@ -162,6 +170,7 @@ export default function Registre() {
                   <th>Pseudo</th>
                   <th>Nom</th>
                   <th>Race</th>
+                  <th>Origine</th>
                   <th>Tempérament</th>
                   <th>Police</th>
                   <th>Membre</th>
@@ -174,8 +183,9 @@ export default function Registre() {
                   <tr key={e.id}>
                     <td className="reg-pseudo">{e.pseudo}</td>
                     <td>{e.name}</td>
-                    <td>{RACE[e.race] || e.race || "—"}</td>
-                    <td>{TRAIT[e.trait] || e.trait || "—"}</td>
+                    <td>{e.race_label || RACE[e.race] || e.race || "—"}</td>
+                    <td>{e.origin_label || "—"}</td>
+                    <td>{e.trait_label || TRAIT[e.trait] || e.trait || "—"}</td>
                     <td>{STYLE[e.style] || e.style}</td>
                     <td>{e.user}</td>
                     <td className="reg-id">{e.id}</td>

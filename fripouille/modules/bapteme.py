@@ -30,7 +30,11 @@ COLOR = 0xC9A44A
 NICK_MAX = 32     # limite Discord d'un pseudo (en codepoints)
 
 # Police proposée par défaut selon la race (l'utilisateur peut en changer).
-RACE_STYLE = {"elfe": "script", "nain": "fraktur_bold", "orc": "fraktur", "humain": "smallcaps"}
+RACE_STYLE = {
+    "elfe": "script", "nain": "fraktur_bold", "orc": "fraktur", "humain": "smallcaps",
+    "halfelin": "bold", "gnome": "bold", "drakeide": "fraktur", "tieffelin": "fraktur",
+    "fee": "script", "revenant": "fraktur_bold",
+}
 
 DEFAULTS = {
     "enabled": False,
@@ -94,8 +98,8 @@ class RaceSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         await interaction.response.edit_message(
-            embed=_step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète."),
-            view=TraitView(self.values[0]),
+            embed=_step_embed("🧭 Ton origine ?", "De quelle contrée viens-tu ? Elle marquera ton nom."),
+            view=OriginView(self.values[0]),
         )
 
 
@@ -105,9 +109,32 @@ class RaceView(discord.ui.View):
         self.add_item(RaceSelect())
 
 
-class TraitSelect(discord.ui.Select):
+class OriginSelect(discord.ui.Select):
     def __init__(self, race_key):
         self.race_key = race_key
+        options = [
+            discord.SelectOption(label=label, value=key, emoji=emoji)
+            for key, label, emoji in data.origin_choices(race_key)
+        ]
+        super().__init__(placeholder="Choisis ton origine…", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction):
+        await interaction.response.edit_message(
+            embed=_step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète."),
+            view=TraitView(self.race_key, self.values[0]),
+        )
+
+
+class OriginView(discord.ui.View):
+    def __init__(self, race_key):
+        super().__init__(timeout=300)
+        self.add_item(OriginSelect(race_key))
+
+
+class TraitSelect(discord.ui.Select):
+    def __init__(self, race_key, origin_key):
+        self.race_key = race_key
+        self.origin_key = origin_key
         options = [
             discord.SelectOption(label=label, value=key, emoji=emoji)
             for key, label, emoji in data.trait_choices()
@@ -115,16 +142,16 @@ class TraitSelect(discord.ui.Select):
         super().__init__(placeholder="Choisis ton tempérament…", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction):
-        name = data.generate(self.race_key, self.values[0])
+        name = data.generate(self.race_key, self.origin_key, self.values[0])
         style = RACE_STYLE.get(self.race_key, fancy.STYLE_ORDER[0])
-        view = ResultView(self.race_key, self.values[0], name, style)
+        view = ResultView(self.race_key, self.origin_key, self.values[0], name, style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class TraitView(discord.ui.View):
-    def __init__(self, race_key):
+    def __init__(self, race_key, origin_key):
         super().__init__(timeout=300)
-        self.add_item(TraitSelect(race_key))
+        self.add_item(TraitSelect(race_key, origin_key))
 
 
 class StyleSelect(discord.ui.Select):
@@ -141,14 +168,15 @@ class StyleSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         p = self.view
-        view = ResultView(p.race_key, p.trait_key, p.name, self.values[0])
+        view = ResultView(p.race_key, p.origin_key, p.trait_key, p.name, self.values[0])
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class ResultView(discord.ui.View):
-    def __init__(self, race_key, trait_key, name, style):
+    def __init__(self, race_key, origin_key, trait_key, name, style):
         super().__init__(timeout=300)
         self.race_key = race_key
+        self.origin_key = origin_key
         self.trait_key = trait_key
         self.name = name
         self.style = style
@@ -159,16 +187,16 @@ class ResultView(discord.ui.View):
 
     @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name, self.style, self.race_key, self.trait_key)
+        await _finalize(interaction, self.name, self.style, self.race_key, self.origin_key, self.trait_key)
 
     @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary, row=1)
     async def reroll(self, interaction, button):
-        name = data.generate(self.race_key, self.trait_key)
-        view = ResultView(self.race_key, self.trait_key, name, self.style)
+        name = data.generate(self.race_key, self.origin_key, self.trait_key)
+        view = ResultView(self.race_key, self.origin_key, self.trait_key, name, self.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
-async def _finalize(interaction, name, style, race_key, trait_key):
+async def _finalize(interaction, name, style, race_key, origin_key, trait_key):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
@@ -189,7 +217,11 @@ async def _finalize(interaction, name, style, race_key, trait_key):
         "name": name,
         "pseudo": styled,
         "race": race_key,
+        "race_label": data.race_label(race_key),
+        "origin": origin_key,
+        "origin_label": data.origin_label(race_key, origin_key),
         "trait": trait_key,
+        "trait_label": data.trait_label(trait_key),
         "style": style,
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }

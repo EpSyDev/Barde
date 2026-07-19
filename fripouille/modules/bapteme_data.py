@@ -1,20 +1,21 @@
 """Données + moteur du générateur de noms « baptême » (données pures, sans Discord).
 
-Philosophie (cf. mémoire) : PAS une liste de milliers de noms, mais une **combinatoire
-curée**. Quelques centaines de fragments → des millions de combinaisons. Les axes
-FAÇONNENT le nom :
-- **Race** → la phonétique/morphologie (assemblage préfixe/racine/suffixe par patrons).
-- **Trait** → l'épithète accolée (« le Vaillant », « l'Ombre »…).
-- **Lieu** (univers fantasy) → complément optionnel (« des Terres Grises »).
+Combinatoire curée : quelques centaines de fragments → millions de combinaisons.
+Les axes FAÇONNENT le nom :
+- **Race** → la phonétique (assemblage préfixe/racine/suffixe par patrons P/R/S).
+- **Origine** (sous-catégorie de la race) → le **lieu** d'origine accolé au nom
+  (« des Bois d'Argent »), pour une immersion cohérente.
+- **Trait** → l'**épithète** (« le Vaillant », « l'Ombre »…).
 
-Proto : univers unique **fantasy**. Ajouter un univers = un autre jeu de pools.
-Un patron est une chaîne de segments : ``P`` = préfixe, ``R`` = racine, ``S`` = suffixe.
+Un patron combine des segments : ``P`` = préfixe, ``R`` = racine, ``S`` = suffixe.
+Structure du nom : ``Prénom [épithète] [de <lieu d'origine>]``.
 """
 import random
 
 UNIVERS = "fantasy"
 
-# race → phonétique. `patterns` combine P(réfixe)/R(acine)/S(uffixe).
+# Chaque race : phonétique (prefixes/roots/suffixes/patterns) + origines (sous-cat.).
+# Chaque origine porte son propre pool de lieux → cohérence race/origine/nom.
 RACES = {
     "elfe": {
         "label": "Elfe", "emoji": "🏹",
@@ -22,6 +23,16 @@ RACES = {
         "roots": ["thas", "riel", "andir", "wen", "loth", "mir", "dae", "sar", "vyn", "thil", "lian", "neth"],
         "suffixes": ["", "iel", "ion", "as", "wyn", "ith", "ael", "'iel", "wë"],
         "patterns": ["PR", "PRS", "PRS", "RS"],
+        "origins": [
+            {"key": "bois", "label": "des Bois", "emoji": "🌲",
+             "places": ["des Bois d'Argent", "de la Forêt Chantante", "des Grands Chênes", "du Bosquet Pâle", "des Feuilles d'Or"]},
+            {"key": "plaines", "label": "des Plaines", "emoji": "🌾",
+             "places": ["des Plaines Vertes", "des Prairies du Vent", "des Herbes Hautes", "des Champs d'Étoiles"]},
+            {"key": "crepuscule", "label": "du Crépuscule", "emoji": "🌙",
+             "places": ["des Terres Grises", "du Val d'Ombre", "des Brumes Mauves", "du Dernier Rayon"]},
+            {"key": "cimes", "label": "des Cimes", "emoji": "🏔️",
+             "places": ["des Cimes Argentées", "des Aiguilles de Givre", "du Nid des Aigles", "des Hauts Sommets"]},
+        ],
     },
     "nain": {
         "label": "Nain", "emoji": "⛏️",
@@ -29,6 +40,16 @@ RACES = {
         "roots": ["gan", "din", "mund", "rak", "bek", "dush", "gar", "nar", "thok", "grim", "buld", "dhr"],
         "suffixes": ["", "son", "i", "ar", "uz", "grim", "bek"],
         "patterns": ["PR", "PR", "PRS"],
+        "origins": [
+            {"key": "montagnes", "label": "des Montagnes", "emoji": "🏔️",
+             "places": ["des Monts de Fer", "du Pic Tonnerre", "des Cols Gelés", "de la Montagne Creuse"]},
+            {"key": "mines", "label": "des Profondeurs", "emoji": "🕳️",
+             "places": ["des Mines Profondes", "des Salles d'Or", "du Gouffre Rouge", "des Galeries Sans-Fin"]},
+            {"key": "forges", "label": "des Forges", "emoji": "🔨",
+             "places": ["des Grandes Forges", "de l'Enclume Éternelle", "des Fournaises", "du Marteau Sacré"]},
+            {"key": "collines", "label": "des Collines", "emoji": "⛰️",
+             "places": ["des Collines Brunes", "des Coteaux de Pierre", "des Terres Basses"]},
+        ],
     },
     "orc": {
         "label": "Orc", "emoji": "🪓",
@@ -36,6 +57,16 @@ RACES = {
         "roots": ["gash", "dar", "mok", "thak", "nak", "rok", "zug", "dur", "gul", "rag", "grum", "shak"],
         "suffixes": ["", "nak", "zg", "ish", "ar", "gul", "thok"],
         "patterns": ["PR", "PR", "PRS", "RS"],
+        "origins": [
+            {"key": "steppes", "label": "des Steppes", "emoji": "🐺",
+             "places": ["des Steppes Rouges", "des Plaines Brûlées", "du Vent Sauvage", "des Grandes Herbes"]},
+            {"key": "marais", "label": "des Marais", "emoji": "🐸",
+             "places": ["des Marais Noirs", "de la Fange Verte", "des Eaux Croupies", "du Bourbier"]},
+            {"key": "cendres", "label": "des Cendres", "emoji": "🌋",
+             "places": ["des Terres de Cendre", "du Mont Fumant", "des Champs Calcinés", "de la Faille Ardente"]},
+            {"key": "horde", "label": "de la Horde", "emoji": "🏴",
+             "places": ["du Camp Brisé", "des Bannières Déchirées", "de la Grande Horde"]},
+        ],
     },
     "humain": {
         "label": "Humain", "emoji": "🛡️",
@@ -43,6 +74,106 @@ RACES = {
         "roots": ["ric", "mund", "bert", "wald", "fried", "hard", "mar", "win", "gis", "and", "mer", "roy"],
         "suffixes": ["", "in", "on", "aud", "el", "ric", "and"],
         "patterns": ["PR", "PR", "PRS"],
+        "origins": [
+            {"key": "royaumes", "label": "des Royaumes", "emoji": "👑",
+             "places": ["du Royaume d'Or", "des Terres de la Couronne", "de la Cité Haute", "des Marches Royales"]},
+            {"key": "cites", "label": "des Cités Libres", "emoji": "🏛️",
+             "places": ["de la Cité Franche", "des Ports du Sud", "des Rues Marchandes", "de la Vieille Ville"]},
+            {"key": "sauvage", "label": "des Terres Sauvages", "emoji": "🏕️",
+             "places": ["des Confins", "des Terres Sans-Loi", "de la Frontière", "des Bois Perdus"]},
+            {"key": "nord", "label": "du Nord", "emoji": "❄️",
+             "places": ["des Terres du Nord", "des Fjords Gris", "de la Côte Gelée", "des Neiges Éternelles"]},
+        ],
+    },
+    "halfelin": {
+        "label": "Halfelin", "emoji": "🍃",
+        "prefixes": ["Bil", "Sam", "Ros", "Meri", "Pip", "Hob", "Ted", "Bung", "Perr", "Mabel", "Tolly", "Dilly"],
+        "roots": ["bo", "win", "ric", "ta", "mo", "della", "berry", "to", "by", "fer", "go", "sy"],
+        "suffixes": ["", "wise", "foot", "buck", "kins", "ly", "bottom"],
+        "patterns": ["PR", "PRS", "PRS"],
+        "origins": [
+            {"key": "prairies", "label": "des Prairies", "emoji": "🌻",
+             "places": ["des Prés Fleuris", "du Val Tranquille", "des Champs Dorés", "de la Comté Verte"]},
+            {"key": "rivieres", "label": "des Rivières", "emoji": "🏞️",
+             "places": ["du Bord de l'Eau", "des Berges Molles", "du Gué Fleuri", "des Moulins"]},
+            {"key": "vignes", "label": "des Vignes", "emoji": "🍇",
+             "places": ["des Coteaux à Vin", "des Tonnelles", "du Clos Doré", "des Celliers"]},
+        ],
+    },
+    "gnome": {
+        "label": "Gnome", "emoji": "🔧",
+        "prefixes": ["Fizz", "Wren", "Nim", "Bix", "Cog", "Zook", "Gimble", "Nack", "Dabble", "Snik", "Turl", "Bram"],
+        "roots": ["le", "wick", "er", "it", "o", "in", "el", "by", "gle", "ver", "ny", "ic"],
+        "suffixes": ["", "le", "ni", "ock", "ix", "gle", "widd"],
+        "patterns": ["PR", "PRS", "PRS", "RS"],
+        "origins": [
+            {"key": "ateliers", "label": "des Ateliers", "emoji": "⚙️",
+             "places": ["des Grands Ateliers", "de la Tour à Rouages", "des Établis", "de la Fabrique"]},
+            {"key": "terriers", "label": "des Terriers", "emoji": "🕳️",
+             "places": ["des Terriers Doux", "du Dédale", "des Galeries Rondes", "du Nid Douillet"]},
+            {"key": "cavernes", "label": "des Cavernes", "emoji": "💎",
+             "places": ["des Cavernes Scintillantes", "des Cristaux", "des Grottes Bleues"]},
+        ],
+    },
+    "drakeide": {
+        "label": "Drakéide", "emoji": "🐉",
+        "prefixes": ["Vor", "Rha", "Kaz", "Draa", "Sar", "Vex", "Nyx", "Tha", "Zar", "Aur", "Gor", "Rex"],
+        "roots": ["xis", "thor", "gon", "rax", "mir", "zar", "eth", "gath", "rys", "vok", "dral", "nax"],
+        "suffixes": ["", "ax", "is", "oth", "ar", "yx", "or"],
+        "patterns": ["PR", "PRS", "PR"],
+        "origins": [
+            {"key": "feu", "label": "du Feu", "emoji": "🔥",
+             "places": ["du Cœur de Braise", "des Pics de Lave", "du Souffle Ardent", "de l'Antre Rouge"]},
+            {"key": "givre", "label": "du Givre", "emoji": "🧊",
+             "places": ["des Glaces Éternelles", "du Souffle Gelé", "de l'Antre Bleue", "des Toundras"]},
+            {"key": "orage", "label": "de l'Orage", "emoji": "⚡",
+             "places": ["des Cieux Grondants", "du Pic Foudroyé", "des Nuées Noires", "de la Tempête"]},
+        ],
+    },
+    "tieffelin": {
+        "label": "Tieffelin", "emoji": "😈",
+        "prefixes": ["Mal", "Bel", "Az", "Nyx", "Dis", "Vas", "Mor", "Ith", "Kaz", "Rav", "Sael", "Ver"],
+        "roots": ["zeth", "ael", "ith", "mor", "phas", "rok", "neth", "zar", "gloth", "vane", "rix", "sius"],
+        "suffixes": ["", "eth", "os", "ael", "ix", "us"],
+        "patterns": ["PR", "PRS", "PR"],
+        "origins": [
+            {"key": "abysses", "label": "des Abysses", "emoji": "🕳️",
+             "places": ["des Abysses Sans-Fond", "des Neuf Cercles", "du Gouffre Rouge", "des Ténèbres"]},
+            {"key": "pactes", "label": "des Pactes", "emoji": "📜",
+             "places": ["du Serment Brisé", "des Contrats de Sang", "de la Dette Éternelle"]},
+            {"key": "exil", "label": "de l'Exil", "emoji": "🚪",
+             "places": ["des Terres Reniées", "du Long Chemin", "des Portes Closes", "de Nulle-Part"]},
+        ],
+    },
+    "fee": {
+        "label": "Fée", "emoji": "🧚",
+        "prefixes": ["Lil", "Fae", "Pae", "Twi", "Dew", "Bel", "Nim", "Sil", "Vio", "Thi", "Ely", "Ari"],
+        "roots": ["le", "wyn", "ora", "belle", "ia", "thel", "dew", "mist", "fae", "lira", "sy", "nia"],
+        "suffixes": ["", "wyn", "elle", "ia", "ling", "let"],
+        "patterns": ["PR", "PRS", "RS"],
+        "origins": [
+            {"key": "fleurs", "label": "des Fleurs", "emoji": "🌸",
+             "places": ["des Pétales", "du Jardin Secret", "des Boutons d'Or", "de la Roseraie"]},
+            {"key": "rosee", "label": "de la Rosée", "emoji": "💧",
+             "places": ["des Gouttes du Matin", "des Sources Claires", "de l'Étang de Lune"]},
+            {"key": "lucioles", "label": "des Lucioles", "emoji": "✨",
+             "places": ["des Lueurs Dansantes", "du Bois Scintillant", "des Nuits d'Été"]},
+        ],
+    },
+    "revenant": {
+        "label": "Revenant", "emoji": "💀",
+        "prefixes": ["Mort", "Vael", "Grae", "Umbr", "Corv", "Ash", "Thane", "Sepul", "Nox", "Drear", "Mour", "Grim"],
+        "roots": ["is", "ael", "eth", "mort", "ash", "grave", "mir", "gaunt", "dust", "vail", "shroud", "wraith"],
+        "suffixes": ["", "eth", "us", "ael", "mort", "is"],
+        "patterns": ["PR", "PRS", "PR"],
+        "origins": [
+            {"key": "tombes", "label": "des Tombes", "emoji": "⚰️",
+             "places": ["des Tombes Anciennes", "du Cimetière Oublié", "des Cryptes", "du Charnier"]},
+            {"key": "batailles", "label": "des Champs de Bataille", "emoji": "⚔️",
+             "places": ["des Champs Rouges", "de la Dernière Charge", "des Os Blanchis", "du Val des Morts"]},
+            {"key": "oubli", "label": "de l'Oubli", "emoji": "🌫️",
+             "places": ["des Brumes Grises", "du Fleuve Silencieux", "des Terres Sans-Nom", "de l'Entre-Deux"]},
+        ],
     },
 }
 
@@ -63,23 +194,62 @@ TRAITS = {
     "farceur": {"label": "Farceur", "emoji": "🎭", "epithets": [
         "le Fripon", "Pied-Léger", "le Bouffon", "Trouble-Fête", "la Pie",
         "Grelot", "le Chahuteur", "Nez-Rouge", "le Cabotin", "Deux-Chopes"]},
+    "noble": {"label": "Noble", "emoji": "👑", "epithets": [
+        "le Juste", "au Grand Cœur", "le Loyal", "Main-Ouverte", "le Digne",
+        "Front-Haut", "le Courtois", "l'Honorable", "Verbe-d'Or"]},
+    "sauvage": {"label": "Sauvage", "emoji": "🐺", "epithets": [
+        "le Farouche", "Crocs-Nus", "l'Indompté", "Griffe-Rapide", "le Rôdeur",
+        "Souffle-de-Loup", "l'Écorché", "Pied-de-Fauve", "le Traqueur"]},
+    "mystique": {"label": "Mystique", "emoji": "🔮", "epithets": [
+        "le Voilé", "aux Runes", "Tisse-Sorts", "l'Illuminé", "Œil-d'Astral",
+        "le Prophète", "aux Mains Bleues", "l'Arcaniste", "Murmure-d'Étoiles"]},
+    "vengeur": {"label": "Vengeur", "emoji": "🗡️", "epithets": [
+        "l'Implacable", "Brise-Serment", "la Lame Froide", "le Traqueur", "Sang-pour-Sang",
+        "l'Inflexible", "le Marqué", "Dette-de-Sang", "l'Ombre Vengeresse"]},
+    "ardent": {"label": "Ardent", "emoji": "🔥", "epithets": [
+        "le Flamboyant", "Cœur-de-Braise", "l'Emporté", "Souffle-de-Feu", "le Bouillant",
+        "l'Incandescent", "Poing-Ardent", "la Torche", "l'Insatiable"]},
+    "stoique": {"label": "Stoïque", "emoji": "🗿", "epithets": [
+        "l'Imperturbable", "Roc-Immobile", "le Patient", "Face-de-Pierre", "l'Endurant",
+        "le Taciturne", "Épaules-Larges", "le Constant", "l'Inébranlable"]},
+    "errant": {"label": "Errant", "emoji": "🧭", "epithets": [
+        "le Vagabond", "Sans-Attache", "l'Éternel Voyageur", "Semelle-de-Vent", "le Nomade",
+        "aux Mille Routes", "l'Exilé", "Pas-Léger", "le Solitaire"]},
 }
-
-# univers fantasy : lieux d'origine (complément optionnel).
-PLACES = [
-    "des Terres Grises", "de la Forêt d'Argent", "du Val Perdu", "des Cimes Gelées",
-    "des Marches du Nord", "de la Côte Brumeuse", "des Landes Rouges", "du Bois-aux-Fées",
-    "des Ruines de Vharn", "du Lac Sombre", "des Sables d'Or", "de Nulle-Part",
-]
-PLACE_CHANCE = 0.4     # proba d'accoler un lieu
 
 
 def race_choices():
     return [(k, v["label"], v.get("emoji")) for k, v in RACES.items()]
 
 
+def origin_choices(race_key):
+    race = RACES.get(race_key)
+    if not race:
+        return []
+    return [(o["key"], o["label"], o.get("emoji")) for o in race.get("origins", [])]
+
+
 def trait_choices():
     return [(k, v["label"], v.get("emoji")) for k, v in TRAITS.items()]
+
+
+def race_label(race_key):
+    r = RACES.get(race_key)
+    return r["label"] if r else race_key
+
+
+def origin_label(race_key, origin_key):
+    race = RACES.get(race_key)
+    if race:
+        for o in race.get("origins", []):
+            if o["key"] == origin_key:
+                return o["label"]
+    return origin_key
+
+
+def trait_label(trait_key):
+    t = TRAITS.get(trait_key)
+    return t["label"] if t else trait_key
 
 
 def _cap(text):
@@ -93,8 +263,15 @@ def _firstname(race):
     return _cap(out) or _cap(random.choice(race["roots"]))
 
 
-def generate(race_key, trait_key):
-    """Assemble un nom : prénom (phonétique de la race) + épithète (trait) + lieu éventuel."""
+def _origin(race, origin_key):
+    for o in race.get("origins", []):
+        if o["key"] == origin_key:
+            return o
+    return race.get("origins", [{}])[0] if race.get("origins") else {}
+
+
+def generate(race_key, origin_key, trait_key):
+    """Assemble un nom : prénom (phonétique race) + épithète (trait) + lieu (origine)."""
     race = RACES.get(race_key)
     trait = TRAITS.get(trait_key)
     if not race or not trait:
@@ -103,6 +280,7 @@ def generate(race_key, trait_key):
     epithet = random.choice(trait["epithets"])
     if epithet:
         parts.append(epithet)
-    if random.random() < PLACE_CHANCE:
-        parts.append(random.choice(PLACES))
+    places = _origin(race, origin_key).get("places") or []
+    if places and random.random() < 0.6:
+        parts.append(random.choice(places))
     return " ".join(parts)
