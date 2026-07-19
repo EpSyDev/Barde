@@ -48,6 +48,7 @@ DEFAULTS = {
     "panel_image": "",
     "button_label": "Se faire baptiser",
     "event_message": "🕯️ Un nouveau voyageur est baptisé : **{name}** !",
+    "event_image": "",           # grande image de l'embed d'annonce (optionnelle)
     "message_id": None,
     # Registre des baptisés (géré bot) : {str(user_id): {user,name,pseudo,race,trait,style,at}}.
     # Persisté dans le store → identifie chaque joueur pour l'IA des quêtes plus tard.
@@ -377,9 +378,12 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         text = (cfg.get("event_message") or "").replace("{name_plain}", name).replace(
             "{name}", styled
         ).replace("{mention}", member.mention)
+        event = discord.Embed(description=text, color=COLOR)
+        if (cfg.get("event_image") or "").strip():
+            event.set_image(url=cfg["event_image"].strip())
         try:
             await channel.send(
-                text,
+                embed=event,
                 allowed_mentions=discord.AllowedMentions(users=False, roles=False, everyone=False),
             )
         except discord.Forbidden:

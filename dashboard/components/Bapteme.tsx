@@ -13,6 +13,7 @@ type BaptemeCfg = {
   panel_image: string;
   button_label: string;
   event_message: string;
+  event_image: string;
 };
 
 export default function Bapteme() {
@@ -42,6 +43,7 @@ export default function Bapteme() {
           panel_image: d.panel_image || "",
           button_label: d.button_label || "",
           event_message: d.event_message || "",
+          event_image: d.event_image || "",
         });
       } catch {
         setError("La Fripouille est injoignable.");
@@ -175,6 +177,11 @@ export default function Bapteme() {
             Variables : <code>{"{name}"}</code> (stylisé), <code>{"{name_plain}"}</code>{" "}
             (lisible), <code>{"{mention}"}</code> (le membre — non pingué par défaut).
           </p>
+        </div>
+        <div className="cfg-field">
+          <label>Image de l'annonce</label>
+          <MediaPicker value={cfg.event_image} onChange={(v) => set({ event_image: v })} />
+          <p className="cfg-hint">Grande image sous le message d'annonce. Vide = texte seul.</p>
         </div>
 
         <div className="cfg-actions">
