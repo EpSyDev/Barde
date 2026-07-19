@@ -80,8 +80,8 @@ def _result_embed(name, style):
         title="🪶 Ton nom",
         description=(
             f"# {styled}\n`{name}`\n\n"
-            "Choisis ta **police** dans le menu, **relance** le sort si le nom ne te plaît "
-            "pas, puis **valide** — il deviendra ton pseudo."
+            "Choisis ta **police**, **relance** le sort si le nom ne te plaît pas — ou "
+            "**ajuste**-le à la main s'il est trop long — puis **valide** : il deviendra ton pseudo."
         ),
         color=COLOR,
     )
@@ -172,6 +172,26 @@ class StyleSelect(discord.ui.Select):
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
+class EditNameModal(discord.ui.Modal, title="Ajuster ton nom"):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.field = discord.ui.TextInput(
+            label="Ton nom (tu peux le raccourcir)",
+            default=parent.name,
+            max_length=NICK_MAX,
+            min_length=1,
+            style=discord.TextStyle.short,
+        )
+        self.add_item(self.field)
+
+    async def on_submit(self, interaction):
+        p = self.parent
+        name = str(self.field).strip() or p.name
+        view = ResultView(p.race_key, p.origin_key, p.trait_key, name, p.style)
+        await interaction.response.edit_message(embed=view.embed(), view=view)
+
+
 class ResultView(discord.ui.View):
     def __init__(self, race_key, origin_key, trait_key, name, style):
         super().__init__(timeout=300)
@@ -194,6 +214,10 @@ class ResultView(discord.ui.View):
         name = data.generate(self.race_key, self.origin_key, self.trait_key)
         view = ResultView(self.race_key, self.origin_key, self.trait_key, name, self.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
+
+    @discord.ui.button(label="Ajuster", emoji="✏️", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_name(self, interaction, button):
+        await interaction.response.send_modal(EditNameModal(self))
 
 
 async def _finalize(interaction, name, style, race_key, origin_key, trait_key):
