@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, farewell, jeux, messages, tempvoice, tickets, welcome
+from .modules import autorole, bapteme, farewell, jeux, messages, tempvoice, tickets, welcome
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -52,6 +52,7 @@ class FripouilleBot(discord.Client):
         log.info("Modules chargés : %s", ", ".join(registry.all_modules()) or "aucun")
         await jeux.setup_persistent(self)
         await tickets.setup_persistent(self)
+        await bapteme.setup_persistent(self)
         await tempvoice.cleanup(self)
 
     async def _on_arrival(self, member: discord.Member):

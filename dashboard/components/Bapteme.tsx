@@ -1,0 +1,222 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import MediaPicker from "@/components/MediaPicker";
+
+type Channel = { id: string; name: string; category: string | null };
+type BaptemeCfg = {
+  enabled: boolean;
+  panel_channel_id: string | null;
+  event_channel_id: string | null;
+  panel_title: string;
+  panel_description: string;
+  panel_image: string;
+  button_label: string;
+  event_message: string;
+  dm_message: string;
+  set_nickname: boolean;
+};
+
+export default function Bapteme() {
+  const [channels, setChannels] = useState<Channel[] | null>(null);
+  const [cfg, setCfg] = useState<BaptemeCfg | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [chRes, cRes] = await Promise.all([
+          fetch("/api/fripouille/channels", { cache: "no-store" }),
+          fetch("/api/fripouille/config/bapteme", { cache: "no-store" }),
+        ]);
+        if (!chRes.ok || !cRes.ok) throw new Error();
+        const chData = await chRes.json();
+        const d = await cRes.json();
+        setChannels(chData.channels || []);
+        setCfg({
+          enabled: !!d.enabled,
+          panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
+          event_channel_id: d.event_channel_id != null ? String(d.event_channel_id) : null,
+          panel_title: d.panel_title || "",
+          panel_description: d.panel_description || "",
+          panel_image: d.panel_image || "",
+          button_label: d.button_label || "",
+          event_message: d.event_message || "",
+          dm_message: d.dm_message || "",
+          set_nickname: !!d.set_nickname,
+        });
+      } catch {
+        setError("La Fripouille est injoignable.");
+      }
+    })();
+  }, []);
+
+  const set = (patch: Partial<BaptemeCfg>) => setCfg((c) => (c ? { ...c, ...patch } : c));
+
+  const save = useCallback(async () => {
+    if (!cfg) return;
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+    try {
+      const res = await fetch("/api/fripouille/config/bapteme", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+      if (!res.ok) throw new Error();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError("Échec de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  }, [cfg]);
+
+  if (error && !cfg) return <div className="empty-state">{error}</div>;
+  if (!cfg || !channels) return <div className="empty-state">Chargement de la config…</div>;
+
+  const chanOpts = (
+    <>
+      <option value="">— Choisir un salon —</option>
+      {channels.map((c) => (
+        <option key={c.id} value={c.id}>
+          #{c.name}
+          {c.category ? ` (${c.category})` : ""}
+        </option>
+      ))}
+    </>
+  );
+
+  const canSave = !cfg.enabled || !!cfg.panel_channel_id;
+
+  return (
+    <div className="cfg-grid">
+      <section className="cfg-card">
+        <div className="cfg-card-head">
+          <h2>🕯️ Baptême</h2>
+          <p>
+            Un panneau à bouton : le membre choisit sa race puis son tempérament, le bot lui
+            génère un nom (des millions de combinaisons), l'envoie en MP et annonce l'événement.
+          </p>
+        </div>
+
+        <label className="cfg-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => set({ enabled: e.target.checked })}
+          />
+          <span className="switch" />
+          <span>Publier le panneau de baptême</span>
+        </label>
+
+        <div className="field-2col">
+          <div className="cfg-field">
+            <label>Salon du panneau</label>
+            <select
+              value={cfg.panel_channel_id ?? ""}
+              onChange={(e) => set({ panel_channel_id: e.target.value || null })}
+            >
+              {chanOpts}
+            </select>
+          </div>
+          <div className="cfg-field">
+            <label>Salon d'événement (annonce du baptême)</label>
+            <select
+              value={cfg.event_channel_id ?? ""}
+              onChange={(e) => set({ event_channel_id: e.target.value || null })}
+            >
+              {chanOpts}
+            </select>
+          </div>
+        </div>
+
+        <div className="cfg-field">
+          <label>Titre du panneau</label>
+          <input
+            type="text"
+            value={cfg.panel_title}
+            onChange={(e) => set({ panel_title: e.target.value })}
+            placeholder="Le Baptême du Voyageur"
+          />
+        </div>
+        <div className="cfg-field">
+          <label>Description du panneau</label>
+          <textarea
+            rows={2}
+            value={cfg.panel_description}
+            onChange={(e) => set({ panel_description: e.target.value })}
+          />
+        </div>
+        <div className="cfg-field">
+          <label>Image du panneau</label>
+          <MediaPicker value={cfg.panel_image} onChange={(v) => set({ panel_image: v })} />
+        </div>
+        <div className="cfg-field">
+          <label>Libellé du bouton</label>
+          <input
+            type="text"
+            value={cfg.button_label}
+            onChange={(e) => set({ button_label: e.target.value })}
+            placeholder="Se faire baptiser"
+          />
+        </div>
+
+        <div className="cfg-field">
+          <label>Message privé envoyé au membre</label>
+          <textarea
+            rows={2}
+            value={cfg.dm_message}
+            onChange={(e) => set({ dm_message: e.target.value })}
+            placeholder="Bienvenue, {name} !"
+          />
+          <p className="cfg-hint">
+            Variable : <code>{"{name}"}</code> = le nom généré.
+          </p>
+        </div>
+        <div className="cfg-field">
+          <label>Message d'événement (salon d'annonce)</label>
+          <textarea
+            rows={2}
+            value={cfg.event_message}
+            onChange={(e) => set({ event_message: e.target.value })}
+            placeholder="🕯️ Un nouveau voyageur est baptisé : {name} !"
+          />
+          <p className="cfg-hint">
+            Variables : <code>{"{name}"}</code>, <code>{"{mention}"}</code> (le membre — non
+            pingué par défaut).
+          </p>
+        </div>
+
+        <label className="cfg-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.set_nickname}
+            onChange={(e) => set({ set_nickname: e.target.checked })}
+          />
+          <span className="switch" />
+          <span>Poser aussi le nom en pseudo serveur du membre</span>
+        </label>
+
+        <div className="cfg-actions">
+          <button className="btn primary" onClick={save} disabled={saving || !canSave}>
+            {saving ? "Enregistrement…" : "Enregistrer & publier"}
+          </button>
+          {saved && <span className="cfg-ok">✓ Enregistré</span>}
+          {error && <span className="cfg-err">{error}</span>}
+        </div>
+
+        <p className="cfg-hint">
+          Les races et tempéraments (et leurs milliers de combinaisons de noms) sont gérés
+          dans le code (fichier <code>bapteme_data.py</code>) — proto actuel : univers fantasy,
+          races Elfe / Nain / Orc / Humain. L'option pseudo requiert « Gérer les pseudos » et le
+          rôle de La Fripouille au-dessus du membre.
+        </p>
+      </section>
+    </div>
+  );
+}
