@@ -32,8 +32,8 @@ NICK_MAX = 32     # limite Discord d'un pseudo (en codepoints)
 # Police proposée par défaut selon la race (l'utilisateur peut en changer).
 RACE_STYLE = {
     "elfe": "script", "nain": "fraktur_bold", "orc": "fraktur", "humain": "smallcaps",
-    "halfelin": "bold", "gnome": "bold", "drakeide": "fraktur", "tieffelin": "fraktur",
-    "fee": "script", "revenant": "fraktur_bold",
+    "gnome": "bold", "fee": "script", "dragon": "fraktur", "demon": "fraktur",
+    "vampire": "script", "loup_garou": "bold",
 }
 
 DEFAULTS = {
