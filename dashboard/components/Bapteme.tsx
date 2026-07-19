@@ -176,6 +176,12 @@ export default function Bapteme() {
           <p className="cfg-hint">
             Variables : <code>{"{name}"}</code> (stylisé), <code>{"{name_plain}"}</code>{" "}
             (lisible), <code>{"{mention}"}</code> (le membre — non pingué par défaut).
+            <br />
+            Pour un nom <strong>plus gros et à la ligne</strong>, mets-le seul sur sa ligne
+            avec un dièse : <code># {"{name}"}</code> (très grand), <code>## {"{name}"}</code>{" "}
+            (grand). Ex. :<br />
+            <code>🕯️ Un nouveau voyageur est baptisé !</code><br />
+            <code># {"{name}"}</code>
           </p>
         </div>
         <div className="cfg-field">

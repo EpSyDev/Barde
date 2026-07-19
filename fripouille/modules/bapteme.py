@@ -47,7 +47,7 @@ DEFAULTS = {
     ),
     "panel_image": "",
     "button_label": "Se faire baptiser",
-    "event_message": "🕯️ Un nouveau voyageur est baptisé : **{name}** !",
+    "event_message": "🕯️ Un nouveau voyageur est baptisé !\n# {name}",
     "event_image": "",           # grande image de l'embed d'annonce (optionnelle)
     "message_id": None,
     # Registre des baptisés (géré bot) : {str(user_id): {user,name,pseudo,race,trait,style,at}}.
