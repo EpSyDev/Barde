@@ -74,6 +74,29 @@ def _step_embed(title, description):
     return discord.Embed(title=title, description=description, color=COLOR)
 
 
+def _race_embed():
+    return _step_embed("✨ Le Baptême", "De quel peuple es-tu ? Choisis, et le sort fera le reste.")
+
+
+def _origin_embed():
+    return _step_embed("🧭 Ton origine ?", "De quelle contrée viens-tu ? Elle marquera ton nom.")
+
+
+def _trait_embed():
+    return _step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète.")
+
+
+class BackButton(discord.ui.Button):
+    """Bouton « Retour » générique : rejoue (embed, view) de l'étape précédente."""
+    def __init__(self, make_step, row=1):
+        super().__init__(label="Retour", emoji="↩️", style=discord.ButtonStyle.secondary, row=row)
+        self._make_step = make_step
+
+    async def callback(self, interaction):
+        embed, view = self._make_step()
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
 def _result_embed(name, style):
     styled = fancy.stylize(name, style)
     return discord.Embed(
@@ -98,8 +121,7 @@ class RaceSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         await interaction.response.edit_message(
-            embed=_step_embed("🧭 Ton origine ?", "De quelle contrée viens-tu ? Elle marquera ton nom."),
-            view=OriginView(self.values[0]),
+            embed=_origin_embed(), view=OriginView(self.values[0]),
         )
 
 
@@ -120,8 +142,7 @@ class OriginSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         await interaction.response.edit_message(
-            embed=_step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète."),
-            view=TraitView(self.race_key, self.values[0]),
+            embed=_trait_embed(), view=TraitView(self.race_key, self.values[0]),
         )
 
 
@@ -129,6 +150,7 @@ class OriginView(discord.ui.View):
     def __init__(self, race_key):
         super().__init__(timeout=300)
         self.add_item(OriginSelect(race_key))
+        self.add_item(BackButton(lambda: (_race_embed(), RaceView())))
 
 
 class TraitSelect(discord.ui.Select):
@@ -152,6 +174,7 @@ class TraitView(discord.ui.View):
     def __init__(self, race_key, origin_key):
         super().__init__(timeout=300)
         self.add_item(TraitSelect(race_key, origin_key))
+        self.add_item(BackButton(lambda: (_origin_embed(), OriginView(race_key))))
 
 
 class StyleSelect(discord.ui.Select):
@@ -218,6 +241,12 @@ class ResultView(discord.ui.View):
     @discord.ui.button(label="Ajuster", emoji="✏️", style=discord.ButtonStyle.secondary, row=1)
     async def edit_name(self, interaction, button):
         await interaction.response.send_modal(EditNameModal(self))
+
+    @discord.ui.button(label="Retour", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            embed=_trait_embed(), view=TraitView(self.race_key, self.origin_key),
+        )
 
 
 async def _finalize(interaction, name, style, race_key, origin_key, trait_key):
@@ -329,8 +358,7 @@ class BaptizeButton(discord.ui.Button):
 
     async def callback(self, interaction):
         await interaction.response.send_message(
-            embed=_step_embed("✨ Le Baptême", "De quel peuple es-tu ? Choisis, et le sort fera le reste."),
-            view=RaceView(), ephemeral=True,
+            embed=_race_embed(), view=RaceView(), ephemeral=True,
         )
 
 
