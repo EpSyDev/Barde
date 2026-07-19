@@ -82,6 +82,10 @@ def _origin_embed():
     return _step_embed("🧭 Ton origine ?", "De quelle contrée viens-tu ? Elle marquera ton nom.")
 
 
+def _gender_embed():
+    return _step_embed("⚧ Homme ou femme ?", "Ton genre façonnera ton prénom et tes titres.")
+
+
 def _trait_embed():
     return _step_embed("⚗️ Ton tempérament ?", "Ce qui coule dans tes veines forgera ton épithète.")
 
@@ -121,7 +125,7 @@ class RaceSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         await interaction.response.edit_message(
-            embed=_origin_embed(), view=OriginView(self.values[0]),
+            embed=_gender_embed(), view=GenderView(self.values[0]),
         )
 
 
@@ -131,9 +135,30 @@ class RaceView(discord.ui.View):
         self.add_item(RaceSelect())
 
 
-class OriginSelect(discord.ui.Select):
-    def __init__(self, race_key):
+class GenderButton(discord.ui.Button):
+    def __init__(self, race_key, gender, label, emoji):
+        super().__init__(label=label, emoji=emoji, style=discord.ButtonStyle.primary)
         self.race_key = race_key
+        self.gender = gender
+
+    async def callback(self, interaction):
+        await interaction.response.edit_message(
+            embed=_origin_embed(), view=OriginView(self.race_key, self.gender),
+        )
+
+
+class GenderView(discord.ui.View):
+    def __init__(self, race_key):
+        super().__init__(timeout=300)
+        for g, label, emoji in data.gender_choices():
+            self.add_item(GenderButton(race_key, g, label, emoji))
+        self.add_item(BackButton(lambda: (_race_embed(), RaceView())))
+
+
+class OriginSelect(discord.ui.Select):
+    def __init__(self, race_key, gender):
+        self.race_key = race_key
+        self.gender = gender
         options = [
             discord.SelectOption(label=label, value=key, emoji=emoji)
             for key, label, emoji in data.origin_choices(race_key)
@@ -142,20 +167,21 @@ class OriginSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         await interaction.response.edit_message(
-            embed=_trait_embed(), view=TraitView(self.race_key, self.values[0]),
+            embed=_trait_embed(), view=TraitView(self.race_key, self.gender, self.values[0]),
         )
 
 
 class OriginView(discord.ui.View):
-    def __init__(self, race_key):
+    def __init__(self, race_key, gender):
         super().__init__(timeout=300)
-        self.add_item(OriginSelect(race_key))
-        self.add_item(BackButton(lambda: (_race_embed(), RaceView())))
+        self.add_item(OriginSelect(race_key, gender))
+        self.add_item(BackButton(lambda: (_gender_embed(), GenderView(race_key))))
 
 
 class TraitSelect(discord.ui.Select):
-    def __init__(self, race_key, origin_key):
+    def __init__(self, race_key, gender, origin_key):
         self.race_key = race_key
+        self.gender = gender
         self.origin_key = origin_key
         options = [
             discord.SelectOption(label=label, value=key, emoji=emoji)
@@ -164,17 +190,17 @@ class TraitSelect(discord.ui.Select):
         super().__init__(placeholder="Choisis ton tempérament…", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction):
-        name = data.generate(self.race_key, self.origin_key, self.values[0])
+        name = data.generate(self.race_key, self.origin_key, self.values[0], self.gender)
         style = RACE_STYLE.get(self.race_key, fancy.STYLE_ORDER[0])
-        view = ResultView(self.race_key, self.origin_key, self.values[0], name, style)
+        view = ResultView(self.race_key, self.gender, self.origin_key, self.values[0], name, style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class TraitView(discord.ui.View):
-    def __init__(self, race_key, origin_key):
+    def __init__(self, race_key, gender, origin_key):
         super().__init__(timeout=300)
-        self.add_item(TraitSelect(race_key, origin_key))
-        self.add_item(BackButton(lambda: (_origin_embed(), OriginView(race_key))))
+        self.add_item(TraitSelect(race_key, gender, origin_key))
+        self.add_item(BackButton(lambda: (_origin_embed(), OriginView(race_key, gender))))
 
 
 class StyleSelect(discord.ui.Select):
@@ -191,7 +217,7 @@ class StyleSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         p = self.view
-        view = ResultView(p.race_key, p.origin_key, p.trait_key, p.name, self.values[0])
+        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, p.name, self.values[0])
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
@@ -211,14 +237,15 @@ class EditNameModal(discord.ui.Modal, title="Ajuster ton nom"):
     async def on_submit(self, interaction):
         p = self.parent
         name = str(self.field).strip() or p.name
-        view = ResultView(p.race_key, p.origin_key, p.trait_key, name, p.style)
+        view = ResultView(p.race_key, p.gender, p.origin_key, p.trait_key, name, p.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
 class ResultView(discord.ui.View):
-    def __init__(self, race_key, origin_key, trait_key, name, style):
+    def __init__(self, race_key, gender, origin_key, trait_key, name, style):
         super().__init__(timeout=300)
         self.race_key = race_key
+        self.gender = gender
         self.origin_key = origin_key
         self.trait_key = trait_key
         self.name = name
@@ -230,12 +257,12 @@ class ResultView(discord.ui.View):
 
     @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name, self.style, self.race_key, self.origin_key, self.trait_key)
+        await _finalize(interaction, self.name, self.style, self.race_key, self.gender, self.origin_key, self.trait_key)
 
     @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary, row=1)
     async def reroll(self, interaction, button):
-        name = data.generate(self.race_key, self.origin_key, self.trait_key)
-        view = ResultView(self.race_key, self.origin_key, self.trait_key, name, self.style)
+        name = data.generate(self.race_key, self.origin_key, self.trait_key, self.gender)
+        view = ResultView(self.race_key, self.gender, self.origin_key, self.trait_key, name, self.style)
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
     @discord.ui.button(label="Ajuster", emoji="✏️", style=discord.ButtonStyle.secondary, row=1)
@@ -245,11 +272,11 @@ class ResultView(discord.ui.View):
     @discord.ui.button(label="Retour", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction, button):
         await interaction.response.edit_message(
-            embed=_trait_embed(), view=TraitView(self.race_key, self.origin_key),
+            embed=_trait_embed(), view=TraitView(self.race_key, self.gender, self.origin_key),
         )
 
 
-async def _finalize(interaction, name, style, race_key, origin_key, trait_key):
+async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
@@ -269,6 +296,8 @@ async def _finalize(interaction, name, style, race_key, origin_key, trait_key):
         "user": member.name,
         "name": name,
         "pseudo": styled,
+        "gender": gender,
+        "gender_label": data.gender_label(gender),
         "race": race_key,
         "race_label": data.race_label(race_key),
         "origin": origin_key,

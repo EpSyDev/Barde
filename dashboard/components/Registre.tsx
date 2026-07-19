@@ -7,6 +7,8 @@ type Entry = {
   user: string;
   name: string;
   pseudo: string;
+  gender?: string;
+  gender_label?: string;
   race: string;
   race_label?: string;
   origin?: string;
@@ -109,7 +111,7 @@ export default function Registre() {
   const exportJSON = () =>
     download(JSON.stringify(entries, null, 2), "registre-bapteme.json", "application/json");
   const exportCSV = () => {
-    const head = ["id", "user", "name", "race", "origin", "trait", "style", "at"];
+    const head = ["id", "user", "name", "gender", "race", "origin", "trait", "style", "at"];
     const rows = (entries || []).map((e) =>
       head.map((h) => csvCell((e as unknown as Record<string, unknown>)[h])).join(",")
     );
@@ -169,6 +171,7 @@ export default function Registre() {
                 <tr>
                   <th>Pseudo</th>
                   <th>Nom</th>
+                  <th>Genre</th>
                   <th>Race</th>
                   <th>Origine</th>
                   <th>Tempérament</th>
@@ -183,6 +186,7 @@ export default function Registre() {
                   <tr key={e.id}>
                     <td className="reg-pseudo">{e.pseudo}</td>
                     <td>{e.name}</td>
+                    <td>{e.gender_label || (e.gender === "m" ? "Homme" : e.gender === "f" ? "Femme" : "—")}</td>
                     <td>{e.race_label || RACE[e.race] || e.race || "—"}</td>
                     <td>{e.origin_label || "—"}</td>
                     <td>{e.trait_label || TRAIT[e.trait] || e.trait || "—"}</td>

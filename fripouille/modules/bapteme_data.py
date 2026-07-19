@@ -2,27 +2,42 @@
 
 Combinatoire curée : quelques centaines de fragments → millions de combinaisons.
 Les axes FAÇONNENT le nom :
-- **Race** → la phonétique (assemblage préfixe/racine/suffixe par patrons P/R/S).
-- **Origine** (sous-catégorie de la race) → le **lieu** d'origine accolé au nom.
+- **Race** → la phonétique (préfixe/racine/suffixe par patrons P/R/S). Les **suffixes
+  sont genrés** (``suffixes_m`` / ``suffixes_f``) → prénom masculin ou féminin.
+- **Genre** (``m`` / ``f``) → accorde le prénom, le titre, l'épithète et l'ordinal.
+- **Origine** → le **lieu** d'origine accolé au nom.
 - **Trait** → l'**épithète**.
+- **Structure** tirée au sort (``STRUCTURES``) → casse le gabarit fixe.
 
-En plus, la **structure** du nom est tirée au sort parmi plusieurs patrons
-(``STRUCTURES``) : prénom seul, prénom + épithète, avec titre, avec lieu, avec
-ordinal de lignée, forme à virgule… → casse la répétition « Prénom épithète lieu ».
-Un patron phonétique combine ``P`` = préfixe, ``R`` = racine, ``S`` = suffixe.
+Convention de genre : un fragment vaut soit une chaîne (épicène, identique m/f),
+soit un tuple ``(masculin, féminin)``. ``_pick(item, gender)`` choisit la bonne forme.
 """
 import random
 
 UNIVERS = "fantasy"
 
-# --- Titres (préfixés au prénom) et ordinaux de lignée (suffixés) ---
+GENDERS = [("m", "Homme", "♂️"), ("f", "Femme", "♀️")]
+
+
+def _pick(item, gender):
+    """Chaîne épicène → telle quelle ; tuple (m, f) → forme selon le genre."""
+    if isinstance(item, (tuple, list)):
+        return item[0] if gender == "m" else item[1]
+    return item
+
+
+# --- Titres (préfixés) et ordinaux de lignée (suffixés), en (masculin, féminin) ---
 TITLES = [
-    "Sieur", "Dame", "Maître", "Messire", "Capitaine", "Doyen", "Vénérable",
-    "le Vieux", "le Jeune", "Baron", "Frère", "Sœur", "l'Ermite", "Sire", "Dom",
+    ("Sieur", "Dame"), ("Maître", "Maîtresse"), ("Messire", "Madame"),
+    ("Capitaine", "Capitaine"), ("Doyen", "Doyenne"), "Vénérable",
+    ("le Vieux", "la Vieille"), ("le Jeune", "la Jeune"), ("Baron", "Baronne"),
+    ("Frère", "Sœur"), "l'Ermite", ("Sire", "Dame"), ("Dom", "Doña"),
 ]
 ORDINALS = [
-    "Premier du Nom", "le Second", "III du Nom", "IV du Nom", "l'Aîné", "le Cadet",
-    "l'Ancien", "le Dernier", "Deux-Fois-Né", "le Revenu",
+    ("Premier du Nom", "Première du Nom"), ("le Second", "la Seconde"),
+    "III du Nom", "IV du Nom", ("l'Aîné", "l'Aînée"), ("le Cadet", "la Cadette"),
+    ("l'Ancien", "l'Ancienne"), ("le Dernier", "la Dernière"),
+    ("Deux-Fois-Né", "Deux-Fois-Née"), ("le Revenu", "la Revenue"),
 ]
 
 # Structures de nom (template, poids). Tokens : {first} {epithet} {place} {title} {ordinal}.
@@ -38,17 +53,18 @@ STRUCTURES = [
     ("{title} {first} {place}", 1),
 ]
 
-# --- Races : phonétique + origines (sous-catégories, chacune son pool de lieux) ---
+# --- Races : phonétique (suffixes genrés) + origines + titres genrés ---
 RACES = {
     "humain": {
         "label": "Humain", "emoji": "🛡️",
-        "titles": ["Sire", "Chevalier", "Écuyer"],
+        "titles": [("Sire", "Dame"), ("Chevalier", "Chevalière"), ("Écuyer", "Écuyère")],
         "prefixes": ["Ald", "Ber", "Cor", "Ed", "Gau", "Rob", "Thi", "Guil", "Ren", "Bau",
                      "Wil", "Hug", "Ans", "Bert", "God", "Roul", "Aim", "Fol"],
         "roots": ["ric", "mund", "bert", "wald", "fried", "hard", "mar", "win", "gis", "and",
                   "mer", "roy", "bald", "gar", "helm", "frid"],
-        "suffixes": ["", "in", "on", "aud", "el", "ric", "and", "ier", "ot"],
-        "patterns": ["PR", "PR", "PRS", "PRS"],
+        "suffixes_m": ["", "in", "on", "aud", "ric", "and", "ier", "ot", "bert"],
+        "suffixes_f": ["a", "e", "ie", "elle", "ette", "ine", "aude", "onne"],
+        "patterns": ["PR", "PRS", "PRS", "RS"],
         "origins": [
             {"key": "royaumes", "label": "des Royaumes", "emoji": "👑",
              "places": ["du Royaume d'Or", "des Terres de la Couronne", "de la Cité Haute",
@@ -66,12 +82,13 @@ RACES = {
     },
     "elfe": {
         "label": "Elfe", "emoji": "🏹",
-        "titles": ["Gardien", "l'Immortel", "Sylphe"],
+        "titles": [("Gardien", "Gardienne"), ("l'Immortel", "l'Immortelle"), ("Sylphe", "Sylphide")],
         "prefixes": ["Ae", "El", "Sil", "Cael", "Lith", "Fae", "Ithil", "Ny", "Aer", "Gala",
                      "Thal", "Ela", "Aran", "Cel", "Mith", "Eär", "Lor", "Fin"],
         "roots": ["thas", "riel", "andir", "wen", "loth", "mir", "dae", "sar", "vyn", "thil",
                   "lian", "neth", "gala", "dor", "wë", "los"],
-        "suffixes": ["", "iel", "ion", "as", "wyn", "ith", "ael", "'iel", "wë", "dil"],
+        "suffixes_m": ["", "ion", "as", "dir", "or", "ael", "dil", "on"],
+        "suffixes_f": ["iel", "wyn", "ith", "'iel", "wë", "elle", "ia", "riel", "a"],
         "patterns": ["PR", "PRS", "PRS", "RS"],
         "origins": [
             {"key": "bois", "label": "des Bois", "emoji": "🌲",
@@ -90,12 +107,13 @@ RACES = {
     },
     "nain": {
         "label": "Nain", "emoji": "⛏️",
-        "titles": ["Maître-Forgeron", "le Barbu", "Thane"],
+        "titles": [("Maître-Forgeron", "Maîtresse-Forgeronne"), ("le Barbu", "la Barbue"), "Thane"],
         "prefixes": ["Thor", "Dur", "Bal", "Grim", "Khaz", "Bru", "Thra", "Nor", "Dwal", "Gor",
-                     "Bom", "Krag", "Bof", "Dain", "Thra", "Bard", "Ori", "Gloi"],
+                     "Bom", "Krag", "Bof", "Dain", "Bard", "Ori", "Gloi", "Balin"],
         "roots": ["gan", "din", "mund", "rak", "bek", "dush", "gar", "nar", "thok", "grim",
                   "buld", "dhr", "dur", "bur", "gnar", "throm"],
-        "suffixes": ["", "son", "i", "ar", "uz", "grim", "bek", "dun", "mir"],
+        "suffixes_m": ["", "son", "i", "ar", "uz", "grim", "bek", "dun", "mir"],
+        "suffixes_f": ["a", "i", "hild", "dis", "runn", "unn", "ra", "wyn"],
         "patterns": ["PR", "PR", "PRS", "PRS"],
         "origins": [
             {"key": "montagnes", "label": "des Montagnes", "emoji": "🏔️",
@@ -114,12 +132,13 @@ RACES = {
     },
     "orc": {
         "label": "Orc", "emoji": "🪓",
-        "titles": ["Chef-de-Guerre", "le Balafré", "Broyeur"],
+        "titles": [("Chef-de-Guerre", "Cheffe-de-Guerre"), ("le Balafré", "la Balafrée"), ("Broyeur", "Broyeuse")],
         "prefixes": ["Gro", "Mok", "Ur", "Gash", "Zug", "Nar", "Brak", "Dro", "Ghor", "Sna",
                      "Rok", "Vha", "Grum", "Skar", "Uz", "Drak", "Mog", "Ghaz"],
         "roots": ["gash", "dar", "mok", "thak", "nak", "rok", "zug", "dur", "gul", "rag",
                   "grum", "shak", "burz", "muk", "ghor", "krak"],
-        "suffixes": ["", "nak", "zg", "ish", "ar", "gul", "thok", "dush", "mog"],
+        "suffixes_m": ["", "nak", "zg", "ish", "ar", "gul", "thok", "dush", "mog"],
+        "suffixes_f": ["a", "ga", "sha", "nka", "gra", "ola", "ka", "ra"],
         "patterns": ["PR", "PR", "PRS", "RS"],
         "origins": [
             {"key": "steppes", "label": "des Steppes", "emoji": "🐺",
@@ -138,12 +157,13 @@ RACES = {
     },
     "fee": {
         "label": "Fée", "emoji": "🧚",
-        "titles": ["Reine", "Sylphide", "le Petit"],
+        "titles": [("Roi", "Reine"), ("Sylphe", "Sylphide"), ("le Petit", "la Petite")],
         "prefixes": ["Lil", "Fae", "Pae", "Twi", "Dew", "Bel", "Nim", "Sil", "Vio", "Thi",
                      "Ely", "Ari", "Mel", "Ros", "Cin", "Pim"],
         "roots": ["le", "wyn", "ora", "belle", "ia", "thel", "dew", "mist", "fae", "lira",
                   "sy", "nia", "pet", "lil", "bloom", "sha"],
-        "suffixes": ["", "wyn", "elle", "ia", "ling", "let", "belle", "dew"],
+        "suffixes_m": ["", "wick", "in", "il", "on"],
+        "suffixes_f": ["elle", "ia", "wyn", "belle", "dew", "let", "ora", "a"],
         "patterns": ["PR", "PRS", "RS", "PRS"],
         "origins": [
             {"key": "fleurs", "label": "des Fleurs", "emoji": "🌸",
@@ -159,12 +179,13 @@ RACES = {
     },
     "gnome": {
         "label": "Gnome", "emoji": "🔧",
-        "titles": ["Bricoleur", "Professeur", "le Petit"],
+        "titles": [("Bricoleur", "Bricoleuse"), ("Professeur", "Professeure"), ("le Petit", "la Petite")],
         "prefixes": ["Fizz", "Wren", "Nim", "Bix", "Cog", "Zook", "Gimble", "Nack", "Dabble",
                      "Snik", "Turl", "Bram", "Fim", "Wid", "Bop", "Tink"],
         "roots": ["le", "wick", "er", "it", "o", "in", "el", "by", "gle", "ver",
                   "ny", "ic", "am", "ot", "iz"],
-        "suffixes": ["", "le", "ni", "ock", "ix", "gle", "widd", "bo"],
+        "suffixes_m": ["", "ock", "ix", "gle", "widd", "bo", "us"],
+        "suffixes_f": ["a", "ella", "ina", "elle", "ie", "etta", "wenn"],
         "patterns": ["PR", "PRS", "RS"],
         "origins": [
             {"key": "ateliers", "label": "des Ateliers", "emoji": "⚙️",
@@ -180,12 +201,13 @@ RACES = {
     },
     "dragon": {
         "label": "Dragon", "emoji": "🐉",
-        "titles": ["l'Ailé", "Seigneur", "l'Ancien"],
+        "titles": [("l'Ailé", "l'Ailée"), ("Seigneur", "Dame"), ("l'Ancien", "l'Ancienne")],
         "prefixes": ["Vor", "Rha", "Kaz", "Draa", "Sar", "Vex", "Nyx", "Tha", "Zar", "Aur",
                      "Gor", "Rex", "Xar", "Vael", "Pyr", "Bal"],
         "roots": ["xis", "thor", "gon", "rax", "mir", "zar", "eth", "gath", "rys", "vok",
                   "dral", "nax", "gorn", "rok", "aeth"],
-        "suffixes": ["", "ax", "is", "oth", "ar", "yx", "or", "ux"],
+        "suffixes_m": ["", "ax", "oth", "ar", "yx", "or", "ux"],
+        "suffixes_f": ["a", "ia", "yssa", "eth", "ira", "issa", "ax"],
         "patterns": ["PR", "PRS", "PR", "PRS"],
         "origins": [
             {"key": "feu", "label": "du Feu", "emoji": "🔥",
@@ -201,12 +223,13 @@ RACES = {
     },
     "demon": {
         "label": "Démon", "emoji": "😈",
-        "titles": ["Archi-", "Seigneur", "le Damné"],
+        "titles": [("Prince", "Princesse"), ("Seigneur", "Dame"), ("le Damné", "la Damnée")],
         "prefixes": ["Mal", "Bel", "Az", "Nyx", "Dis", "Vas", "Mor", "Ith", "Kaz", "Rav",
                      "Sael", "Ver", "Bael", "Xul", "Gra", "Zeph"],
         "roots": ["zeth", "ael", "ith", "mor", "phas", "rok", "neth", "zar", "gloth", "vane",
                   "rix", "sius", "goth", "azel", "phel"],
-        "suffixes": ["", "eth", "os", "ael", "ix", "us", "oth"],
+        "suffixes_m": ["", "eth", "os", "ael", "ix", "us", "oth"],
+        "suffixes_f": ["a", "eth", "ia", "elle", "issa", "ael", "ara"],
         "patterns": ["PR", "PRS", "PR", "PRS"],
         "origins": [
             {"key": "abysses", "label": "des Abysses", "emoji": "🕳️",
@@ -222,12 +245,13 @@ RACES = {
     },
     "vampire": {
         "label": "Vampire", "emoji": "🧛",
-        "titles": ["Comte", "Comtesse", "le Sans-Âge"],
+        "titles": [("Comte", "Comtesse"), ("le Sans-Âge", "la Sans-Âge"), ("Baron", "Baronne")],
         "prefixes": ["Vlad", "Dra", "Carm", "Alu", "Lucr", "Cassi", "Vane", "Ortho", "Mor",
                      "Ser", "Nyx", "Bela", "Rad", "Vesp", "Cor", "Sang"],
         "roots": ["cul", "mir", "eska", "vane", "dor", "lena", "thas", "viel", "gore", "nox",
                   "rian", "sang", "mort", "ula", "cinth"],
-        "suffixes": ["", "escu", "a", "ov", "ine", "us", "eth"],
+        "suffixes_m": ["", "escu", "ov", "us", "eth", "or"],
+        "suffixes_f": ["a", "escu", "ova", "ine", "issa", "ella", "ia"],
         "patterns": ["PR", "PRS", "PR", "PRS"],
         "origins": [
             {"key": "chateau", "label": "du Château", "emoji": "🏰",
@@ -243,12 +267,13 @@ RACES = {
     },
     "loup_garou": {
         "label": "Loup-garou", "emoji": "🐺",
-        "titles": ["Alpha", "le Grand", "Traqueur"],
+        "titles": ["Alpha", ("le Grand", "la Grande"), ("Traqueur", "Traqueuse")],
         "prefixes": ["Fen", "Grey", "Ulr", "Rag", "Bjor", "Sköll", "Vark", "Lup", "Cana",
                      "Hati", "Ronce", "Croc", "Fang", "Loup", "Mord", "Snar"],
         "roots": ["rir", "mane", "fang", "garic", "mund", "var", "grim", "ulf", "mar", "nir",
                   "loup", "hurle", "gueule", "croc", "rôde"],
-        "suffixes": ["", "ulf", "gar", "mane", "son", "ric", "croc"],
+        "suffixes_m": ["", "ulf", "gar", "son", "ric", "croc"],
+        "suffixes_f": ["a", "wenn", "ra", "ira", "mane", "wina"],
         "patterns": ["PR", "PRS", "PR", "PRS"],
         "origins": [
             {"key": "forets", "label": "des Forêts", "emoji": "🌲",
@@ -264,61 +289,81 @@ RACES = {
     },
 }
 
-# trait → épithète accolée au nom.
+# trait → épithètes (str épicène, ou tuple (masculin, féminin)).
 TRAITS = {
     "brave": {"label": "Brave", "emoji": "⚔️", "epithets": [
-        "le Vaillant", "Cœur-de-Lion", "l'Intrépide", "Brise-Bouclier", "le Hardi",
-        "sans Peur", "Taille-Géant", "le Rempart", "Poing-de-Fer", "le Lion",
-        "Front-d'Acier", "le Preux", "Brise-Lances", "Mâchoire-Serrée", "le Fier", "l'Audacieux"]},
+        ("le Vaillant", "la Vaillante"), "Cœur-de-Lion", "l'Intrépide", "Brise-Bouclier",
+        ("le Hardi", "la Hardie"), "sans Peur", "Taille-Géant", "le Rempart", "Poing-de-Fer",
+        ("le Lion", "la Lionne"), "Front-d'Acier", ("le Brave", "la Brave"), "Brise-Lances",
+        "Mâchoire-Serrée", ("le Fier", "la Fière"), ("l'Audacieux", "l'Audacieuse")]},
     "ruse": {"label": "Rusé", "emoji": "🦊", "epithets": [
-        "le Malin", "l'Ombre", "aux Mille Tours", "Langue-d'Argent", "le Filou",
-        "Doigts-Agiles", "le Renard", "Pied-Feutré", "le Caméléon", "Vif-d'Esprit",
-        "Double-Jeu", "le Fourbe", "Sourire-en-Coin", "l'Anguille", "le Subtil", "Trois-Coups-d'Avance"]},
+        ("le Malin", "la Maligne"), "l'Ombre", "aux Mille Tours", "Langue-d'Argent",
+        ("le Filou", "la Filoute"), "Doigts-Agiles", ("le Renard", "la Renarde"), "Pied-Feutré",
+        "le Caméléon", "Vif-d'Esprit", "Double-Jeu", ("le Fourbe", "la Fourbe"),
+        "Sourire-en-Coin", "l'Anguille", ("le Subtil", "la Subtile"), "Trois-Coups-d'Avance"]},
     "sage": {"label": "Sage", "emoji": "📜", "epithets": [
-        "le Sage", "l'Érudit", "aux Yeux Clairs", "le Contemplatif", "Barbe-Grise",
-        "le Devin", "Porte-Savoir", "l'Ancien", "aux Mille Livres", "le Lucide",
-        "Voix-Posée", "le Songeur", "Front-Pensif", "l'Éclairé", "Garde-Mémoire", "le Patient"]},
+        ("le Sage", "la Sage"), ("l'Érudit", "l'Érudite"), "aux Yeux Clairs",
+        ("le Contemplatif", "la Contemplative"), "Barbe-Grise", ("le Devin", "la Devineresse"),
+        "Porte-Savoir", ("l'Ancien", "l'Ancienne"), "aux Mille Livres", ("le Lucide", "la Lucide"),
+        "Voix-Posée", ("le Songeur", "la Songeuse"), ("l'Éclairé", "l'Éclairée"),
+        "Garde-Mémoire", ("le Patient", "la Patiente")]},
     "sombre": {"label": "Sombre", "emoji": "🌑", "epithets": [
-        "le Ténébreux", "des Cendres", "Porte-Deuil", "le Maudit", "l'Endeuillé",
-        "Nuit-Profonde", "le Corbeau", "Sang-Froid", "l'Éclipse", "le Silencieux",
-        "Ombre-Longue", "le Sépulcral", "Voile-Noir", "l'Oublié", "Cœur-de-Suie", "le Funeste"]},
+        ("le Ténébreux", "la Ténébreuse"), "des Cendres", "Porte-Deuil", ("le Maudit", "la Maudite"),
+        ("l'Endeuillé", "l'Endeuillée"), "Nuit-Profonde", ("le Corbeau", "la Corneille"), "Sang-Froid",
+        "l'Éclipse", ("le Silencieux", "la Silencieuse"), "Ombre-Longue",
+        ("le Sépulcral", "la Sépulcrale"), "Voile-Noir", ("l'Oublié", "l'Oubliée"),
+        "Cœur-de-Suie", ("le Funeste", "la Funeste")]},
     "farceur": {"label": "Farceur", "emoji": "🎭", "epithets": [
-        "le Fripon", "Pied-Léger", "le Bouffon", "Trouble-Fête", "la Pie",
-        "Grelot", "le Chahuteur", "Nez-Rouge", "le Cabotin", "Deux-Chopes",
-        "Tourne-Boule", "le Blagueur", "Pince-sans-Rire", "Culbuto", "le Farfadet", "Gros-Rire"]},
+        ("le Fripon", "la Friponne"), "Pied-Léger", ("le Bouffon", "la Bouffonne"), "Trouble-Fête",
+        "la Pie", "Grelot", ("le Chahuteur", "la Chahuteuse"), "Nez-Rouge",
+        ("le Cabotin", "la Cabotine"), "Deux-Chopes", "Tourne-Boule", ("le Blagueur", "la Blagueuse"),
+        "Pince-sans-Rire", "Culbuto", ("le Farfadet", "la Farfadette"), "Gros-Rire"]},
     "noble": {"label": "Noble", "emoji": "👑", "epithets": [
-        "le Juste", "au Grand Cœur", "le Loyal", "Main-Ouverte", "le Digne",
-        "Front-Haut", "le Courtois", "l'Honorable", "Verbe-d'Or", "le Généreux",
-        "Cœur-Pur", "le Bienveillant", "Parole-Tenue", "le Magnanime", "Port-Altier", "l'Intègre"]},
+        ("le Juste", "la Juste"), "au Grand Cœur", ("le Loyal", "la Loyale"), "Main-Ouverte",
+        ("le Digne", "la Digne"), "Front-Haut", ("le Courtois", "la Courtoise"), "l'Honorable",
+        "Verbe-d'Or", ("le Généreux", "la Généreuse"), "Cœur-Pur", ("le Bienveillant", "la Bienveillante"),
+        "Parole-Tenue", ("le Magnanime", "la Magnanime"), "Port-Altier", "l'Intègre"]},
     "sauvage": {"label": "Sauvage", "emoji": "🐺", "epithets": [
-        "le Farouche", "Crocs-Nus", "l'Indompté", "Griffe-Rapide", "le Rôdeur",
-        "Souffle-de-Loup", "l'Écorché", "Pied-de-Fauve", "le Traqueur", "Poil-Hérissé",
-        "Sang-Bouillant", "Œil-de-Lynx", "le Primitif", "Mord-Vent", "l'Insaisissable", "Crin-au-Vent"]},
+        ("le Farouche", "la Farouche"), "Crocs-Nus", ("l'Indompté", "l'Indomptée"), "Griffe-Rapide",
+        ("le Rôdeur", "la Rôdeuse"), "Souffle-de-Loup", ("l'Écorché", "l'Écorchée"), "Pied-de-Fauve",
+        ("le Traqueur", "la Traqueuse"), "Poil-Hérissé", "Sang-Bouillant", "Œil-de-Lynx",
+        ("le Primitif", "la Primitive"), "Mord-Vent", "l'Insaisissable", "Crin-au-Vent"]},
     "mystique": {"label": "Mystique", "emoji": "🔮", "epithets": [
-        "le Voilé", "aux Runes", "Tisse-Sorts", "l'Illuminé", "Œil-d'Astral",
-        "le Prophète", "aux Mains Bleues", "l'Arcaniste", "Murmure-d'Étoiles", "le Visionnaire",
-        "Porte-Grimoire", "l'Éthéré", "Doigts-de-Lune", "le Sibyllin", "Voix-des-Vents", "l'Initié"]},
+        ("le Voilé", "la Voilée"), "aux Runes", "Tisse-Sorts", ("l'Illuminé", "l'Illuminée"),
+        "Œil-d'Astral", ("le Prophète", "la Prophétesse"), "aux Mains Bleues", "l'Arcaniste",
+        "Murmure-d'Étoiles", ("le Visionnaire", "la Visionnaire"), "Porte-Grimoire",
+        ("l'Éthéré", "l'Éthérée"), "Doigts-de-Lune", ("le Sibyllin", "la Sibylline"),
+        "Voix-des-Vents", ("l'Initié", "l'Initiée")]},
     "vengeur": {"label": "Vengeur", "emoji": "🗡️", "epithets": [
         "l'Implacable", "Brise-Serment", "la Lame Froide", "Sang-pour-Sang", "l'Inflexible",
-        "le Marqué", "Dette-de-Sang", "l'Ombre Vengeresse", "Œil-pour-Œil", "le Rancunier",
-        "Fer-Rouge", "le Poursuivant", "Cœur-de-Fiel", "la Nemesis", "l'Inexorable", "Jamais-Pardon"]},
+        ("le Marqué", "la Marquée"), "Dette-de-Sang", "l'Ombre Vengeresse", "Œil-pour-Œil",
+        ("le Rancunier", "la Rancunière"), "Fer-Rouge", ("le Poursuivant", "la Poursuivante"),
+        "Cœur-de-Fiel", "la Nemesis", "l'Inexorable", "Jamais-Pardon"]},
     "ardent": {"label": "Ardent", "emoji": "🔥", "epithets": [
-        "le Flamboyant", "Cœur-de-Braise", "l'Emporté", "Souffle-de-Feu", "le Bouillant",
-        "l'Incandescent", "Poing-Ardent", "la Torche", "l'Insatiable", "Sang-Chaud",
-        "le Fougueux", "Étincelle", "Brûle-Tout", "l'Enflammé", "Verbe-Haut", "le Volcanique"]},
+        ("le Flamboyant", "la Flamboyante"), "Cœur-de-Braise", ("l'Emporté", "l'Emportée"),
+        "Souffle-de-Feu", ("le Bouillant", "la Bouillante"), ("l'Incandescent", "l'Incandescente"),
+        "Poing-Ardent", "la Torche", "l'Insatiable", "Sang-Chaud", ("le Fougueux", "la Fougueuse"),
+        "Étincelle", "Brûle-Tout", ("l'Enflammé", "l'Enflammée"), "Verbe-Haut",
+        ("le Volcanique", "la Volcanique")]},
     "stoique": {"label": "Stoïque", "emoji": "🗿", "epithets": [
-        "l'Imperturbable", "Roc-Immobile", "le Patient", "Face-de-Pierre", "l'Endurant",
-        "le Taciturne", "Épaules-Larges", "le Constant", "l'Inébranlable", "Souffle-Égal",
-        "le Posé", "Marbre-Froid", "l'Immuable", "Nerfs-d'Acier", "le Flegmatique", "Assise-Ferme"]},
+        "l'Imperturbable", "Roc-Immobile", ("le Patient", "la Patiente"), "Face-de-Pierre",
+        ("l'Endurant", "l'Endurante"), ("le Taciturne", "la Taciturne"), "Épaules-Larges",
+        ("le Constant", "la Constante"), "l'Inébranlable", "Souffle-Égal", ("le Posé", "la Posée"),
+        "Marbre-Froid", "l'Immuable", "Nerfs-d'Acier", ("le Flegmatique", "la Flegmatique")]},
     "errant": {"label": "Errant", "emoji": "🧭", "epithets": [
-        "le Vagabond", "Sans-Attache", "l'Éternel Voyageur", "Semelle-de-Vent", "le Nomade",
-        "aux Mille Routes", "l'Exilé", "Pas-Léger", "le Solitaire", "Sans-Racines",
-        "le Passant", "Poussière-de-Route", "l'Égaré", "Boussole-Folle", "le Sans-Pays", "Cœur-Ailleurs"]},
+        ("le Vagabond", "la Vagabonde"), "Sans-Attache", ("l'Éternel Voyageur", "l'Éternelle Voyageuse"),
+        "Semelle-de-Vent", ("le Nomade", "la Nomade"), "aux Mille Routes", ("l'Exilé", "l'Exilée"),
+        "Pas-Léger", ("le Solitaire", "la Solitaire"), "Sans-Racines", ("le Passant", "la Passante"),
+        "Poussière-de-Route", ("l'Égaré", "l'Égarée"), "Boussole-Folle", "Sans-Pays", "Cœur-Ailleurs"]},
 }
 
 
 def race_choices():
     return [(k, v["label"], v.get("emoji")) for k, v in RACES.items()]
+
+
+def gender_choices():
+    return list(GENDERS)
 
 
 def origin_choices(race_key):
@@ -335,6 +380,10 @@ def trait_choices():
 def race_label(race_key):
     r = RACES.get(race_key)
     return r["label"] if r else race_key
+
+
+def gender_label(gender):
+    return {"m": "Homme", "f": "Femme"}.get(gender, gender)
 
 
 def origin_label(race_key, origin_key):
@@ -355,9 +404,10 @@ def _cap(text):
     return text[:1].upper() + text[1:] if text else text
 
 
-def _firstname(race):
+def _firstname(race, gender):
     pattern = random.choice(race["patterns"])
-    pools = {"P": race["prefixes"], "R": race["roots"], "S": race["suffixes"]}
+    suffixes = race.get(f"suffixes_{gender}") or race.get("suffixes_m") or [""]
+    pools = {"P": race["prefixes"], "R": race["roots"], "S": suffixes}
     out = "".join(random.choice(pools[ch]) for ch in pattern)
     return _cap(out) or _cap(random.choice(race["roots"]))
 
@@ -369,20 +419,20 @@ def _origin(race, origin_key):
     return race.get("origins", [{}])[0] if race.get("origins") else {}
 
 
-def generate(race_key, origin_key, trait_key):
-    """Assemble un nom : prénom (phonétique race) + composants, selon une structure tirée
-    au sort (titre / épithète / lieu d'origine / ordinal de lignée)."""
+def generate(race_key, origin_key, trait_key, gender="m"):
+    """Assemble un nom genré : prénom + composants accordés, selon une structure tirée
+    au sort. ``gender`` = ``m`` ou ``f``."""
     race = RACES.get(race_key)
     trait = TRAITS.get(trait_key)
     if not race or not trait:
         return None
     places = _origin(race, origin_key).get("places") or [""]
     comps = {
-        "first": _firstname(race),
-        "epithet": random.choice(trait["epithets"]),
+        "first": _firstname(race, gender),
+        "epithet": _pick(random.choice(trait["epithets"]), gender),
         "place": random.choice(places),
-        "title": random.choice(TITLES + race.get("titles", [])),
-        "ordinal": random.choice(ORDINALS),
+        "title": _pick(random.choice(TITLES + race.get("titles", [])), gender),
+        "ordinal": _pick(random.choice(ORDINALS), gender),
     }
     templates, weights = zip(*STRUCTURES)
     tpl = random.choices(templates, weights=weights, k=1)[0]
