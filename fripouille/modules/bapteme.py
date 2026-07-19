@@ -318,6 +318,24 @@ class ResultView(discord.ui.View):
         )
 
 
+async def _set_exclusive_role(member, chosen_id, all_ids, label):
+    """Attribue un rôle unique d'un groupe : retire les autres rôles du groupe, pose le bon.
+    Ne touche JAMAIS un rôle hors ``all_ids``. Renvoie une note d'erreur (ou "")."""
+    chosen_int = int(chosen_id) if chosen_id else None
+    try:
+        stale = [r for r in member.roles if r.id in all_ids and r.id != chosen_int]
+        if stale:
+            await member.remove_roles(*stale, reason=f"Baptême : changement de {label}")
+        role = member.guild.get_role(chosen_int) if chosen_int else None
+        if role is None and chosen_int:
+            return f"\n*(Rôle de {label} introuvable — préviens un admin.)*"
+        if role and role not in member.roles:
+            await member.add_roles(role, reason=f"Baptême : {label}")
+    except discord.Forbidden:
+        return f"\n*(Je n'ai pas pu poser ton rôle de {label} — permission/hiérarchie.)*"
+    return ""
+
+
 async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key, faith_key):
     bot = interaction.client
     cfg = _cfg(bot)
@@ -332,23 +350,13 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         except discord.Forbidden:
             nick_ok = False
 
-    # Rôle de foi : on ne garde qu'un seul rôle de voie → retire les autres, ajoute le bon.
-    faith_note = ""
+    # Rôles exclusifs de race et de foi : un seul de chaque, sans jamais toucher aux autres rôles.
+    race_note = faith_note = ""
     if isinstance(member, discord.Member):
-        chosen_id = data.faith_role_id(faith_key)
-        all_ids = data.all_faith_role_ids()
-        chosen_int = int(chosen_id) if chosen_id else None
-        try:
-            stale = [r for r in member.roles if r.id in all_ids and r.id != chosen_int]
-            if stale:
-                await member.remove_roles(*stale, reason="Baptême : changement de foi")
-            role = member.guild.get_role(chosen_int) if chosen_int else None
-            if role is None and chosen_int:
-                faith_note = "\n*(Rôle de foi introuvable — préviens un admin.)*"
-            elif role and role not in member.roles:
-                await member.add_roles(role, reason="Baptême : foi")
-        except discord.Forbidden:
-            faith_note = "\n*(Je n'ai pas pu poser ton rôle de foi — permission/hiérarchie.)*"
+        race_note = await _set_exclusive_role(
+            member, data.race_role_id(race_key), data.all_race_role_ids(), "race")
+        faith_note = await _set_exclusive_role(
+            member, data.faith_role_id(faith_key), data.all_faith_role_ids(), "foi")
 
     # Registre persistant : ID Discord → identité choisie (pour l'IA des quêtes).
     roster = dict(cfg.get("roster") or {})
@@ -397,8 +405,8 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
             if nick_ok
             else "⚠️ Je n'ai pas pu changer ton pseudo (permission/hiérarchie), mais voici ton nom."
         )
-        + f"\nTu as rejoint **{data.faith_label(faith_key)}**."
-        + faith_note,
+        + f"\nRace : **{data.race_label(race_key)}** · Foi : **{data.faith_label(faith_key)}**."
+        + race_note + faith_note,
         color=COLOR,
     )
     await interaction.response.edit_message(embed=confirm, view=None)

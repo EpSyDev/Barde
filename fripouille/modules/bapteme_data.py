@@ -56,7 +56,7 @@ STRUCTURES = [
 # --- Races : phonétique (suffixes genrés) + origines + titres genrés ---
 RACES = {
     "humain": {
-        "label": "Humain", "emoji": "🛡️",
+        "label": "Humain", "emoji": "🛡️", "role_id": "1528460919217192980",
         "titles": [("Sire", "Dame"), ("Chevalier", "Chevalière"), ("Écuyer", "Écuyère")],
         "prefixes": ["Ald", "Ber", "Cor", "Ed", "Gau", "Rob", "Thi", "Guil", "Ren", "Bau",
                      "Wil", "Hug", "Ans", "Bert", "God", "Roul", "Aim", "Fol"],
@@ -81,7 +81,7 @@ RACES = {
         ],
     },
     "elfe": {
-        "label": "Elfe", "emoji": "🏹",
+        "label": "Elfe", "emoji": "🏹", "role_id": "1528461977083707532",
         "titles": [("Gardien", "Gardienne"), ("l'Immortel", "l'Immortelle"), ("Sylphe", "Sylphide")],
         "prefixes": ["Ae", "El", "Sil", "Cael", "Lith", "Fae", "Ithil", "Ny", "Aer", "Gala",
                      "Thal", "Ela", "Aran", "Cel", "Mith", "Eär", "Lor", "Fin"],
@@ -106,7 +106,7 @@ RACES = {
         ],
     },
     "nain": {
-        "label": "Nain", "emoji": "⛏️",
+        "label": "Nain", "emoji": "⛏️", "role_id": "1528462229127561459",
         "titles": [("Maître-Forgeron", "Maîtresse-Forgeronne"), ("le Barbu", "la Barbue"), "Thane"],
         "prefixes": ["Thor", "Dur", "Bal", "Grim", "Khaz", "Bru", "Thra", "Nor", "Dwal", "Gor",
                      "Bom", "Krag", "Bof", "Dain", "Bard", "Ori", "Gloi", "Balin"],
@@ -131,7 +131,7 @@ RACES = {
         ],
     },
     "orc": {
-        "label": "Orc", "emoji": "🪓",
+        "label": "Orc", "emoji": "🪓", "role_id": "1528464103319015474",
         "titles": [("Chef-de-Guerre", "Cheffe-de-Guerre"), ("le Balafré", "la Balafrée"), ("Broyeur", "Broyeuse")],
         "prefixes": ["Gro", "Mok", "Ur", "Gash", "Zug", "Nar", "Brak", "Dro", "Ghor", "Sna",
                      "Rok", "Vha", "Grum", "Skar", "Uz", "Drak", "Mog", "Ghaz"],
@@ -156,7 +156,7 @@ RACES = {
         ],
     },
     "fee": {
-        "label": "Fée", "emoji": "🧚",
+        "label": "Fée", "emoji": "🧚", "role_id": "1528464185795805234",
         "titles": [("Roi", "Reine"), ("Sylphe", "Sylphide"), ("le Petit", "la Petite")],
         "prefixes": ["Lil", "Fae", "Pae", "Twi", "Dew", "Bel", "Nim", "Sil", "Vio", "Thi",
                      "Ely", "Ari", "Mel", "Ros", "Cin", "Pim"],
@@ -178,7 +178,7 @@ RACES = {
         ],
     },
     "gnome": {
-        "label": "Gnome", "emoji": "🔧",
+        "label": "Gnome", "emoji": "🔧", "role_id": "1528464292674797578",
         "titles": [("Bricoleur", "Bricoleuse"), ("Professeur", "Professeure"), ("le Petit", "la Petite")],
         "prefixes": ["Fizz", "Wren", "Nim", "Bix", "Cog", "Zook", "Gimble", "Nack", "Dabble",
                      "Snik", "Turl", "Bram", "Fim", "Wid", "Bop", "Tink"],
@@ -200,7 +200,7 @@ RACES = {
         ],
     },
     "dragon": {
-        "label": "Dragon", "emoji": "🐉",
+        "label": "Dragon", "emoji": "🐉", "role_id": "1528464357745492100",
         "titles": [("l'Ailé", "l'Ailée"), ("Seigneur", "Dame"), ("l'Ancien", "l'Ancienne")],
         "prefixes": ["Vor", "Rha", "Kaz", "Draa", "Sar", "Vex", "Nyx", "Tha", "Zar", "Aur",
                      "Gor", "Rex", "Xar", "Vael", "Pyr", "Bal"],
@@ -222,7 +222,7 @@ RACES = {
         ],
     },
     "demon": {
-        "label": "Démon", "emoji": "😈",
+        "label": "Démon", "emoji": "😈", "role_id": "1528464419192049714",
         "titles": [("Prince", "Princesse"), ("Seigneur", "Dame"), ("le Damné", "la Damnée")],
         "prefixes": ["Mal", "Bel", "Az", "Nyx", "Dis", "Vas", "Mor", "Ith", "Kaz", "Rav",
                      "Sael", "Ver", "Bael", "Xul", "Gra", "Zeph"],
@@ -244,7 +244,7 @@ RACES = {
         ],
     },
     "vampire": {
-        "label": "Vampire", "emoji": "🧛",
+        "label": "Vampire", "emoji": "🧛", "role_id": "1528464495901671584",
         "titles": [("Comte", "Comtesse"), ("le Sans-Âge", "la Sans-Âge"), ("Baron", "Baronne")],
         "prefixes": ["Vlad", "Dra", "Carm", "Alu", "Lucr", "Cassi", "Vane", "Ortho", "Mor",
                      "Ser", "Nyx", "Bela", "Rad", "Vesp", "Cor", "Sang"],
@@ -266,7 +266,7 @@ RACES = {
         ],
     },
     "loup_garou": {
-        "label": "Loup-garou", "emoji": "🐺",
+        "label": "Loup-garou", "emoji": "🐺", "role_id": "1528464585856909381",
         "titles": ["Alpha", ("le Grand", "la Grande"), ("Traqueur", "Traqueuse")],
         "prefixes": ["Fen", "Grey", "Ulr", "Rag", "Bjor", "Sköll", "Vark", "Lup", "Cana",
                      "Hati", "Ronce", "Croc", "Fang", "Loup", "Mord", "Snar"],
@@ -433,6 +433,15 @@ def trait_choices():
 def race_label(race_key):
     r = RACES.get(race_key)
     return r["label"] if r else race_key
+
+
+def race_role_id(race_key):
+    r = RACES.get(race_key)
+    return r.get("role_id") if r else None
+
+
+def all_race_role_ids():
+    return {int(r["role_id"]) for r in RACES.values() if r.get("role_id")}
 
 
 def gender_label(gender):
