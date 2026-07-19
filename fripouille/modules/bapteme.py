@@ -14,6 +14,7 @@ Vue persistante : le bouton du panneau (`bapteme:start`). Le parcours d'après e
 suite de vues éphémères à état (durée de vie = l'interaction).
 """
 import logging
+from datetime import datetime, timezone
 
 import discord
 
@@ -43,6 +44,9 @@ DEFAULTS = {
     "button_label": "Se faire baptiser",
     "event_message": "🕯️ Un nouveau voyageur est baptisé : **{name}** !",
     "message_id": None,
+    # Registre des baptisés (géré bot) : {str(user_id): {user,name,pseudo,race,trait,style,at}}.
+    # Persisté dans le store → identifie chaque joueur pour l'IA des quêtes plus tard.
+    "roster": {},
 }
 
 
@@ -154,7 +158,7 @@ class ResultView(discord.ui.View):
 
     @discord.ui.button(label="Valider", emoji="✅", style=discord.ButtonStyle.success, row=1)
     async def validate(self, interaction, button):
-        await _finalize(interaction, self.name, self.style)
+        await _finalize(interaction, self.name, self.style, self.race_key, self.trait_key)
 
     @discord.ui.button(label="Relancer", emoji="🎲", style=discord.ButtonStyle.secondary, row=1)
     async def reroll(self, interaction, button):
@@ -163,7 +167,7 @@ class ResultView(discord.ui.View):
         await interaction.response.edit_message(embed=view.embed(), view=view)
 
 
-async def _finalize(interaction, name, style):
+async def _finalize(interaction, name, style, race_key, trait_key):
     bot = interaction.client
     cfg = _cfg(bot)
     member = interaction.user
@@ -176,6 +180,19 @@ async def _finalize(interaction, name, style):
             await member.edit(nick=_nick(name, style), reason="Baptême")
         except discord.Forbidden:
             nick_ok = False
+
+    # Registre persistant : ID Discord → identité choisie (pour l'IA des quêtes).
+    roster = dict(cfg.get("roster") or {})
+    roster[str(member.id)] = {
+        "user": member.name,
+        "name": name,
+        "pseudo": styled,
+        "race": race_key,
+        "trait": trait_key,
+        "style": style,
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    bot.store.set("bapteme", {"roster": roster})
 
     # Message d'événement dans le coin des voyageurs.
     ev_id = cfg.get("event_channel_id")
