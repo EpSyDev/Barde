@@ -13,7 +13,7 @@ Config (éditée depuis le dashboard) :
 - ``channel_id``         : salon où poster les menus.
 - ``title`` / ``description`` : embed d'intro (optionnel).
 - ``categories``         : liste de ``{id, label, emoji, description, placeholder,
-                           games:[{id, label, role_id}]}``.
+                           games:[{id, label, role_id, emoji}]}``.
 - ``message_ids``        : ids des messages postés (gérés par le bot).
 
 Chaque menu définit l'ensemble EXACT des rôles-jeux **de sa catégorie** : les rôles
@@ -50,10 +50,18 @@ def _cat_options(cat):
         rid = g.get("role_id")
         if not rid:
             continue
-        options.append(discord.SelectOption(
+        opt = discord.SelectOption(
             label=(g.get("label") or "Jeu")[:100],
             value=str(rid),
-        ))
+        )
+        emoji = (g.get("emoji") or "").strip()
+        if emoji:
+            # str accepté : emoji unicode ou perso « <:nom:id> » (parsé par discord.py).
+            try:
+                opt.emoji = emoji
+            except (ValueError, TypeError):
+                log.warning("jeux : emoji invalide « %s » ignoré", emoji)
+        options.append(opt)
     return options[:25]
 
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
-type Game = { id: string; label: string; role_id: string | null };
+type Game = { id: string; label: string; role_id: string | null; emoji: string };
 type Category = {
   id: string;
   label: string;
@@ -22,7 +22,7 @@ type JeuxCfg = {
 };
 
 const rid = () => (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8);
-const newGame = (): Game => ({ id: rid(), label: "", role_id: null });
+const newGame = (): Game => ({ id: rid(), label: "", role_id: null, emoji: "" });
 const newCategory = (): Category => ({
   id: rid(),
   label: "",
@@ -59,6 +59,7 @@ export default function Games() {
           id: g.id || rid(),
           label: g.label || "",
           role_id: g.role_id != null ? String(g.role_id) : null,
+          emoji: g.emoji || "",
         });
         // Reprise de l'ancien format (liste plate `games`) → une catégorie unique.
         let categories: Category[];
@@ -121,7 +122,7 @@ export default function Games() {
           placeholder: k.placeholder.trim(),
           games: k.games
             .filter((g) => g.label.trim() && g.role_id)
-            .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id })),
+            .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id, emoji: g.emoji.trim() })),
         }))
         .filter((k) => k.label && k.games.length);
       const res = await fetch("/api/fripouille/config/jeux", {
@@ -270,11 +271,22 @@ export default function Games() {
                 </div>
 
                 <label className="cfg-hint" style={{ marginTop: 4 }}>
-                  Jeux ({k.games.length}/25)
+                  Jeux ({k.games.length}/25) — emoji optionnel : un emoji classique, ou un
+                  emoji perso du serveur au format <code>&lt;:nom:id&gt;</code> (tape{" "}
+                  <code>\:nom:</code> dans Discord pour lire l'id).
                 </label>
                 <div className="game-list">
                   {k.games.map((g) => (
                     <div className="game-row" key={g.id}>
+                      <input
+                        className="game-emoji"
+                        type="text"
+                        value={g.emoji}
+                        onChange={(e) => patchGame(k.id, g.id, { emoji: e.target.value })}
+                        placeholder="😀"
+                        title="Emoji du jeu : un emoji classique ou un emoji perso du serveur au format <:nom:id>"
+                        aria-label="Emoji du jeu"
+                      />
                       <input
                         className="game-label"
                         type="text"
