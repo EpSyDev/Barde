@@ -32,7 +32,22 @@ log = logging.getLogger("fripouille.jeux")
 
 ROLE_PREFIX = "jeux:role:"      # custom_id du bouton = jeux:role:{role_id}
 MAX_BUTTONS = 25                # une View Discord = 5×5 boutons max
-COLOR = 0xC9A44A
+COLOR = 0xC9A44A                # accent doré de l'intro (couleur de La Fripouille)
+
+# Palette d'accents cyclée d'une catégorie à l'autre : chaque bloc a SA couleur de
+# barre latérale, ce qui les distingue au premier coup d'œil.
+CAT_PALETTE = [
+    0xE67E22,  # orange
+    0x3498DB,  # bleu
+    0x9B59B6,  # violet
+    0x2ECC71,  # vert émeraude
+    0xE74C3C,  # rouge
+    0x1ABC9C,  # turquoise
+    0xF1C40F,  # jaune
+    0xE91E63,  # rose
+    0x546E7A,  # ardoise
+    0x00BCD4,  # cyan
+]
 
 DEFAULTS = {
     "enabled": False,
@@ -108,27 +123,55 @@ async def _toggle_role(interaction, role_id):
 
 
 # --- Rendu du panneau ---
+def _intro_embed(title, desc):
+    """Bandeau d'intro, volontairement distinct des catégories : titre en grand
+    (markdown H1), texte d'accroche, puis une ligne de guidage en gris (subtext)."""
+    lines = []
+    if title:
+        lines.append(f"# {title}")
+    if desc:
+        lines.append(f"*{desc}*")          # accroche en italique
+    lines.append(
+        "-# 👉 Clique sur un jeu pour rejoindre son salon · reclique pour le quitter"
+        " · la confirmation n'est visible que par toi"
+    )
+    return discord.Embed(description="\n".join(lines), color=COLOR)
+
+
+def _category_embed(cat, accent):
+    """En-tête d'une catégorie : emoji + nom en titre, description en italique et
+    un rappel gris « où cliquer ». La couleur d'accent la démarque des voisines."""
+    emoji = (cat.get("emoji") or "").strip()
+    label = (cat.get("label") or "Jeux").strip()
+    n = len(_cat_games(cat))
+    body = []
+    cdesc = (cat.get("description") or "").strip()
+    if cdesc:
+        body.append(f"*{cdesc}*")
+    body.append("-# 👇 Choisis tes jeux ci-dessous")
+    embed = discord.Embed(
+        title=f"{emoji}  {label}".strip(),
+        description="\n".join(body),
+        color=accent,
+    )
+    embed.set_footer(text=f"{n} jeu{'x' if n > 1 else ''}")
+    return embed
+
+
 def _build_blocks(cfg):
     """Liste ordonnée de (embed, view|None) : intro éventuel puis une catégorie/bloc."""
     blocks = []
     title = (cfg.get("title") or "").strip()
     desc = (cfg.get("description") or "").strip()
     if title or desc:
-        blocks.append(
-            (discord.Embed(title=title or None, description=desc or None, color=COLOR), None)
-        )
+        blocks.append((_intro_embed(title, desc), None))
+    i = 0
     for cat in cfg.get("categories", []):
         if not _cat_games(cat):
             continue
-        emoji = (cat.get("emoji") or "").strip()
-        label = (cat.get("label") or "Jeux").strip()
-        header = f"{emoji} {label}".strip()
-        embed = discord.Embed(
-            title=header,
-            description=(cat.get("description") or "").strip() or None,
-            color=COLOR,
-        )
-        blocks.append((embed, CategoryButtonsView(cat)))
+        accent = CAT_PALETTE[i % len(CAT_PALETTE)]
+        blocks.append((_category_embed(cat, accent), CategoryButtonsView(cat)))
+        i += 1
     return blocks
 
 
