@@ -1450,3 +1450,125 @@ h3 {
   font-family: ui-monospace, monospace;
   font-size: 0.8rem;
 }
+
+/* --- PUB (annonce partenaire) --- */
+.pub-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .pub-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.preview-embed-author {
+  font-size: 0.78rem;
+  color: var(--parchment-dim);
+  margin-bottom: 6px;
+}
+
+.preview-embed-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--parchment);
+}
+
+.preview-embed-fields b {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
+.preview-embed-btn {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #fff;
+  background: #5865f2; /* blurple Discord (bouton lien) */
+}
+
+/* --- Historique des envois (unique + pub) --- */
+.edit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(217, 112, 47, 0.5);
+  border-radius: 8px;
+  background: rgba(217, 112, 47, 0.12);
+  color: var(--gold-bright);
+  font-size: 0.85rem;
+}
+
+.btn.small {
+  padding: 5px 9px;
+  font-size: 0.78rem;
+}
+
+.btn.small.danger {
+  border-color: var(--panel-edge);
+  color: var(--parchment-dim);
+}
+
+.btn.small.danger:hover {
+  border-color: var(--red);
+  color: #e8b3a4;
+}
+
+.sent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.sent-item.editing {
+  border-color: rgba(217, 112, 47, 0.6);
+  background: rgba(217, 112, 47, 0.1);
+}
+
+.sent-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sent-label {
+  color: var(--parchment);
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-sub {
+  color: var(--parchment-dim);
+  font-size: 0.76rem;
+}
+
+.sent-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
