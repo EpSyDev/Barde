@@ -11,7 +11,9 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import anonyme, autorole, bapteme, farewell, jeux, messages, tempvoice, tickets, welcome
+from .modules import (
+    anonyme, autorole, bapteme, economie, farewell, jeux, messages, tempvoice, tickets, welcome,
+)
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -31,6 +33,10 @@ intents = discord.Intents.none()
 intents.guilds = True
 intents.members = True
 intents.voice_states = True
+# Messages de serveur : requis par le module « Économie » (gain de monnaie sur
+# message). On ne lit PAS le contenu (pas d'intent message_content) — on compte
+# seulement qu'un message a eu lieu, ce qui suffit pour créditer l'auteur.
+intents.guild_messages = True
 
 
 class FripouilleBot(discord.Client):
@@ -51,6 +57,7 @@ class FripouilleBot(discord.Client):
         # global sinon (propagation Discord plus lente).
         guild = discord.Object(id=config.GUILD_ID) if config.GUILD_ID else None
         anonyme.setup(self.tree, guild)
+        economie.install(self, guild)
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -91,6 +98,15 @@ class FripouilleBot(discord.Client):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
         await tempvoice.on_voice(self, member, before, after)
+
+    async def on_message(self, message: discord.Message):
+        # Gain de monnaie sur message (module Économie). On ignore les MP, les bots
+        # et les serveurs hors périmètre.
+        if message.guild is None or message.author.bot:
+            return
+        if config.GUILD_ID and message.guild.id != config.GUILD_ID:
+            return
+        await economie.on_message(self, message)
 
 
 def main():
