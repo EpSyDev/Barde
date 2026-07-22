@@ -10,6 +10,7 @@ import Voice from "@/components/Voice";
 import Bapteme from "@/components/Bapteme";
 import Registre from "@/components/Registre";
 import Media from "@/components/Media";
+import Economie from "@/components/Economie";
 import { logout } from "@/app/actions";
 
 type Section = {
@@ -26,6 +27,7 @@ const SECTIONS: Section[] = [
   { id: "communaute", label: "Communauté", icon: "🛡️", hint: "Rôles & accueil", ready: true },
   { id: "jeux", label: "Rôles-jeux", icon: "🎮", hint: "Menu des jeux", ready: true },
   { id: "messages", label: "Messages", icon: "✉️", hint: "Envois & récurrents", ready: true },
+  { id: "economie", label: "Économie", icon: "🪙", hint: "Monnaie & boutique", ready: true },
   { id: "tickets", label: "Tickets", icon: "🎫", hint: "Support membres", ready: true },
   { id: "vocaux", label: "Salons vocaux", icon: "🔊", hint: "Vocaux temporaires", ready: true },
   { id: "bapteme", label: "Baptême", icon: "🕯️", hint: "Générateur de noms", ready: true },
@@ -111,6 +113,8 @@ export default function AppShell({ userName }: { userName: string }) {
           <Games />
         ) : active === "messages" ? (
           <Messages />
+        ) : active === "economie" ? (
+          <Economie />
         ) : active === "tickets" ? (
           <Tickets />
         ) : active === "vocaux" ? (
