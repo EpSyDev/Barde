@@ -19,6 +19,7 @@ type Entry = {
   faith_label?: string;
   style: string;
   at: string;
+  unlocked?: boolean;
 };
 
 const RACE: Record<string, string> = { elfe: "Elfe", nain: "Nain", orc: "Orc", humain: "Humain" };
@@ -51,6 +52,7 @@ export default function Registre() {
   const [q, setQ] = useState("");
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +95,28 @@ export default function Registre() {
       setImporting(false);
     }
   }, [load]);
+
+  const unlock = useCallback(
+    async (id: string, label: string) => {
+      setUnlockingId(id);
+      setNotice(null);
+      try {
+        const res = await fetch("/api/fripouille/action/bapteme/unlock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: id }),
+        });
+        if (!res.ok) throw new Error();
+        setNotice(`${label} peut se faire re-baptiser.`);
+        await load();
+      } catch {
+        setNotice("Échec du déblocage (bot injoignable ?).");
+      } finally {
+        setUnlockingId(null);
+      }
+    },
+    [load]
+  );
 
   const filtered = useMemo(() => {
     if (!entries) return [];
@@ -182,6 +206,7 @@ export default function Registre() {
                   <th>Membre</th>
                   <th>ID Discord</th>
                   <th>Baptisé le</th>
+                  <th>Renouvellement</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,6 +223,20 @@ export default function Registre() {
                     <td>{e.user}</td>
                     <td className="reg-id">{e.id}</td>
                     <td>{fmtDate(e.at)}</td>
+                    <td>
+                      {e.unlocked ? (
+                        <span className="reg-badge">⏳ Débloqué</span>
+                      ) : (
+                        <button
+                          className="btn"
+                          onClick={() => unlock(e.id, e.name || e.user)}
+                          disabled={unlockingId === e.id}
+                          title="Autoriser ce membre à se faire re-baptiser"
+                        >
+                          {unlockingId === e.id ? "…" : "Débloquer"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

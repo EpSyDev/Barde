@@ -452,6 +452,21 @@ async def backfill(bot, payload):
     return {"added": added, "total": len(roster)}
 
 
+async def unlock(bot, payload):
+    """Débloque un membre pour un nouveau baptême (flag `unlocked`). Le prochain baptême
+    validé écrase sa fiche et le re-verrouille."""
+    uid = str(payload.get("user_id") or "")
+    roster = dict(_cfg(bot).get("roster") or {})
+    entry = roster.get(uid)
+    if not entry:
+        raise ValueError("membre absent du registre")
+    entry = dict(entry)
+    entry["unlocked"] = True
+    roster[uid] = entry
+    bot.store.set("bapteme", {"roster": roster})
+    return {"ok": True}
+
+
 # --- Panneau (vue persistante) ---
 class BaptizeButton(discord.ui.Button):
     def __init__(self, label):
@@ -461,6 +476,14 @@ class BaptizeButton(discord.ui.Button):
         )
 
     async def callback(self, interaction):
+        # Anti re-baptême : déjà dans le registre = déjà baptisé (sauf débloqué par un tavernier).
+        entry = (_cfg(interaction.client).get("roster") or {}).get(str(interaction.user.id))
+        if entry and not entry.get("unlocked"):
+            await interaction.response.send_message(
+                "🕯️ Tu es **déjà baptisé**. Pour un nouveau baptême, contacte les taverniers.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_message(
             embed=_race_embed(), view=RaceView(), ephemeral=True,
         )
@@ -515,5 +538,5 @@ MODULE = register(Module(
     label="Baptême",
     defaults=DEFAULTS,
     apply=apply,
-    actions={"backfill": backfill},
+    actions={"backfill": backfill, "unlock": unlock},
 ))
