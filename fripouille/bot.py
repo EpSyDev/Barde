@@ -11,7 +11,7 @@ import logging
 import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
-from .modules import autorole, bapteme, farewell, jeux, messages, tempvoice, tickets, welcome
+from .modules import anonyme, autorole, bapteme, farewell, jeux, messages, tempvoice, tickets, welcome
 from .store import ConfigStore
 
 logging.basicConfig(
@@ -42,10 +42,16 @@ class FripouilleBot(discord.Client):
             max_messages=None,
         )
         self.store = ConfigStore()
+        self.tree = discord.app_commands.CommandTree(self)
 
     async def setup_hook(self):
         await webapi.start_web(self)
         messages.start_scheduler(self)
+        # Commandes slash : portée serveur (sync instantané) si GUILD_ID connu,
+        # global sinon (propagation Discord plus lente).
+        guild = discord.Object(id=config.GUILD_ID) if config.GUILD_ID else None
+        anonyme.setup(self.tree, guild)
+        await self.tree.sync(guild=guild)
 
     async def on_ready(self):
         log.info("La Fripouille connectée : %s", self.user)
