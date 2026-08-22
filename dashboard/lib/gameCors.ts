@@ -4,6 +4,12 @@ import { NextResponse } from "next/server";
 
 const GAME_ORIGIN = process.env.GAME_ORIGIN || "";
 
+if (!GAME_ORIGIN) {
+  // Var d'env absente ou pas prise en compte (Environment pas coché / pas redéployé
+  // depuis l'ajout) — sans ça le CORS échoue silencieusement côté navigateur.
+  console.warn("GAME_ORIGIN n'est pas défini : les routes /api/game/* refuseront le jeu en CORS.");
+}
+
 function headers(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": GAME_ORIGIN,
