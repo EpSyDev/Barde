@@ -49,6 +49,10 @@ DEFAULTS = {
     # Article = {id, nom, description, prix, type("role"|"objet"), role_id, stock, enabled}
     # stock : None ou -1 = illimité.
     "boutique": [],
+    # Récompenses ponctuelles déclenchables depuis d'autres systèmes (ex. le jeu MYRHAVEN),
+    # une seule fois par joueur (voir action_crediter_evenement). Clé = event_id arbitraire.
+    # Valeur = {"montant": int, "enabled": bool, "label": str}
+    "evenements": {},
 }
 
 DB_PATH = config.DATA_DIR / "economy.db"
@@ -297,6 +301,39 @@ async def on_message(bot, message: discord.Message):
         log.error("gain message échoué : %s", exc)
 
 
+class PurchaseError(Exception):
+    """Erreur métier d'achat ; ``code`` ∈ {introuvable, stock, solde} pour que chaque
+    appelant (Discord, API HTTP) compose son propre message."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _execute_purchase(bot, cfg: dict, user_id, item_id: str) -> tuple[dict, int]:
+    """Débite, livre (inventaire + décrément stock), renvoie ``(item, solde_restant)``.
+
+    Ne gère pas l'attribution de rôle Discord (pas de contexte ``guild`` ici) : à
+    l'appelant de le faire si ``item['type'] == 'role'``. Partagée entre la commande
+    Discord ``/boutique`` et l'action HTTP ``acheter`` (ex. achats depuis le jeu).
+    """
+    item = _find_item(cfg, item_id)
+    if not item or not item.get("enabled"):
+        raise PurchaseError("introuvable")
+    if not _stock_illimite(item) and _int(item.get("stock"), 0) <= 0:
+        raise PurchaseError("stock")
+    prix = _int(item.get("prix"), 0)
+    try:
+        reste = bot.economy.spend(user_id, prix, f"achat:{item_id}")
+    except ValueError:
+        raise PurchaseError("solde")
+    bot.economy.add_item(user_id, item_id, 1)
+    if not _stock_illimite(item):
+        item["stock"] = max(0, _int(item.get("stock"), 0) - 1)
+        bot.store.set("economie", {"boutique": cfg.get("boutique")})
+    return item, reste
+
+
 # ───────────────────────── Boutique interactive ─────────────────────────
 def _shop_embed(cfg: dict) -> discord.Embed:
     embed = discord.Embed(
@@ -354,7 +391,6 @@ async def _purchase(interaction: discord.Interaction, item_id: str):
     if not item or not item.get("enabled"):
         await interaction.response.send_message("❌ Article introuvable.", ephemeral=True)
         return
-    prix = _int(item.get("prix"), 0)
 
     # Rôle déjà possédé ?
     if item.get("type") == "role" and item.get("role_id"):
@@ -363,25 +399,23 @@ async def _purchase(interaction: discord.Interaction, item_id: str):
             await interaction.response.send_message("❌ Tu possèdes déjà ce rôle.", ephemeral=True)
             return
 
-    # Stock ?
-    if not _stock_illimite(item) and _int(item.get("stock"), 0) <= 0:
-        await interaction.response.send_message("❌ Article en rupture de stock.", ephemeral=True)
-        return
-
-    # Débit atomique (vérifie le solde).
     try:
-        reste = bot.economy.spend(interaction.user.id, prix, f"achat:{item_id}")
-    except ValueError:
-        bal = bot.economy.balance(interaction.user.id)
-        await interaction.response.send_message(
-            f"❌ Solde insuffisant : il te faut **{format_amount(cfg, prix)}** "
-            f"(tu as {format_amount(cfg, bal)}).",
-            ephemeral=True,
-        )
+        item, reste = _execute_purchase(bot, cfg, interaction.user.id, item_id)
+    except PurchaseError as exc:
+        if exc.code == "stock":
+            await interaction.response.send_message("❌ Article en rupture de stock.", ephemeral=True)
+        elif exc.code == "solde":
+            bal = bot.economy.balance(interaction.user.id)
+            await interaction.response.send_message(
+                f"❌ Solde insuffisant : il te faut **{format_amount(cfg, _int(item.get('prix'), 0))}** "
+                f"(tu as {format_amount(cfg, bal)}).",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message("❌ Article introuvable.", ephemeral=True)
         return
 
-    # Livraison : inventaire + rôle éventuel.
-    bot.economy.add_item(interaction.user.id, item_id, 1)
+    # Rôle éventuel (attribution possible seulement depuis ce contexte Discord).
     if item.get("type") == "role" and item.get("role_id") and interaction.guild:
         role = interaction.guild.get_role(_int(item.get("role_id")))
         if role:
@@ -390,14 +424,9 @@ async def _purchase(interaction: discord.Interaction, item_id: str):
             except discord.Forbidden:
                 log.error("rôle %s non attribuable (permissions)", role.id)
 
-    # Décrément du stock en config.
-    if not _stock_illimite(item):
-        item["stock"] = max(0, _int(item.get("stock"), 0) - 1)
-        bot.store.set("economie", {"boutique": cfg.get("boutique")})
-
     await interaction.response.send_message(
         f"✅ Tu as acheté **{item.get('nom', 'Article')}** pour "
-        f"**{format_amount(cfg, prix)}**. Il te reste **{format_amount(cfg, reste)}**.",
+        f"**{format_amount(cfg, _int(item.get('prix'), 0))}**. Il te reste **{format_amount(cfg, reste)}**.",
         ephemeral=True,
     )
 
@@ -601,6 +630,55 @@ async def action_classement(bot, payload) -> dict:
     return {"ok": True, "classement": [dict(r) for r in rows]}
 
 
+async def action_solde(bot, payload) -> dict:
+    """Lecture de solde pour un système externe (ex. le jeu MYRHAVEN)."""
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("user_id requis")
+    return {"ok": True, "balance": bot.economy.balance(user_id)}
+
+
+async def action_crediter_evenement(bot, payload) -> dict:
+    """Crédite une récompense d'``evenements`` — une seule fois par joueur et par
+    ``event_id`` (anti-rejeu via le même mécanisme de cooldown que ``/daily``), pour
+    qu'un système externe (le jeu) ne puisse jamais faire farmer la monnaie en
+    rejouant la requête."""
+    user_id = payload.get("user_id")
+    event_id = str(payload.get("event_id") or "")
+    if not user_id or not event_id:
+        raise ValueError("user_id et event_id requis")
+    cfg = _cfg(bot)
+    evt = (cfg.get("evenements") or {}).get(event_id)
+    if not evt or not evt.get("enabled"):
+        return {"ok": False, "error": "evenement_inconnu"}
+    if bot.economy.get_cooldown(user_id, f"evt:{event_id}") is not None:
+        return {"ok": False, "error": "deja_recompense", "balance": bot.economy.balance(user_id)}
+    montant = _int(evt.get("montant"), 0)
+    new_bal = bot.economy.credit(user_id, montant, f"evenement:{event_id}")
+    bot.economy.set_cooldown(user_id, f"evt:{event_id}", datetime.now(timezone.utc))
+    return {"ok": True, "balance": new_bal, "montant": montant}
+
+
+async def action_acheter(bot, payload) -> dict:
+    """Achat boutique déclenché hors Discord (ex. depuis le jeu). Le prix vient
+    toujours du catalogue du bot, jamais de l'appelant. Les articles de type
+    ``role`` sont refusés ici (pas de contexte serveur/membre en HTTP) — à acheter
+    sur Discord."""
+    user_id = payload.get("user_id")
+    item_id = str(payload.get("item_id") or "")
+    if not user_id or not item_id:
+        raise ValueError("user_id et item_id requis")
+    cfg = _cfg(bot)
+    item = _find_item(cfg, item_id)
+    if item and item.get("type") == "role":
+        return {"ok": False, "error": "type_non_supporte"}
+    try:
+        item, reste = _execute_purchase(bot, cfg, user_id, item_id)
+    except PurchaseError as exc:
+        return {"ok": False, "error": exc.code}
+    return {"ok": True, "balance": reste, "item": {"id": item.get("id"), "nom": item.get("nom")}}
+
+
 MODULE = register(Module(
     key="economie",
     label="Économie",
@@ -609,5 +687,8 @@ MODULE = register(Module(
     actions={
         "crediter": action_crediter,
         "classement": action_classement,
+        "solde": action_solde,
+        "crediter_evenement": action_crediter_evenement,
+        "acheter": action_acheter,
     },
 ))
