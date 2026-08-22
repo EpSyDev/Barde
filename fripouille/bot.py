@@ -37,9 +37,10 @@ intents.voice_states = True
 # message). On ne lit PAS le contenu (pas d'intent message_content) — on compte
 # seulement qu'un message a eu lieu, ce qui suffit pour créditer l'auteur.
 intents.guild_messages = True
-# Réactions : requis par le gain « réaction » et le bonus « message très réagi » de
-# l'économie. Intent non privilégié (pas de toggle à activer sur le portail Discord).
-intents.reactions = True
+# Réactions (serveur uniquement, même doctrine que guild_messages) : requis par le gain
+# « réaction » et le bonus « message très réagi » de l'économie. Intent non privilégié
+# (pas de toggle à activer sur le portail Discord).
+intents.guild_reactions = True
 
 
 class FripouilleBot(discord.Client):
