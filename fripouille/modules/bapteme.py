@@ -452,6 +452,39 @@ async def backfill(bot, payload):
     return {"added": added, "total": len(roster)}
 
 
+async def action_statut(bot, payload) -> dict:
+    """Le joueur possède-t-il un rôle de race (= baptisé) ? Utilisé pour restreindre
+    l'accès au jeu MYRHAVEN. Vérifie les rôles Discord réels (pas le ``roster``, qui
+    peut diverger : import historique sans rôle attribué, retrait manuel par un admin…)."""
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("user_id requis")
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    member = guild.get_member(int(user_id))
+    if member is None:
+        try:
+            member = await guild.fetch_member(int(user_id))
+        except discord.NotFound:
+            return {"ok": True, "baptise": False}
+    race_ids = data.all_race_role_ids()
+    matched = {r.id for r in member.roles} & race_ids
+    if not matched:
+        return {"ok": True, "baptise": False}
+    matched_id = next(iter(matched))
+    race_key = next(
+        (k for k, v in data.RACES.items() if v.get("role_id") and int(v["role_id"]) == matched_id),
+        None,
+    )
+    return {
+        "ok": True,
+        "baptise": True,
+        "race": race_key,
+        "race_label": data.race_label(race_key) if race_key else None,
+    }
+
+
 async def unlock(bot, payload):
     """Débloque un membre pour un nouveau baptême (flag `unlocked`). Le prochain baptême
     validé écrase sa fiche et le re-verrouille."""
@@ -538,5 +571,5 @@ MODULE = register(Module(
     label="Baptême",
     defaults=DEFAULTS,
     apply=apply,
-    actions={"backfill": backfill, "unlock": unlock},
+    actions={"backfill": backfill, "unlock": unlock, "statut": action_statut},
 ))
