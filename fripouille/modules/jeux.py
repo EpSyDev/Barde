@@ -27,6 +27,7 @@ import logging
 import discord
 
 from ..registry import Module, register
+from . import economie
 
 log = logging.getLogger("fripouille.jeux")
 
@@ -112,6 +113,7 @@ async def _toggle_role(interaction, role_id):
             )
         else:
             await member.add_roles(role, reason="Rôles-jeux (La Fripouille)")
+            await economie.on_role_jeu_added(interaction.client, member.id)
             await interaction.response.send_message(
                 f"✅ **{role.name}** ajouté — accès à ses salons débloqué.", ephemeral=True
             )

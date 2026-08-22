@@ -17,6 +17,7 @@ Point d'entrée public pour les autres systèmes (ex. quêtes) : :func:`crediter
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 import threading
@@ -40,10 +41,21 @@ DEFAULTS = {
         "symbole": "🪙",          # emoji ou caractère ; prioritaire sur le nom
         "symbole_avant": False,    # True → « 🪙 100 », False → « 100 🪙 »
     },
-    # Sources de gains : chacune activable + réglable depuis le dashboard.
+    # Sources de gains : chacune activable + réglable depuis le dashboard. Certaines ont
+    # besoin d'un intent Discord supplémentaire (reaction) ou d'un tick périodique (vocal,
+    # anciennete) — voir bot.py / start_scheduler.
     "gains": {
         "message": {"enabled": False, "montant": 1, "cooldown": 60},      # cooldown en secondes
         "daily": {"enabled": True, "montant": 100, "cooldown": 86400},    # 24 h par défaut
+        "reaction": {"enabled": False, "montant": 1, "cooldown": 60},     # réagir à un message
+        "vocal": {"enabled": False, "montant": 5, "minutes": 30},         # toutes les N minutes connecté (hors AFK)
+        "bienvenue": {"enabled": False, "montant": 50},                   # arrivée sur le serveur, une fois/compte
+        "bapteme": {"enabled": False, "montant": 100},                    # baptême complété, une fois/compte
+        "role_jeu": {"enabled": False, "montant": 25},                    # premier rôle-jeu choisi, une fois/compte
+        "boost": {"enabled": False, "montant": 200},                      # à chaque nouveau boost du serveur
+        "ticket_resolu": {"enabled": False, "montant": 30},                # au membre staff qui a pris en charge
+        "anciennete": {"enabled": False, "montant": 100, "paliers_jours": [30, 90, 365]},
+        "seuil_reactions": {"enabled": False, "montant": 20, "seuil": 10},  # auteur d'un message très réagi
     },
     # Catalogue de la boutique : liste d'articles éditée au dashboard.
     # Article = {id, nom, description, prix, type("role"|"objet"), role_id, stock, enabled}
@@ -299,6 +311,171 @@ async def on_message(bot, message: discord.Message):
         bot.economy.credit(message.author.id, montant, "gain:message")
     except Exception as exc:  # noqa: BLE001
         log.error("gain message échoué : %s", exc)
+
+
+# ───────────────────────── Autres déclencheurs Discord ─────────────────────────
+# Cooldown anti-spam du gain « réaction » — même doctrine que _msg_cooldown (en mémoire).
+_reaction_cooldown: dict[int, float] = {}
+# Minutes accumulées en vocal depuis le dernier crédit — en mémoire (repart à zéro au
+# restart, acceptable : au pire quelques minutes de progression perdues).
+_voice_minutes: dict[int, int] = {}
+
+
+def _gain_cfg(bot, key: str) -> dict:
+    return (_cfg(bot).get("gains") or {}).get(key) or {}
+
+
+async def _credit_once(bot, user_id, kind: str, montant: int, reason: str) -> bool:
+    """Crédite une seule fois, jamais rejoué (même mécanisme que l'anti-rejeu de
+    `crediter_evenement`) — renvoie True si crédité, False si déjà accordé."""
+    if bot.economy.get_cooldown(user_id, kind) is not None:
+        return False
+    bot.economy.credit(user_id, montant, reason)
+    bot.economy.set_cooldown(user_id, kind, datetime.now(timezone.utc))
+    return True
+
+
+async def on_reaction_add(bot, payload) -> None:
+    """Gain « réaction » (générique, cooldown anti-spam) + bonus seuil pour l'auteur du
+    message réagi. Appelé depuis `on_raw_reaction_add` (intent ``reactions``)."""
+    if payload.guild_id is None or (config.GUILD_ID and payload.guild_id != config.GUILD_ID):
+        return
+    member = payload.member
+    if member is None or member.bot:
+        return
+
+    reaction_cfg = _gain_cfg(bot, "reaction")
+    if reaction_cfg.get("enabled"):
+        montant = _int(reaction_cfg.get("montant"), 0)
+        cooldown = _int(reaction_cfg.get("cooldown"), 60)
+        now = time.monotonic()
+        last = _reaction_cooldown.get(member.id, 0.0)
+        if montant > 0 and now - last >= cooldown:
+            _reaction_cooldown[member.id] = now
+            try:
+                bot.economy.credit(member.id, montant, "gain:reaction")
+            except Exception as exc:  # noqa: BLE001
+                log.error("gain réaction échoué : %s", exc)
+
+    seuil_cfg = _gain_cfg(bot, "seuil_reactions")
+    if seuil_cfg.get("enabled"):
+        montant = _int(seuil_cfg.get("montant"), 0)
+        seuil = _int(seuil_cfg.get("seuil"), 10)
+        if montant <= 0 or seuil <= 0:
+            return
+        try:
+            channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
+            message = await channel.fetch_message(payload.message_id)
+        except (discord.NotFound, discord.Forbidden):
+            return
+        if message.author.bot:
+            return
+        total = sum(r.count for r in message.reactions)
+        if total >= seuil:
+            await _credit_once(bot, message.author.id, f"seuil:{message.id}", montant, "gain:seuil_reactions")
+
+
+async def on_arrival(bot, member) -> None:
+    """Bonus de bienvenue — une seule fois par compte, même en cas de départ puis retour."""
+    cfg = _gain_cfg(bot, "bienvenue")
+    montant = _int(cfg.get("montant"), 0)
+    if cfg.get("enabled") and montant > 0:
+        await _credit_once(bot, member.id, "bienvenue", montant, "gain:bienvenue")
+
+
+async def on_bapteme(bot, member_id) -> None:
+    """Bonus de baptême complété — une seule fois par compte (un re-baptême ne recrédite pas)."""
+    cfg = _gain_cfg(bot, "bapteme")
+    montant = _int(cfg.get("montant"), 0)
+    if cfg.get("enabled") and montant > 0:
+        await _credit_once(bot, member_id, "bapteme", montant, "gain:bapteme")
+
+
+async def on_role_jeu_added(bot, member_id) -> None:
+    """Bonus du premier rôle-jeu choisi — une seule fois, malgré le toggle ajout/retrait."""
+    cfg = _gain_cfg(bot, "role_jeu")
+    montant = _int(cfg.get("montant"), 0)
+    if cfg.get("enabled") and montant > 0:
+        await _credit_once(bot, member_id, "role_jeu", montant, "gain:role_jeu")
+
+
+async def on_boost(bot, member) -> None:
+    """Bonus de boost serveur — crédité à chaque transition « ne boostait pas → boost »."""
+    cfg = _gain_cfg(bot, "boost")
+    montant = _int(cfg.get("montant"), 0)
+    if cfg.get("enabled") and montant > 0:
+        bot.economy.credit(member.id, montant, "gain:boost")
+
+
+async def on_ticket_resolved(bot, claimer_id) -> None:
+    """Bonus au membre staff qui a pris en charge (claim) le ticket avant sa fermeture."""
+    cfg = _gain_cfg(bot, "ticket_resolu")
+    montant = _int(cfg.get("montant"), 0)
+    if cfg.get("enabled") and montant > 0:
+        bot.economy.credit(claimer_id, montant, "gain:ticket_resolu")
+
+
+# ───────────────────────── Tick périodique (vocal + ancienneté) ─────────────────────────
+async def _tick(bot) -> None:
+    gains = _cfg(bot).get("gains") or {}
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        return
+
+    vocal_cfg = gains.get("vocal") or {}
+    if vocal_cfg.get("enabled"):
+        montant = _int(vocal_cfg.get("montant"), 0)
+        minutes_needed = max(1, _int(vocal_cfg.get("minutes"), 30))
+        afk = guild.afk_channel
+        for channel in guild.voice_channels:
+            if afk and channel.id == afk.id:
+                continue
+            for member in channel.members:
+                if member.bot:
+                    continue
+                total = _voice_minutes.get(member.id, 0) + 1
+                if total >= minutes_needed:
+                    total -= minutes_needed
+                    if montant > 0:
+                        try:
+                            bot.economy.credit(member.id, montant, "gain:vocal")
+                        except Exception as exc:  # noqa: BLE001
+                            log.error("gain vocal échoué : %s", exc)
+                _voice_minutes[member.id] = total
+
+    anciennete_cfg = gains.get("anciennete") or {}
+    if anciennete_cfg.get("enabled"):
+        montant = _int(anciennete_cfg.get("montant"), 0)
+        paliers = [j for j in (anciennete_cfg.get("paliers_jours") or []) if _int(j, 0) > 0]
+        if montant > 0 and paliers:
+            if not guild.chunked:
+                await guild.chunk()
+            now = datetime.now(timezone.utc)
+            for member in guild.members:
+                if member.bot or not member.joined_at:
+                    continue
+                age_days = (now - member.joined_at).days
+                for jours in paliers:
+                    jours = _int(jours, 0)
+                    if age_days >= jours:
+                        await _credit_once(
+                            bot, member.id, f"anciennete:{jours}", montant, f"gain:anciennete:{jours}"
+                        )
+
+
+async def _scheduler(bot) -> None:
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        try:
+            await _tick(bot)
+        except Exception as exc:  # noqa: BLE001
+            log.error("scheduler économie : %s", exc)
+        await asyncio.sleep(60)
+
+
+def start_scheduler(bot) -> None:
+    """Démarre le tick vocal/ancienneté — à appeler depuis setup_hook, après install()."""
+    bot.loop.create_task(_scheduler(bot))
 
 
 class PurchaseError(Exception):

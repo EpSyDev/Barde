@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import discord
 
 from ..registry import Module, register
+from . import economie
 
 log = logging.getLogger("fripouille.tickets")
 
@@ -324,6 +325,9 @@ async def close_ticket(interaction, reason):
         return
 
     await interaction.response.send_message("🔒 Fermeture du ticket — archivage en cours…")
+
+    if claimer_id:
+        await economie.on_ticket_resolved(bot, claimer_id)
 
     log_channel = bot.get_channel(int(cfg["log_channel_id"])) if cfg.get("log_channel_id") else None
     if log_channel is not None:

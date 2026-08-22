@@ -21,6 +21,7 @@ import discord
 from .. import config
 from ..registry import Module, register
 from . import bapteme_data as data
+from . import economie
 from . import fancy
 
 log = logging.getLogger("fripouille.bapteme")
@@ -378,6 +379,7 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     bot.store.set("bapteme", {"roster": roster})
+    await economie.on_bapteme(bot, member.id)
 
     # Message d'événement dans le coin des voyageurs.
     ev_id = cfg.get("event_channel_id")

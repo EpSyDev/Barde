@@ -37,6 +37,9 @@ intents.voice_states = True
 # message). On ne lit PAS le contenu (pas d'intent message_content) — on compte
 # seulement qu'un message a eu lieu, ce qui suffit pour créditer l'auteur.
 intents.guild_messages = True
+# Réactions : requis par le gain « réaction » et le bonus « message très réagi » de
+# l'économie. Intent non privilégié (pas de toggle à activer sur le portail Discord).
+intents.reactions = True
 
 
 class FripouilleBot(discord.Client):
@@ -58,6 +61,7 @@ class FripouilleBot(discord.Client):
         guild = discord.Object(id=config.GUILD_ID) if config.GUILD_ID else None
         anonyme.setup(self.tree, guild)
         economie.install(self, guild)
+        economie.start_scheduler(self)
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -72,6 +76,7 @@ class FripouilleBot(discord.Client):
         # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
         await autorole.on_arrival(self, member)
         await welcome.on_arrival(self, member)
+        await economie.on_arrival(self, member)
 
     async def on_member_join(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
@@ -88,6 +93,8 @@ class FripouilleBot(discord.Client):
             return
         if before.pending and not after.pending:
             await self._on_arrival(after)
+        if before.premium_since is None and after.premium_since is not None:
+            await economie.on_boost(self, after)
 
     async def on_member_remove(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
@@ -107,6 +114,10 @@ class FripouilleBot(discord.Client):
         if config.GUILD_ID and message.guild.id != config.GUILD_ID:
             return
         await economie.on_message(self, message)
+
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        # Gain « réaction » + bonus « message très réagi » (module Économie).
+        await economie.on_reaction_add(self, payload)
 
 
 def main():

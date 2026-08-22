@@ -8,8 +8,64 @@ type Devise = {
   symbole: string;
   symbole_avant: boolean;
 };
-type GainRule = { enabled: boolean; montant: number; cooldown: number };
-type Gains = { message: GainRule; daily: GainRule };
+
+type GainKey =
+  | "message"
+  | "daily"
+  | "reaction"
+  | "vocal"
+  | "bienvenue"
+  | "bapteme"
+  | "role_jeu"
+  | "boost"
+  | "ticket_resolu"
+  | "anciennete"
+  | "seuil_reactions";
+
+// Chaque source a `enabled` + `montant`, plus au maximum UN champ secondaire selon son
+// type (cooldown anti-spam, palier en minutes, seuil de réactions, ou liste de paliers
+// en jours) — c'est ce qui permet de les rendre en boucle plutôt qu'un bloc par source.
+type GainRule = {
+  enabled: boolean;
+  montant: number;
+  cooldown?: number;
+  minutes?: number;
+  seuil?: number;
+  paliers_jours?: number[];
+};
+type Gains = Record<GainKey, GainRule>;
+
+type GainExtra = "cooldown" | "minutes" | "seuil" | "paliers";
+type GainMeta = { key: GainKey; label: string; hint: string; extra?: GainExtra };
+
+const GAIN_META: GainMeta[] = [
+  { key: "message", label: "Message envoyé", hint: "Anti-spam : délai minimum entre deux gains d'un même membre.", extra: "cooldown" },
+  { key: "daily", label: "Récompense quotidienne (/daily)", hint: "86400 = 24 h.", extra: "cooldown" },
+  { key: "reaction", label: "Réagir à un message", hint: "Anti-spam : délai minimum entre deux gains d'un même membre.", extra: "cooldown" },
+  { key: "vocal", label: "Temps passé en vocal", hint: "Crédité toutes les N minutes connecté (salon AFK exclu).", extra: "minutes" },
+  { key: "bienvenue", label: "Arrivée sur le serveur", hint: "Une seule fois par compte, même après un départ/retour." },
+  { key: "bapteme", label: "Baptême complété", hint: "Une seule fois par compte (un re-baptême ne recrédite pas)." },
+  { key: "role_jeu", label: "Premier rôle-jeu choisi", hint: "Une seule fois par compte." },
+  { key: "boost", label: "Boost du serveur", hint: "À chaque nouveau boost." },
+  { key: "ticket_resolu", label: "Ticket résolu (staff)", hint: "Crédité au membre qui a pris en charge le ticket." },
+  { key: "seuil_reactions", label: "Message très réagi (auteur)", hint: "Récompense l'auteur, une fois par message.", extra: "seuil" },
+  { key: "anciennete", label: "Palier d'ancienneté", hint: "Paliers en jours depuis l'arrivée, séparés par des virgules (ex. 30, 90, 365).", extra: "paliers" },
+];
+
+const DEFAULT_GAIN_RULE: GainRule = { enabled: false, montant: 0, cooldown: 60, minutes: 30, seuil: 10, paliers_jours: [30, 90, 365] };
+
+/** Ne garde que le champ secondaire pertinent pour ce type de source, sanitizé. */
+function sanitizeGainRule(meta: GainMeta, rule: GainRule): GainRule {
+  const out: GainRule = { enabled: rule.enabled, montant: Math.max(0, Number(rule.montant) || 0) };
+  if (meta.extra === "cooldown") out.cooldown = Math.max(0, Number(rule.cooldown) || 0);
+  if (meta.extra === "minutes") out.minutes = Math.max(1, Number(rule.minutes) || 1);
+  if (meta.extra === "seuil") out.seuil = Math.max(1, Number(rule.seuil) || 1);
+  if (meta.extra === "paliers") {
+    out.paliers_jours = (rule.paliers_jours || []).map((j) => Math.max(0, Number(j) || 0)).filter((j) => j > 0);
+  }
+  return out;
+}
+
 type ItemType = "objet" | "role";
 type Item = {
   id: string;
@@ -28,10 +84,6 @@ const DEFAULT_DEVISE: Devise = {
   nom_singulier: "Écu",
   symbole: "🪙",
   symbole_avant: false,
-};
-const DEFAULT_GAINS: Gains = {
-  message: { enabled: false, montant: 1, cooldown: 60 },
-  daily: { enabled: true, montant: 100, cooldown: 86400 },
 };
 
 const newItem = (): Item => ({
@@ -78,10 +130,12 @@ export default function Economie() {
         const d = await cRes.json();
         const rData = rRes.ok ? await rRes.json() : { roles: [] };
         setDevise({ ...DEFAULT_DEVISE, ...(d.devise || {}) });
-        setGains({
-          message: { ...DEFAULT_GAINS.message, ...((d.gains || {}).message || {}) },
-          daily: { ...DEFAULT_GAINS.daily, ...((d.gains || {}).daily || {}) },
-        });
+        const fetchedGains = d.gains || {};
+        setGains(
+          Object.fromEntries(
+            GAIN_META.map((m) => [m.key, { ...DEFAULT_GAIN_RULE, ...(fetchedGains[m.key] || {}) }])
+          ) as Gains
+        );
         setBoutique(
           (d.boutique || []).map((it: Partial<Item>) => ({
             ...newItem(),
@@ -122,18 +176,9 @@ export default function Economie() {
             symbole: devise.symbole.trim(),
             symbole_avant: devise.symbole_avant,
           },
-          gains: {
-            message: {
-              enabled: gains.message.enabled,
-              montant: Math.max(0, Number(gains.message.montant) || 0),
-              cooldown: Math.max(0, Number(gains.message.cooldown) || 0),
-            },
-            daily: {
-              enabled: gains.daily.enabled,
-              montant: Math.max(0, Number(gains.daily.montant) || 0),
-              cooldown: Math.max(0, Number(gains.daily.cooldown) || 0),
-            },
-          },
+          gains: Object.fromEntries(
+            GAIN_META.map((m) => [m.key, sanitizeGainRule(m, gains[m.key])])
+          ),
         }),
       });
       if (!res.ok) throw new Error();
@@ -280,71 +325,84 @@ export default function Economie() {
               <p>Comment les membres gagnent de la monnaie. Les changements s'appliquent aussitôt.</p>
             </div>
 
-            <div className="rec-item">
-              <label className="cfg-toggle compact">
-                <input
-                  type="checkbox"
-                  checked={gains.message.enabled}
-                  onChange={(e) => setGain("message", { enabled: e.target.checked })}
-                />
-                <span className="switch" />
-                <span>Gain sur message</span>
-              </label>
-              <div className="field-2col">
-                <div className="cfg-field">
-                  <label>Montant par message</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={gains.message.montant}
-                    onChange={(e) => setGain("message", { montant: Number(e.target.value) })}
-                  />
+            {GAIN_META.map((meta) => {
+              const rule = gains[meta.key];
+              return (
+                <div className="rec-item" key={meta.key}>
+                  <label className="cfg-toggle compact">
+                    <input
+                      type="checkbox"
+                      checked={rule.enabled}
+                      onChange={(e) => setGain(meta.key, { enabled: e.target.checked })}
+                    />
+                    <span className="switch" />
+                    <span>{meta.label}</span>
+                  </label>
+                  <div className="field-2col">
+                    <div className="cfg-field">
+                      <label>Montant</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={rule.montant}
+                        onChange={(e) => setGain(meta.key, { montant: Number(e.target.value) })}
+                      />
+                    </div>
+                    {meta.extra === "cooldown" && (
+                      <div className="cfg-field">
+                        <label>Anti-spam (secondes)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={rule.cooldown ?? 0}
+                          onChange={(e) => setGain(meta.key, { cooldown: Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
+                    {meta.extra === "minutes" && (
+                      <div className="cfg-field">
+                        <label>Toutes les (minutes)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rule.minutes ?? 30}
+                          onChange={(e) => setGain(meta.key, { minutes: Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
+                    {meta.extra === "seuil" && (
+                      <div className="cfg-field">
+                        <label>Seuil de réactions</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rule.seuil ?? 10}
+                          onChange={(e) => setGain(meta.key, { seuil: Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
+                    {meta.extra === "paliers" && (
+                      <div className="cfg-field">
+                        <label>Paliers (jours)</label>
+                        <input
+                          type="text"
+                          value={(rule.paliers_jours || []).join(", ")}
+                          onChange={(e) =>
+                            setGain(meta.key, {
+                              paliers_jours: e.target.value
+                                .split(",")
+                                .map((v) => Number(v.trim()))
+                                .filter((v) => Number.isFinite(v) && v > 0),
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {meta.hint && <p className="cfg-hint">{meta.hint}</p>}
                 </div>
-                <div className="cfg-field">
-                  <label>Anti-spam (secondes)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={gains.message.cooldown}
-                    onChange={(e) => setGain("message", { cooldown: Number(e.target.value) })}
-                  />
-                  <p className="cfg-hint">Délai minimum entre deux gains d'un même membre.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rec-item">
-              <label className="cfg-toggle compact">
-                <input
-                  type="checkbox"
-                  checked={gains.daily.enabled}
-                  onChange={(e) => setGain("daily", { enabled: e.target.checked })}
-                />
-                <span className="switch" />
-                <span>Récompense quotidienne (/daily)</span>
-              </label>
-              <div className="field-2col">
-                <div className="cfg-field">
-                  <label>Montant</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={gains.daily.montant}
-                    onChange={(e) => setGain("daily", { montant: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="cfg-field">
-                  <label>Délai (secondes)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={gains.daily.cooldown}
-                    onChange={(e) => setGain("daily", { cooldown: Number(e.target.value) })}
-                  />
-                  <p className="cfg-hint">86400 = 24 h.</p>
-                </div>
-              </div>
-            </div>
+              );
+            })}
 
             <div className="cfg-actions">
               <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
