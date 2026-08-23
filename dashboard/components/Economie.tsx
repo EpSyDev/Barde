@@ -78,6 +78,7 @@ type Item = {
   enabled: boolean;
 };
 type Role = { id: string; name: string; color: number };
+type Category = { id: string; name: string };
 
 const DEFAULT_DEVISE: Devise = {
   nom: "Écus",
@@ -112,6 +113,8 @@ export default function Economie() {
   const [gains, setGains] = useState<Gains | null>(null);
   const [boutique, setBoutique] = useState<Item[] | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
 
   const [savingCfg, setSavingCfg] = useState(false);
   const [savedCfg, setSavedCfg] = useState(false);
@@ -122,13 +125,17 @@ export default function Economie() {
   useEffect(() => {
     (async () => {
       try {
-        const [cRes, rRes] = await Promise.all([
+        const [cRes, rRes, catRes] = await Promise.all([
           fetch("/api/fripouille/config/economie", { cache: "no-store" }),
           fetch("/api/fripouille/roles", { cache: "no-store" }),
+          fetch("/api/fripouille/categories", { cache: "no-store" }),
         ]);
         if (!cRes.ok) throw new Error();
         const d = await cRes.json();
         const rData = rRes.ok ? await rRes.json() : { roles: [] };
+        const catData = catRes.ok ? await catRes.json() : { categories: [] };
+        setCategoryId(d.category_id != null ? String(d.category_id) : null);
+        setCategories(catData.categories || []);
         setDevise({ ...DEFAULT_DEVISE, ...(d.devise || {}) });
         const fetchedGains = d.gains || {};
         setGains(
@@ -170,6 +177,7 @@ export default function Economie() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          category_id: categoryId,
           devise: {
             nom: devise.nom.trim() || "points",
             nom_singulier: devise.nom_singulier.trim() || devise.nom.trim() || "point",
@@ -189,7 +197,7 @@ export default function Economie() {
     } finally {
       setSavingCfg(false);
     }
-  }, [devise, gains]);
+  }, [categoryId, devise, gains]);
 
   const saveShop = useCallback(async () => {
     if (!boutique) return;
@@ -252,6 +260,43 @@ export default function Economie() {
 
       {tab === "reglages" && (
         <div className="cfg-grid">
+          <section className="cfg-card">
+            <div className="cfg-card-head">
+              <h2>📍 Portée</h2>
+              <p>
+                Hors de cette catégorie, l'économie est entièrement inactive (gains ET
+                commandes /solde, /donner, /daily, /boutique...). Seuls les membres ayant un
+                rôle de race (baptisés) peuvent gagner ou dépenser, sans exception.
+              </p>
+            </div>
+            <div className="cfg-field">
+              <label>Catégorie « espace RP »</label>
+              <select
+                value={categoryId ?? ""}
+                onChange={(e) => setCategoryId(e.target.value || null)}
+              >
+                <option value="">— Choisir une catégorie —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {!categoryId && (
+                <p className="cfg-hint">
+                  Aucune catégorie choisie = économie désactivée partout sur le serveur.
+                </p>
+              )}
+            </div>
+            <div className="cfg-actions">
+              <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
+                {savingCfg ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              {savedCfg && <span className="cfg-ok">✓ Enregistré</span>}
+              {error && <span className="cfg-err">{error}</span>}
+            </div>
+          </section>
+
           <section className="cfg-card">
             <div className="cfg-card-head">
               <h2>🪙 Devise</h2>

@@ -30,11 +30,16 @@ from discord import app_commands
 
 from .. import config
 from ..registry import Module, register
+from . import bapteme_data
 
 log = logging.getLogger("fripouille.economie")
 
 # --- Schéma de configuration (défauts du dashboard) ---
 DEFAULTS = {
+    # Catégorie « espace RP » : hors de cette catégorie (et de ses salons), l'économie est
+    # entièrement inactive — gains passifs ET commandes membre (/solde, /donner, /daily...).
+    # None = pas encore configuré = économie inactive partout (voir _in_rp_category).
+    "category_id": None,
     "devise": {
         "nom": "Écus",            # pluriel affiché
         "nom_singulier": "Écu",    # utilisé quand montant == 1 et pas de symbole
@@ -282,6 +287,51 @@ def _stock_illimite(item: dict) -> bool:
     return s is None or _int(s, -1) < 0
 
 
+# ───────────────────────── Garde « espace RP » (catégorie + rôle de race) ─────────────────────────
+def _has_race_role(member) -> bool:
+    """Rôle de race = baptisé (voir bapteme.py). Les rôles de race sont la même liste que
+    celle utilisée pour restreindre l'accès au jeu MYRHAVEN — une seule source de vérité."""
+    if not isinstance(member, discord.Member):
+        return False
+    race_ids = bapteme_data.all_race_role_ids()
+    return any(r.id in race_ids for r in member.roles)
+
+
+def _in_rp_category(bot, channel) -> bool:
+    """Le salon (texte ou vocal) appartient-il à la catégorie RP configurée ? Pas de
+    catégorie réglée au dashboard = économie inactive partout, par sécurité (pas de
+    fallback « partout »)."""
+    cat_id = _cfg(bot).get("category_id")
+    if not cat_id or channel is None:
+        return False
+    return getattr(channel, "category_id", None) == _int(cat_id, 0)
+
+
+def _resolve_member(bot, member_id):
+    """Résout un ID en `discord.Member` (handlers déclenchés hors contexte Discord direct,
+    ex. baptême/rôle-jeu qui ne reçoivent qu'un ID)."""
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    return guild.get_member(int(member_id)) if guild else None
+
+
+async def _require_rp(interaction: discord.Interaction) -> bool:
+    """Garde commune aux commandes membre : salon dans la catégorie RP + rôle de race.
+    Répond et renvoie False si bloqué. Pas utilisée par le groupe /eco (outil admin)."""
+    bot = interaction.client
+    if not _in_rp_category(bot, interaction.channel):
+        await interaction.response.send_message(
+            "❌ Cette commande n'est utilisable que dans l'espace RP.", ephemeral=True
+        )
+        return False
+    if not _has_race_role(interaction.user):
+        await interaction.response.send_message(
+            "❌ Il te faut un rôle de race (fais-toi baptiser) pour accéder à l'économie.",
+            ephemeral=True,
+        )
+        return False
+    return True
+
+
 # ───────────────────────── Moteur de gains ─────────────────────────
 # Cooldown anti-spam des gains « message » : en mémoire (repart à zéro au restart,
 # acceptable pour de l'anti-spam) — évite un accès disque à chaque message.
@@ -294,9 +344,12 @@ async def crediter(bot, user_id, amount, reason="système") -> int:
 
 
 async def on_message(bot, message: discord.Message):
-    """Crédite l'auteur d'un message si la source ``message`` est active (avec cooldown)."""
+    """Crédite l'auteur d'un message si la source ``message`` est active (avec cooldown),
+    dans l'espace RP et pour un membre ayant un rôle de race."""
     gains = (_cfg(bot).get("gains") or {}).get("message") or {}
     if not gains.get("enabled"):
+        return
+    if not _in_rp_category(bot, message.channel) or not _has_race_role(message.author):
         return
     montant = _int(gains.get("montant"), 0)
     if montant <= 0:
@@ -337,15 +390,20 @@ async def _credit_once(bot, user_id, kind: str, montant: int, reason: str) -> bo
 
 async def on_reaction_add(bot, payload) -> None:
     """Gain « réaction » (générique, cooldown anti-spam) + bonus seuil pour l'auteur du
-    message réagi. Appelé depuis `on_raw_reaction_add` (intent ``reactions``)."""
+    message réagi. Appelé depuis `on_raw_reaction_add` (intent ``reactions``). Les deux
+    exigent le salon dans l'espace RP ; le rôle de race est vérifié séparément pour
+    chaque bénéficiaire (le réacteur, puis l'auteur du message pour le bonus seuil)."""
     if payload.guild_id is None or (config.GUILD_ID and payload.guild_id != config.GUILD_ID):
         return
     member = payload.member
     if member is None or member.bot:
         return
+    channel = bot.get_channel(payload.channel_id)
+    if not _in_rp_category(bot, channel):
+        return
 
     reaction_cfg = _gain_cfg(bot, "reaction")
-    if reaction_cfg.get("enabled"):
+    if reaction_cfg.get("enabled") and _has_race_role(member):
         montant = _int(reaction_cfg.get("montant"), 0)
         cooldown = _int(reaction_cfg.get("cooldown"), 60)
         now = time.monotonic()
@@ -364,11 +422,11 @@ async def on_reaction_add(bot, payload) -> None:
         if montant <= 0 or seuil <= 0:
             return
         try:
-            channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
-            message = await channel.fetch_message(payload.message_id)
+            msg_channel = channel or await bot.fetch_channel(payload.channel_id)
+            message = await msg_channel.fetch_message(payload.message_id)
         except (discord.NotFound, discord.Forbidden):
             return
-        if message.author.bot:
+        if message.author.bot or not _has_race_role(message.author):
             return
         total = sum(r.count for r in message.reactions)
         if total >= seuil:
@@ -376,18 +434,23 @@ async def on_reaction_add(bot, payload) -> None:
 
 
 async def on_arrival(bot, member) -> None:
-    """Bonus de bienvenue — une seule fois par compte, même en cas de départ puis retour."""
+    """Bonus de bienvenue — une seule fois par compte, même en cas de départ puis retour.
+    Exige un rôle de race comme tout le reste de l'économie : en pratique ne se déclenchera
+    plus tant qu'un nouvel arrivant n'est pas encore baptisé (délibéré, pas de dérogation)."""
     cfg = _gain_cfg(bot, "bienvenue")
     montant = _int(cfg.get("montant"), 0)
-    if cfg.get("enabled") and montant > 0:
+    if cfg.get("enabled") and montant > 0 and _has_race_role(member):
         await _credit_once(bot, member.id, "bienvenue", montant, "gain:bienvenue")
 
 
 async def on_bapteme(bot, member_id) -> None:
-    """Bonus de baptême complété — une seule fois par compte (un re-baptême ne recrédite pas)."""
+    """Bonus de baptême complété — une seule fois par compte (un re-baptême ne recrédite pas).
+    Le rôle de race est déjà posé avant cet appel (voir `_finalize` dans bapteme.py), donc la
+    garde passe naturellement."""
     cfg = _gain_cfg(bot, "bapteme")
     montant = _int(cfg.get("montant"), 0)
-    if cfg.get("enabled") and montant > 0:
+    member = _resolve_member(bot, member_id)
+    if cfg.get("enabled") and montant > 0 and member and _has_race_role(member):
         await _credit_once(bot, member_id, "bapteme", montant, "gain:bapteme")
 
 
@@ -395,7 +458,8 @@ async def on_role_jeu_added(bot, member_id) -> None:
     """Bonus du premier rôle-jeu choisi — une seule fois, malgré le toggle ajout/retrait."""
     cfg = _gain_cfg(bot, "role_jeu")
     montant = _int(cfg.get("montant"), 0)
-    if cfg.get("enabled") and montant > 0:
+    member = _resolve_member(bot, member_id)
+    if cfg.get("enabled") and montant > 0 and member and _has_race_role(member):
         await _credit_once(bot, member_id, "role_jeu", montant, "gain:role_jeu")
 
 
@@ -403,15 +467,18 @@ async def on_boost(bot, member) -> None:
     """Bonus de boost serveur — crédité à chaque transition « ne boostait pas → boost »."""
     cfg = _gain_cfg(bot, "boost")
     montant = _int(cfg.get("montant"), 0)
-    if cfg.get("enabled") and montant > 0:
+    if cfg.get("enabled") and montant > 0 and _has_race_role(member):
         bot.economy.credit(member.id, montant, "gain:boost")
 
 
 async def on_ticket_resolved(bot, claimer_id) -> None:
-    """Bonus au membre staff qui a pris en charge (claim) le ticket avant sa fermeture."""
+    """Bonus au membre staff qui a pris en charge (claim) le ticket avant sa fermeture.
+    Soumis à la même garde « rôle de race » que le reste (choix explicite, sans exception) —
+    un membre staff sans rôle de race ne touchera pas ce bonus."""
     cfg = _gain_cfg(bot, "ticket_resolu")
     montant = _int(cfg.get("montant"), 0)
-    if cfg.get("enabled") and montant > 0:
+    member = _resolve_member(bot, claimer_id)
+    if cfg.get("enabled") and montant > 0 and member and _has_race_role(member):
         bot.economy.credit(claimer_id, montant, "gain:ticket_resolu")
 
 
@@ -430,8 +497,10 @@ async def _tick(bot) -> None:
         for channel in guild.voice_channels:
             if afk and channel.id == afk.id:
                 continue
+            if not _in_rp_category(bot, channel):
+                continue
             for member in channel.members:
-                if member.bot:
+                if member.bot or not _has_race_role(member):
                     continue
                 total = _voice_minutes.get(member.id, 0) + 1
                 if total >= minutes_needed:
@@ -452,7 +521,7 @@ async def _tick(bot) -> None:
                 await guild.chunk()
             now = datetime.now(timezone.utc)
             for member in guild.members:
-                if member.bot or not member.joined_at:
+                if member.bot or not member.joined_at or not _has_race_role(member):
                     continue
                 age_days = (now - member.joined_at).days
                 for jours in paliers:
@@ -636,6 +705,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
     @tree.command(name="solde", description="Afficher ton solde (ou celui d'un membre).", guild=guild)
     @app_commands.describe(membre="Membre dont voir le solde (par défaut : toi)")
     async def solde(interaction: discord.Interaction, membre: Optional[discord.Member] = None):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         cfg = _cfg(bot)
         cible = membre or interaction.user
@@ -648,11 +719,18 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
     @tree.command(name="donner", description="Donner de la monnaie à un membre.", guild=guild)
     @app_commands.describe(membre="Destinataire", montant="Montant à donner")
     async def donner(interaction: discord.Interaction, membre: discord.Member, montant: int):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         cfg = _cfg(bot)
         if membre.bot or membre.id == interaction.user.id:
             await interaction.response.send_message(
                 "❌ Destinataire invalide.", ephemeral=True
+            )
+            return
+        if not _has_race_role(membre):
+            await interaction.response.send_message(
+                "❌ Ce membre n'a pas de rôle de race.", ephemeral=True
             )
             return
         if montant <= 0:
@@ -670,6 +748,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
 
     @tree.command(name="daily", description="Récupérer ta récompense quotidienne.", guild=guild)
     async def daily(interaction: discord.Interaction):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         cfg = _cfg(bot)
         gains = (cfg.get("gains") or {}).get("daily") or {}
@@ -700,6 +780,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
         guild=guild,
     )
     async def progression(interaction: discord.Interaction):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         gains = _cfg(bot).get("gains") or {}
         member = interaction.user
@@ -730,6 +812,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
 
     @tree.command(name="boutique", description="Ouvrir la boutique.", guild=guild)
     async def boutique(interaction: discord.Interaction):
+        if not await _require_rp(interaction):
+            return
         cfg = _cfg(interaction.client)
         await interaction.response.send_message(
             embed=_shop_embed(cfg), view=ShopView(cfg), ephemeral=True
@@ -737,6 +821,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
 
     @tree.command(name="inventaire", description="Afficher tes articles achetés.", guild=guild)
     async def inventaire(interaction: discord.Interaction):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         cfg = _cfg(bot)
         rows = bot.economy.inventory(interaction.user.id)
@@ -757,6 +843,8 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
 
     @tree.command(name="classement", description="Top des plus riches.", guild=guild)
     async def classement(interaction: discord.Interaction):
+        if not await _require_rp(interaction):
+            return
         bot = interaction.client
         cfg = _cfg(bot)
         rows = bot.economy.leaderboard(10)
@@ -858,6 +946,9 @@ async def action_crediter_evenement(bot, payload) -> dict:
     event_id = str(payload.get("event_id") or "")
     if not user_id or not event_id:
         raise ValueError("user_id et event_id requis")
+    member = _resolve_member(bot, user_id)
+    if not member or not _has_race_role(member):
+        return {"ok": False, "error": "role_requis"}
     cfg = _cfg(bot)
     evt = (cfg.get("evenements") or {}).get(event_id)
     if not evt or not evt.get("enabled"):
@@ -879,6 +970,9 @@ async def action_acheter(bot, payload) -> dict:
     item_id = str(payload.get("item_id") or "")
     if not user_id or not item_id:
         raise ValueError("user_id et item_id requis")
+    member = _resolve_member(bot, user_id)
+    if not member or not _has_race_role(member):
+        return {"ok": False, "error": "role_requis"}
     cfg = _cfg(bot)
     item = _find_item(cfg, item_id)
     if item and item.get("type") == "role":
