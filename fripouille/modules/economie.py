@@ -694,6 +694,40 @@ def setup(tree: app_commands.CommandTree, guild: Optional[discord.Object]) -> No
             f"Nouveau solde : **{format_amount(cfg, new_bal)}**.", ephemeral=True
         )
 
+    @tree.command(
+        name="progression",
+        description="Voir ta progression vers les prochains gains passifs (vocal, ancienneté).",
+        guild=guild,
+    )
+    async def progression(interaction: discord.Interaction):
+        bot = interaction.client
+        gains = _cfg(bot).get("gains") or {}
+        member = interaction.user
+        lines: list[str] = []
+
+        vocal_cfg = gains.get("vocal") or {}
+        if vocal_cfg.get("enabled"):
+            minutes_needed = max(1, _int(vocal_cfg.get("minutes"), 30))
+            current = _voice_minutes.get(member.id, 0)
+            reste = max(0, minutes_needed - current)
+            lines.append(f"🎙️ Vocal : {current}/{minutes_needed} min — encore **{reste} min** avant le prochain gain.")
+
+        anciennete_cfg = gains.get("anciennete") or {}
+        paliers = sorted({_int(j, 0) for j in (anciennete_cfg.get("paliers_jours") or []) if _int(j, 0) > 0})
+        if anciennete_cfg.get("enabled") and paliers and isinstance(member, discord.Member) and member.joined_at:
+            age_days = (datetime.now(timezone.utc) - member.joined_at).days
+            prochain = next((j for j in paliers if age_days < j), None)
+            if prochain is not None:
+                lines.append(f"📆 Ancienneté : {age_days} j — prochain palier dans **{prochain - age_days} j** ({prochain} j).")
+            else:
+                lines.append(f"📆 Ancienneté : {age_days} j — tous les paliers actuels sont atteints.")
+
+        if not lines:
+            lines.append("Aucune source de gain à progression n'est activée pour l'instant.")
+
+        embed = discord.Embed(title="📈 Ta progression", description="\n".join(lines), color=0xC9A44A)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @tree.command(name="boutique", description="Ouvrir la boutique.", guild=guild)
     async def boutique(interaction: discord.Interaction):
         cfg = _cfg(interaction.client)

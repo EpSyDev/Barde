@@ -12,7 +12,8 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, economie, farewell, jeux, messages, tempvoice, tickets, welcome,
+    anonyme, autorole, bapteme, economie, farewell, help as help_module, jeux, messages,
+    tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
 
@@ -63,6 +64,7 @@ class FripouilleBot(discord.Client):
         anonyme.setup(self.tree, guild)
         economie.install(self, guild)
         economie.start_scheduler(self)
+        help_module.setup(self.tree, guild)
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
