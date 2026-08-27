@@ -479,11 +479,16 @@ async def action_statut(bot, payload) -> dict:
         (k for k, v in data.RACES.items() if v.get("role_id") and int(v["role_id"]) == matched_id),
         None,
     )
+    # Nom RP (nom choisi au baptême, non stylisé) — pour que les PNJ du jeu MYRHAVEN puissent
+    # nommer le joueur. Le roster porte le nom en clair ; à défaut, on retire le style du pseudo.
+    entry = ((_cfg(bot) or {}).get("roster") or {}).get(str(user_id)) or {}
+    nom_rp = entry.get("name") or fancy.destylize(member.display_name)[1] or member.display_name
     return {
         "ok": True,
         "baptise": True,
         "race": race_key,
         "race_label": data.race_label(race_key) if race_key else None,
+        "nom_rp": nom_rp,
     }
 
 
