@@ -337,10 +337,12 @@ async def _set_exclusive_role(member, chosen_id, all_ids, label):
     return ""
 
 
-async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key, faith_key):
-    bot = interaction.client
+async def _consecrate(bot, member, name, style, race_key, gender, origin_key, trait_key, faith_key):
+    """Cœur du baptême, sans dépendance à une interaction Discord : pseudo stylisé,
+    rôles exclusifs race + foi, fiche roster, bonus d'économie, message d'événement.
+    Partagé par le parcours Discord (``_finalize``) et l'action HTTP du jeu MYRHAVEN
+    (``action_consacrer``, rite à la chapelle). Renvoie de quoi bâtir la confirmation."""
     cfg = _cfg(bot)
-    member = interaction.user
     styled = fancy.stylize(name, style)
 
     # Le pseudo serveur devient le nom stylisé (c'est la livraison, plus de MP).
@@ -399,16 +401,24 @@ async def _finalize(interaction, name, style, race_key, gender, origin_key, trai
         except discord.Forbidden:
             log.error("bapteme : envoi de l'événement refusé")
 
+    return {"styled": styled, "nick_ok": nick_ok, "race_note": race_note, "faith_note": faith_note}
+
+
+async def _finalize(interaction, name, style, race_key, gender, origin_key, trait_key, faith_key):
+    member = interaction.user
+    res = await _consecrate(
+        interaction.client, member, name, style, race_key, gender, origin_key, trait_key, faith_key)
+
     confirm = discord.Embed(
         title="🎉 Te voilà baptisé !",
-        description=f"# {styled}\n`{name}`\n\n"
+        description=f"# {res['styled']}\n`{name}`\n\n"
         + (
             "Ton nouveau pseudo est posé. 📜"
-            if nick_ok
+            if res["nick_ok"]
             else "⚠️ Je n'ai pas pu changer ton pseudo (permission/hiérarchie), mais voici ton nom."
         )
         + f"\nRace : **{data.race_label(race_key)}** · Foi : **{data.faith_label(faith_key)}**."
-        + race_note + faith_note,
+        + res["race_note"] + res["faith_note"],
         color=COLOR,
     )
     await interaction.response.edit_message(embed=confirm, view=None)
@@ -470,8 +480,8 @@ async def action_statut(bot, payload) -> dict:
             member = await guild.fetch_member(int(user_id))
         except discord.NotFound:
             return {"ok": True, "baptise": False}
-    race_ids = data.all_race_role_ids()
-    matched = {r.id for r in member.roles} & race_ids
+    member_role_ids = {r.id for r in member.roles}
+    matched = member_role_ids & data.all_race_role_ids()
     if not matched:
         return {"ok": True, "baptise": False}
     matched_id = next(iter(matched))
@@ -479,6 +489,13 @@ async def action_statut(bot, payload) -> dict:
         (k for k, v in data.RACES.items() if v.get("role_id") and int(v["role_id"]) == matched_id),
         None,
     )
+    # Foi (rôle exclusif, posé au même baptême) — pour les répliques de PNJ qui en dépendent.
+    matched_faith = member_role_ids & data.all_faith_role_ids()
+    faith_key = None
+    if matched_faith:
+        fid = next(iter(matched_faith))
+        faith_key = next(
+            (f["key"] for f in data.FAITHS if f.get("role_id") and int(f["role_id"]) == fid), None)
     # Nom RP (nom choisi au baptême, non stylisé) — pour que les PNJ du jeu MYRHAVEN puissent
     # nommer le joueur. Le roster porte le nom en clair ; à défaut, on retire le style du pseudo.
     entry = ((_cfg(bot) or {}).get("roster") or {}).get(str(user_id)) or {}
@@ -488,6 +505,8 @@ async def action_statut(bot, payload) -> dict:
         "baptise": True,
         "race": race_key,
         "race_label": data.race_label(race_key) if race_key else None,
+        "foi": faith_key,
+        "foi_label": data.faith_label(faith_key) if faith_key else None,
         "nom_rp": nom_rp,
     }
 
@@ -505,6 +524,120 @@ async def unlock(bot, payload):
     roster[uid] = entry
     bot.store.set("bapteme", {"roster": roster})
     return {"ok": True}
+
+
+# --- Baptême piloté par le jeu MYRHAVEN (dashboard → /api/action/bapteme/*) ---
+# Le parcours Discord (vues éphémères ci-dessus) reste disponible ; ces trois actions
+# rejouent les mêmes étapes depuis le jeu, où le rite se déroule à la chapelle avec le
+# mage (cf. bible docs/lore-myrhaven.md §9-10). Une seule source de vérité : races,
+# noms, polices et fois vivent ici ; le jeu ne fait que présenter ce qu'on lui renvoie.
+
+async def _resolve_member(bot, user_id):
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    member = guild.get_member(int(user_id))
+    if member is None:
+        try:
+            member = await guild.fetch_member(int(user_id))
+        except discord.NotFound:
+            return None
+    return member
+
+
+def _validate_axes(payload):
+    """Contrôle les quatre axes qui façonnent le nom. Lève ValueError si invalide."""
+    race_key = payload.get("race")
+    gender = payload.get("gender")
+    origin_key = payload.get("origin")
+    trait_key = payload.get("trait")
+    if race_key not in data.RACES:
+        raise ValueError("race inconnue")
+    if gender not in ("m", "f"):
+        raise ValueError("genre invalide")
+    if origin_key not in {o["key"] for o in data.RACES[race_key].get("origins", [])}:
+        raise ValueError("origine invalide pour cette race")
+    if trait_key not in data.TRAITS:
+        raise ValueError("tempérament inconnu")
+    return race_key, gender, origin_key, trait_key
+
+
+async def action_options(bot, payload) -> dict:
+    """Catalogue complet des choix du baptême, pour que le jeu peuple ses menus RP
+    sans dupliquer le lexique côté client. Lecture pure."""
+    return {
+        "ok": True,
+        "nick_max": NICK_MAX,
+        "races": [{"key": k, "label": l, "emoji": e} for k, l, e in data.race_choices()],
+        "genders": [{"key": g, "label": l, "emoji": e} for g, l, e in data.gender_choices()],
+        "origins": {
+            k: [{"key": ok, "label": ol, "emoji": oe} for ok, ol, oe in data.origin_choices(k)]
+            for k in data.RACES
+        },
+        "traits": [{"key": k, "label": l, "emoji": e} for k, l, e in data.trait_choices()],
+        "faiths": [
+            {"key": f["key"], "label": f["label"], "emoji": f.get("emoji"),
+             "desc": f.get("desc"), "creed": f.get("creed")}
+            for f in data.FAITHS
+        ],
+        "styles": [{"key": s, "label": fancy.STYLE_LABELS[s]} for s in fancy.STYLE_ORDER],
+        "race_style": dict(RACE_STYLE),
+    }
+
+
+async def action_generer_nom(bot, payload) -> dict:
+    """Tire un nom depuis les quatre axes phonétiques — le bouton « relancer » du jeu.
+    La foi n'entre pas dans le nom."""
+    race_key, gender, origin_key, trait_key = _validate_axes(payload)
+    name = data.generate(race_key, origin_key, trait_key, gender)
+    if not name:
+        raise ValueError("génération impossible")
+    return {"ok": True, "name": name}
+
+
+async def action_consacrer(bot, payload) -> dict:
+    """Baptise un joueur depuis le jeu : mêmes effets que la validation du parcours
+    Discord (pseudo stylisé, rôle de race + rôle de foi, bonus, événement). Anti
+    re-baptême identique au bouton du panneau (débloquer via l'action ``unlock``)."""
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("user_id requis")
+
+    entry = ((_cfg(bot) or {}).get("roster") or {}).get(str(user_id))
+    if entry and not entry.get("unlocked"):
+        return {"ok": False, "error": "deja_baptise"}
+
+    race_key, gender, origin_key, trait_key = _validate_axes(payload)
+    faith_key = payload.get("faith")
+    if faith_key not in {f["key"] for f in data.FAITHS}:
+        raise ValueError("foi inconnue")
+
+    style = payload.get("style")
+    if style not in fancy.STYLES:
+        style = RACE_STYLE.get(race_key, fancy.STYLE_ORDER[0])
+
+    name = str(payload.get("name") or "").strip() or data.generate(race_key, origin_key, trait_key, gender)
+    name = (name or "").strip()[:NICK_MAX]
+    if not name:
+        raise ValueError("nom vide")
+
+    member = await _resolve_member(bot, user_id)
+    if member is None:
+        raise ValueError("membre introuvable sur le serveur")
+
+    res = await _consecrate(
+        bot, member, name, style, race_key, gender, origin_key, trait_key, faith_key)
+    return {
+        "ok": True,
+        "baptise": True,
+        "race": race_key,
+        "race_label": data.race_label(race_key),
+        "foi": faith_key,
+        "foi_label": data.faith_label(faith_key),
+        "nom_rp": name,
+        "pseudo": res["styled"],
+        "nick_ok": res["nick_ok"],
+    }
 
 
 # --- Panneau (vue persistante) ---
@@ -578,5 +711,12 @@ MODULE = register(Module(
     label="Baptême",
     defaults=DEFAULTS,
     apply=apply,
-    actions={"backfill": backfill, "unlock": unlock, "statut": action_statut},
+    actions={
+        "backfill": backfill,
+        "unlock": unlock,
+        "statut": action_statut,
+        "options": action_options,
+        "generer_nom": action_generer_nom,
+        "consacrer": action_consacrer,
+    },
 ))
