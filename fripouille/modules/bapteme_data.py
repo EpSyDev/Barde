@@ -358,34 +358,42 @@ TRAITS = {
 }
 
 
-# --- Fois (voies masquées ; leur vraie nature se révèle en quête) ---
-# Pour l'instant : simple choix stocké. Les accès/chemins par foi viendront ensuite.
+# --- Fois : cinq façons de vivre dans un monde qu'on ne voit qu'à moitié ---
+# Myrhaven : dix-sept contrées, seize noyées sous la brume. Chaque foi est une réponse à
+# la même question — que fait-on de ce qu'on ne voit pas ? Préserver (Sceau), contourner
+# (Renard), forcer (Marteau), écouter (Voile), ou n'y rien voir du tout (Libre).
+# Les accès/chemins de quête par foi se câbleront contrée par contrée (cf. bible du jeu).
 FAITHS = [
     {"key": "sceau", "label": "l'Ordre du Sceau", "emoji": "🔒",
      "role_id": "1528416586120167774",
-     "desc": "Protéger ce qui doit le rester.",
-     "creed": "Quelque chose dort sous la taverne. L'Ordre veille à ce qu'il ne s'éveille "
-              "jamais : discipline, serments, et foi inébranlable envers le Premier."},
+     "desc": "Certaines portes protègent qui n'entre pas.",
+     "creed": "Le monde tient sur ce qui reste fermé : des seuils, des noms qu'on tait, des "
+              "terres qu'aucune carte ne montre. L'Ordre du Sceau ne les ouvre pas — il monte "
+              "la garde, et se méfie de quiconque veut tout mettre au jour."},
     {"key": "renard", "label": "la Voie du Renard", "emoji": "🦊",
      "role_id": "1528416918434742473",
-     "desc": "La ruse ouvre plus de portes que la force.",
-     "creed": "Pourquoi forcer une porte qu'on peut convaincre de s'ouvrir ? Les Renards "
-              "amassent secrets, faveurs et raccourcis — et paient toujours leurs dettes… un jour."},
+     "desc": "Un secret bien placé ouvre ce que nulle clé n'ouvre.",
+     "creed": "Pourquoi forcer une porte qu'on peut convaincre ? Le Renard amasse les secrets, "
+              "les faveurs et les passages de traverse — il doit à tout le monde un peu, et se "
+              "fait devoir davantage."},
     {"key": "marteau", "label": "la Voie du Marteau", "emoji": "🔨",
      "role_id": "1528417282957512855",
-     "desc": "La force brise tous les sceaux.",
-     "creed": "Tout sceau finit par céder sous assez de coups. Les fidèles du Marteau ne "
-              "négocient pas avec un mur : ils cognent jusqu'à ce qu'il cède."},
+     "desc": "Ce qui vaut d'être eu se prend.",
+     "creed": "Un monde ne se mérite pas en attendant qu'il s'ouvre. Le Marteau avance, prend, "
+              "brise ce qui barre — et laisse aux autres le soin de s'extasier devant les portes "
+              "closes."},
     {"key": "voile", "label": "la Voie du Voile", "emoji": "🌫️",
      "role_id": "1528418114780397588",
-     "desc": "Les ombres murmurent des vérités.",
-     "creed": "Tends l'oreille : les murs murmurent, et le Voile traduit. Ceux qui l'écoutent "
-              "apprennent des vérités que les autres préfèrent ne pas connaître."},
+     "desc": "La brume n'est pas vide — elle parle.",
+     "creed": "Ce que la carte ne montre pas n'est pas absent : c'est seulement voilé, et cela "
+              "murmure. Le Voile apprend à se taire assez longtemps pour entendre — et retient "
+              "ce que d'autres préfèrent ignorer."},
     {"key": "libre", "label": "Libre-penseur", "emoji": "🎲",
      "role_id": "1528418315280584764",
-     "desc": "Aucun maître, aucun dogme.",
-     "creed": "Dieux, sceaux, prophéties : du folklore pour veillées d'auberge. Le Libre-penseur "
-              "ne doit rien à personne et compte bien le rester."},
+     "desc": "Ni maître, ni présage, ni dette.",
+     "creed": "Sceaux, murmures, voies tracées d'avance : des histoires pour retenir le voyageur "
+              "une chope de plus. Le Libre-penseur ne doit rien à personne, ne guette aucun "
+              "signe, et s'en trouve très bien."},
 ]
 
 

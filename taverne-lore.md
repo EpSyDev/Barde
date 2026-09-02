@@ -1,4 +1,17 @@
-# 🐉 La Taverne du Gaming — Bible de l'intrigue (ARG)
+# 🐉 La Taverne du Gaming — Bible de l'intrigue (ARG) — ⚠️ ABANDONNÉ
+
+> **Design abandonné (03/09/2026).** L'ARG « hydre primordiale + trois Sceaux + Nom Premier
+> VELKARNETH + combat aux dés » n'est plus le canon. Le jeu MYRHAVEN (repo
+> `EpSyDev/myrhaven-point-and-click`) porte désormais la seule bible vivante :
+> `docs/lore-myrhaven.md`. Rien ici ne part dans une bouche de PNJ ou un embed sans y être
+> re-validé. Fichier gardé pour l'historique et les fragments réutilisables (noms de lieux,
+> tournures d'énigmes), pas comme référence.
+>
+> Conséquence concrète déjà appliquée : les cinq **fois** du baptême (`bapteme_data.py`) ont
+> été réécrites — elles ne renvoient plus à l'hydre ni au « Premier », mais à cinq idéologies
+> de voyageur. Le reste du recâblage (accès de quête par foi) se fera contrée par contrée.
+
+---
 
 > Document de référence : mythe fondateur, quêtes, énigmes, **réponses exactes**, et
 > mécanique du combat final. C'est le « livre du maître du jeu ». Les joueurs ne le
