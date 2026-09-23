@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Icon from "@/components/Icon";
+import { DirtyBar, Loading, Vide } from "@/components/ui";
+import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import MediaPicker from "@/components/MediaPicker";
 
 type Role = { id: string; name: string; color: number };
@@ -40,101 +43,96 @@ const newReason = (): Reason => ({
   staff_role_id: null,
 });
 
+const LABELS: Record<string, string> = {
+  enabled: "Activation",
+  panel_channel_id: "Salon du panneau",
+  category_id: "Catégorie des tickets",
+  staff_roles: "Rôles staff",
+  max_open: "Tickets ouverts max",
+  log_channel_id: "Salon d'archive",
+  panel_title: "Titre du panneau",
+  panel_description: "Description du panneau",
+  panel_image: "Image du panneau",
+  button_label: "Libellé du bouton",
+  open_message: "Message d'ouverture",
+  ping_staff: "Ping du staff",
+  delete_on_close: "Suppression à la fermeture",
+  reasons: "Motifs de ticket",
+};
+
+const normalize = (d: Record<string, unknown>): TicketsCfg => ({
+  enabled: !!d.enabled,
+  panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
+  category_id: d.category_id != null ? String(d.category_id) : null,
+  staff_roles: ((d.staff_roles as unknown[]) || []).map(String),
+  max_open: Number(d.max_open) || 1,
+  log_channel_id: d.log_channel_id != null ? String(d.log_channel_id) : null,
+  panel_title: String(d.panel_title || ""),
+  panel_description: String(d.panel_description || ""),
+  panel_image: String(d.panel_image || ""),
+  button_label: String(d.button_label || ""),
+  open_message: String(d.open_message || ""),
+  ping_staff: d.ping_staff !== false,
+  delete_on_close: d.delete_on_close !== false,
+  reasons: (((d.reasons as Partial<Reason>[]) || []).map((r) => ({
+    id: r.id || newReason().id,
+    label: r.label || "",
+    emoji: r.emoji || "",
+    intro: r.intro || "",
+    category_id: r.category_id != null ? String(r.category_id) : null,
+    staff_role_id: r.staff_role_id != null ? String(r.staff_role_id) : null,
+  }))),
+});
+
+/** Les motifs sans libellé sont des lignes en cours de saisie : on ne les envoie pas. */
+const serialize = (cfg: TicketsCfg) => ({
+  ...cfg,
+  reasons: cfg.reasons
+    .filter((r) => r.label.trim())
+    .map((r) => ({
+      id: r.id,
+      label: r.label.trim(),
+      emoji: r.emoji.trim(),
+      intro: r.intro,
+      category_id: r.category_id,
+      staff_role_id: r.staff_role_id,
+    })),
+});
+
 export default function Tickets() {
-  const [roles, setRoles] = useState<Role[] | null>(null);
-  const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [categories, setCategories] = useState<Category[] | null>(null);
-  const [cfg, setCfg] = useState<TicketsCfg | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const mod = useModuleConfig<TicketsCfg>("tickets", normalize, serialize);
+  useUnsavedGuard(mod.dirty);
+
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [rRes, chRes, catRes, cRes] = await Promise.all([
-          fetch("/api/fripouille/roles", { cache: "no-store" }),
-          fetch("/api/fripouille/channels", { cache: "no-store" }),
-          fetch("/api/fripouille/categories", { cache: "no-store" }),
-          fetch("/api/fripouille/config/tickets", { cache: "no-store" }),
-        ]);
-        if (!rRes.ok || !chRes.ok || !catRes.ok || !cRes.ok) throw new Error();
-        const rData = await rRes.json();
-        const chData = await chRes.json();
-        const catData = await catRes.json();
-        const d = await cRes.json();
-        setRoles(rData.roles || []);
-        setChannels(chData.channels || []);
-        setCategories(catData.categories || []);
-        setCfg({
-          enabled: !!d.enabled,
-          panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
-          category_id: d.category_id != null ? String(d.category_id) : null,
-          staff_roles: (d.staff_roles || []).map(String),
-          max_open: Number(d.max_open) || 1,
-          log_channel_id: d.log_channel_id != null ? String(d.log_channel_id) : null,
-          panel_title: d.panel_title || "",
-          panel_description: d.panel_description || "",
-          panel_image: d.panel_image || "",
-          button_label: d.button_label || "",
-          open_message: d.open_message || "",
-          ping_staff: d.ping_staff !== false,
-          delete_on_close: d.delete_on_close !== false,
-          reasons: (d.reasons || []).map((r: Partial<Reason>) => ({
-            id: r.id || newReason().id,
-            label: r.label || "",
-            emoji: r.emoji || "",
-            intro: r.intro || "",
-            category_id: r.category_id != null ? String(r.category_id) : null,
-            staff_role_id: r.staff_role_id != null ? String(r.staff_role_id) : null,
-          })),
-        });
-      } catch {
-        setError("La Fripouille est injoignable.");
-      }
-    })();
+    Promise.all([
+      fetch("/api/fripouille/roles", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { roles: [] })),
+      fetch("/api/fripouille/channels", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { channels: [] })),
+      fetch("/api/fripouille/categories", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { categories: [] })),
+    ])
+      .then(([r, ch, cat]) => {
+        setRoles(r.roles || []);
+        setChannels(ch.channels || []);
+        setCategories(cat.categories || []);
+      })
+      .catch(() => undefined);
   }, []);
 
-  const set = (patch: Partial<TicketsCfg>) => setCfg((c) => (c ? { ...c, ...patch } : c));
+  const cfg = mod.draft;
+  const saving = mod.saving;
+  const save = mod.save;
+  const set = (patch: Partial<TicketsCfg>) => mod.patch(patch);
   const patchReason = (id: string, patch: Partial<Reason>) =>
-    setCfg((c) =>
-      c ? { ...c, reasons: c.reasons.map((r) => (r.id === id ? { ...r, ...patch } : r)) } : c
-    );
+    cfg && mod.setDraft({
+      ...cfg,
+      reasons: cfg.reasons.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    });
 
-  const save = useCallback(async () => {
-    if (!cfg) return;
-    setSaving(true);
-    setSaved(false);
-    setError(null);
-    try {
-      const reasons = cfg.reasons
-        .filter((r) => r.label.trim())
-        .map((r) => ({
-          id: r.id,
-          label: r.label.trim(),
-          emoji: r.emoji.trim(),
-          intro: r.intro,
-          category_id: r.category_id,
-          staff_role_id: r.staff_role_id,
-        }));
-      const res = await fetch("/api/fripouille/config/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...cfg, reasons }),
-      });
-      if (!res.ok) throw new Error();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch {
-      setError("Échec de l'enregistrement.");
-    } finally {
-      setSaving(false);
-    }
-  }, [cfg]);
-
-  if (error && !cfg) return <div className="empty-state">{error}</div>;
-  if (!cfg || !roles || !channels || !categories)
-    return <div className="empty-state">Chargement de la config…</div>;
+  if (mod.loading) return <Loading lignes={6} />;
+  if (!cfg) return <Vide>{mod.error || "La Fripouille est injoignable."}</Vide>;
 
   const chanOpts = (
     <>
@@ -402,10 +400,14 @@ export default function Tickets() {
 
         <div className="cfg-actions">
           <button className="btn primary" onClick={save} disabled={saving || !canSave}>
-            {saving ? "Enregistrement…" : "Enregistrer & publier"}
+            <Icon name="sceau" />
+            {saving ? "Publication…" : "Enregistrer & publier"}
           </button>
-          {saved && <span className="cfg-ok">✓ Enregistré</span>}
-          {error && <span className="cfg-err">{error}</span>}
+          {!canSave && (
+            <span className="cfg-err">
+              Il manque le salon du panneau, une catégorie ou un rôle staff.
+            </span>
+          )}
         </div>
 
         <p className="cfg-hint">
@@ -415,6 +417,15 @@ export default function Tickets() {
           avoir « Gérer les salons », et son rôle au-dessus dans la hiérarchie.
         </p>
       </section>
+
+      <DirtyBar
+        dirty={mod.dirty}
+        dirtyKeys={mod.dirtyKeys}
+        saving={saving}
+        onSave={save}
+        onReset={mod.reset}
+        labels={LABELS}
+      />
     </div>
   );
 }

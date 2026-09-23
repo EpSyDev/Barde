@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+
+import { useEffect, useState } from "react";
+import Icon from "@/components/Icon";
+import { DirtyBar, Loading, Vide } from "@/components/ui";
+import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import MediaPicker from "@/components/MediaPicker";
 
 type Channel = { id: string; name: string; category: string | null };
@@ -16,66 +20,48 @@ type BaptemeCfg = {
   event_image: string;
 };
 
+const LABELS: Record<string, string> = {
+  enabled: "Activation",
+  panel_channel_id: "Salon du panneau",
+  event_channel_id: "Salon d'annonce",
+  panel_title: "Titre du panneau",
+  panel_description: "Description du panneau",
+  panel_image: "Image du panneau",
+  button_label: "Libellé du bouton",
+  event_message: "Message d'annonce",
+  event_image: "Image de l'annonce",
+};
+
 export default function Bapteme() {
-  const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [cfg, setCfg] = useState<BaptemeCfg | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const mod = useModuleConfig<BaptemeCfg>("bapteme", (d) => ({
+    enabled: !!d.enabled,
+    panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
+    event_channel_id: d.event_channel_id != null ? String(d.event_channel_id) : null,
+    panel_title: String(d.panel_title || ""),
+    panel_description: String(d.panel_description || ""),
+    panel_image: String(d.panel_image || ""),
+    button_label: String(d.button_label || ""),
+    event_message: String(d.event_message || ""),
+    event_image: String(d.event_image || ""),
+  }));
+  useUnsavedGuard(mod.dirty);
+
+  const [channels, setChannels] = useState<Channel[]>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [chRes, cRes] = await Promise.all([
-          fetch("/api/fripouille/channels", { cache: "no-store" }),
-          fetch("/api/fripouille/config/bapteme", { cache: "no-store" }),
-        ]);
-        if (!chRes.ok || !cRes.ok) throw new Error();
-        const chData = await chRes.json();
-        const d = await cRes.json();
-        setChannels(chData.channels || []);
-        setCfg({
-          enabled: !!d.enabled,
-          panel_channel_id: d.panel_channel_id != null ? String(d.panel_channel_id) : null,
-          event_channel_id: d.event_channel_id != null ? String(d.event_channel_id) : null,
-          panel_title: d.panel_title || "",
-          panel_description: d.panel_description || "",
-          panel_image: d.panel_image || "",
-          button_label: d.button_label || "",
-          event_message: d.event_message || "",
-          event_image: d.event_image || "",
-        });
-      } catch {
-        setError("La Fripouille est injoignable.");
-      }
-    })();
+    fetch("/api/fripouille/channels", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { channels: [] }))
+      .then((d) => setChannels(d.channels || []))
+      .catch(() => undefined);
   }, []);
 
-  const set = (patch: Partial<BaptemeCfg>) => setCfg((c) => (c ? { ...c, ...patch } : c));
+  const cfg = mod.draft;
+  const set = (patch: Partial<BaptemeCfg>) => mod.patch(patch);
+  const save = mod.save;
+  const saving = mod.saving;
 
-  const save = useCallback(async () => {
-    if (!cfg) return;
-    setSaving(true);
-    setSaved(false);
-    setError(null);
-    try {
-      const res = await fetch("/api/fripouille/config/bapteme", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
-      });
-      if (!res.ok) throw new Error();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch {
-      setError("Échec de l'enregistrement.");
-    } finally {
-      setSaving(false);
-    }
-  }, [cfg]);
-
-  if (error && !cfg) return <div className="empty-state">{error}</div>;
-  if (!cfg || !channels) return <div className="empty-state">Chargement de la config…</div>;
+  if (mod.loading) return <Loading lignes={5} />;
+  if (!cfg) return <Vide>{mod.error || "La Fripouille est injoignable."}</Vide>;
 
   const chanOpts = (
     <>
@@ -192,10 +178,12 @@ export default function Bapteme() {
 
         <div className="cfg-actions">
           <button className="btn primary" onClick={save} disabled={saving || !canSave}>
-            {saving ? "Enregistrement…" : "Enregistrer & publier"}
+            <Icon name="sceau" />
+            {saving ? "Publication…" : "Enregistrer & publier"}
           </button>
-          {saved && <span className="cfg-ok">✓ Enregistré</span>}
-          {error && <span className="cfg-err">{error}</span>}
+          {!canSave && (
+            <span className="cfg-err">Choisis le salon du panneau avant de publier.</span>
+          )}
         </div>
 
         <p className="cfg-hint">
@@ -208,6 +196,15 @@ export default function Bapteme() {
           peut jamais renommer le propriétaire du serveur — limite Discord).
         </p>
       </section>
+
+      <DirtyBar
+        dirty={mod.dirty}
+        dirtyKeys={mod.dirtyKeys}
+        saving={saving}
+        onSave={save}
+        onReset={mod.reset}
+        labels={LABELS}
+      />
     </div>
   );
 }

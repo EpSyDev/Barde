@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Icon from "@/components/Icon";
+import { useToasts } from "@/components/Toasts";
+import { useUnsavedGuard } from "@/lib/useModuleConfig";
+import { DirtyBar } from "@/components/ui";
 import MediaPicker from "@/components/MediaPicker";
 
 // Vignette fixe des embeds « classiques » (imposée aussi côté bot).
@@ -424,14 +428,13 @@ export default function Messages() {
   const [oneContent, setOneContent] = useState("");
   const [oneEmbed, setOneEmbed] = useState<Embed>(emptyEmbed());
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const toasts = useToasts();
   const [editingOne, setEditingOne] = useState<Editing>(null);
 
   // Publicité
   const [pubChannel, setPubChannel] = useState<string | null>(null);
   const [pub, setPub] = useState<Pub>(emptyPub());
   const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState(false);
   const [editingPub, setEditingPub] = useState<Editing>(null);
 
   // Historique des envois ponctuels (unique + pub)
@@ -440,7 +443,8 @@ export default function Messages() {
   // Récurrents
   const [recurring, setRecurring] = useState<Recurring[] | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedRec, setSavedRec] = useState(false);
+  // Instantané du dernier état enregistré : c'est lui qui dit si un brouillon traîne.
+  const [recSnapshot, setRecSnapshot] = useState<Recurring[] | null>(null);
 
   const channelName = useCallback(
     (id: string) => {
@@ -462,14 +466,14 @@ export default function Messages() {
         const cData = await cRes.json();
         setChannels(chData.channels || []);
         setHistory(cData.sent || []);
-        setRecurring(
-          (cData.recurring || []).map((r: Partial<Recurring>) => ({
-            ...newRecurring(),
-            ...r,
-            channel_id: r.channel_id != null ? String(r.channel_id) : null,
-            embed: { ...emptyEmbed(), ...(r.embed || {}) },
-          }))
-        );
+        const recus = (cData.recurring || []).map((r: Partial<Recurring>) => ({
+          ...newRecurring(),
+          ...r,
+          channel_id: r.channel_id != null ? String(r.channel_id) : null,
+          embed: { ...emptyEmbed(), ...(r.embed || {}) },
+        }));
+        setRecurring(recus);
+        setRecSnapshot(recus);
       } catch {
         setError("La Fripouille est injoignable.");
       }
@@ -498,7 +502,6 @@ export default function Messages() {
 
   const sendOne = useCallback(async () => {
     setSending(true);
-    setSent(false);
     setError(null);
     try {
       const url = editingOne
@@ -518,8 +521,7 @@ export default function Messages() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error();
-      setSent(true);
-      setTimeout(() => setSent(false), 2500);
+      toasts.ok(editingOne ? "Message mis à jour" : "Message envoyé");
       resetOne();
       await reloadHistory();
     } catch {
@@ -539,7 +541,6 @@ export default function Messages() {
 
   const publishPub = useCallback(async () => {
     setPublishing(true);
-    setPublished(false);
     setError(null);
     try {
       const url = editingPub
@@ -559,8 +560,7 @@ export default function Messages() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error();
-      setPublished(true);
-      setTimeout(() => setPublished(false), 2500);
+      toasts.ok(editingPub ? "Annonce mise à jour" : "Annonce publiée");
       resetPub();
       await reloadHistory();
     } catch {
@@ -613,7 +613,6 @@ export default function Messages() {
   const saveRecurring = useCallback(async () => {
     if (!recurring) return;
     setSaving(true);
-    setSavedRec(false);
     setError(null);
     try {
       const payload = recurring
@@ -633,14 +632,23 @@ export default function Messages() {
         body: JSON.stringify({ recurring: payload }),
       });
       if (!res.ok) throw new Error();
-      setSavedRec(true);
-      setTimeout(() => setSavedRec(false), 2500);
+      setRecSnapshot(recurring);
+      toasts.ok("Récurrents consignés", "Le planificateur repart sur les nouveaux délais.");
     } catch {
       setError("Échec de l'enregistrement.");
+      toasts.err("Rien n'a été enregistré", "Tes récurrents sont toujours là, à l'écran.");
     } finally {
       setSaving(false);
     }
-  }, [recurring]);
+  }, [recurring, toasts]);
+
+  // Les envois partent tout de suite ; seuls les récurrents sont un brouillon qu'on
+  // peut perdre — c'est donc le seul état que la barre et le garde-fou surveillent.
+  const recDirty = useMemo(
+    () => !!recSnapshot && JSON.stringify(recurring) !== JSON.stringify(recSnapshot),
+    [recurring, recSnapshot]
+  );
+  useUnsavedGuard(recDirty);
 
   if (error && !channels) return <div className="empty-state">{error}</div>;
   if (!channels || !recurring || !history)
@@ -710,8 +718,6 @@ export default function Messages() {
               >
                 {sending ? "…" : editingOne ? "Mettre à jour" : "Envoyer"}
               </button>
-              {sent && <span className="cfg-ok">✓ {editingOne ? "Mis à jour" : "Envoyé"}</span>}
-              {error && <span className="cfg-err">{error}</span>}
             </div>
 
             <div className="cfg-card-head" style={{ marginTop: 18 }}>
@@ -763,10 +769,6 @@ export default function Messages() {
               >
                 {publishing ? "…" : editingPub ? "Mettre à jour" : "Publier"}
               </button>
-              {published && (
-                <span className="cfg-ok">✓ {editingPub ? "Mis à jour" : "Publié"}</span>
-              )}
-              {error && <span className="cfg-err">{error}</span>}
             </div>
 
             <div className="cfg-card-head" style={{ marginTop: 18 }}>
@@ -870,14 +872,23 @@ export default function Messages() {
               </button>
               <div className="cfg-actions">
                 <button className="btn primary" onClick={saveRecurring} disabled={saving}>
-                  {saving ? "Enregistrement…" : "Enregistrer"}
+                  <Icon name="sceau" />
+                  {saving ? "Consignation…" : "Enregistrer"}
                 </button>
-                {savedRec && <span className="cfg-ok">✓ Enregistré</span>}
-                {error && <span className="cfg-err">{error}</span>}
               </div>
             </div>
           </section>
         </div>
+      )}
+
+      {tab === "recurrents" && (
+        <DirtyBar
+          dirty={recDirty}
+          dirtyKeys={["messages récurrents"]}
+          saving={saving}
+          onSave={saveRecurring}
+          onReset={() => recSnapshot && setRecurring(recSnapshot)}
+        />
       )}
     </div>
   );

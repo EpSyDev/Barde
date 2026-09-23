@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Icon from "@/components/Icon";
+import { DirtyBar, Loading, Vide } from "@/components/ui";
+import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
@@ -31,124 +34,110 @@ const newCategory = (): Category => ({
   placeholder: "",
   games: [newGame()],
 });
+const LABELS: Record<string, string> = {
+  enabled: "Activation",
+  channel_id: "Salon du menu",
+  title: "Titre",
+  description: "Description",
+  categories: "Catégories de jeux",
+};
+
+/** Le brouillon garde les lignes en cours de saisie ; l'envoi, lui, écarte les
+ *  catégories sans nom et les jeux sans rôle — inutiles côté bot. */
+const serialize = (cfg: JeuxCfg) => ({
+  enabled: cfg.enabled,
+  channel_id: cfg.channel_id,
+  title: cfg.title.trim(),
+  description: cfg.description.trim(),
+  categories: cfg.categories
+    .map((k) => ({
+      id: k.id,
+      label: k.label.trim(),
+      emoji: k.emoji.trim(),
+      description: k.description.trim(),
+      placeholder: k.placeholder.trim(),
+      games: k.games
+        .filter((g) => g.label.trim() && g.role_id)
+        .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id, emoji: g.emoji.trim() })),
+    }))
+    .filter((k) => k.label && k.games.length),
+});
+
+const mapGame = (g: Partial<Game>): Game => ({
+  id: g.id || rid(),
+  label: g.label || "",
+  role_id: g.role_id != null ? String(g.role_id) : null,
+  emoji: g.emoji || "",
+});
+
+const normalize = (raw: Record<string, unknown>): JeuxCfg => {
+  // Reprise de l'ancien format (liste plate `games`) → une catégorie unique.
+  const brutes = raw.categories as Partial<Category>[] | undefined;
+  const plates = raw.games as Partial<Game>[] | undefined;
+  let categories: Category[];
+  if (Array.isArray(brutes) && brutes.length) {
+    categories = brutes.map((c) => ({
+      id: c.id || rid(),
+      label: c.label || "",
+      emoji: c.emoji || "",
+      description: c.description || "",
+      placeholder: c.placeholder || "",
+      games: (c.games || []).map(mapGame),
+    }));
+  } else if (Array.isArray(plates) && plates.length) {
+    categories = [{ ...newCategory(), label: "Jeux", games: plates.map(mapGame) }];
+  } else {
+    categories = [];
+  }
+  return {
+    enabled: !!raw.enabled,
+    channel_id: raw.channel_id != null ? String(raw.channel_id) : null,
+    title: String(raw.title || ""),
+    description: String(raw.description || ""),
+    categories,
+  };
+};
 
 export default function Games() {
-  const [roles, setRoles] = useState<Role[] | null>(null);
-  const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [cfg, setCfg] = useState<JeuxCfg | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const mod = useModuleConfig<JeuxCfg>("jeux", normalize, serialize);
+  useUnsavedGuard(mod.dirty);
+
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [rRes, chRes, cRes] = await Promise.all([
-          fetch("/api/fripouille/roles", { cache: "no-store" }),
-          fetch("/api/fripouille/channels", { cache: "no-store" }),
-          fetch("/api/fripouille/config/jeux", { cache: "no-store" }),
-        ]);
-        if (!rRes.ok || !chRes.ok || !cRes.ok) throw new Error();
-        const rData = await rRes.json();
-        const chData = await chRes.json();
-        const cData = await cRes.json();
-        setRoles(rData.roles || []);
-        setChannels(chData.channels || []);
-
-        const mapGame = (g: Partial<Game>): Game => ({
-          id: g.id || rid(),
-          label: g.label || "",
-          role_id: g.role_id != null ? String(g.role_id) : null,
-          emoji: g.emoji || "",
-        });
-        // Reprise de l'ancien format (liste plate `games`) → une catégorie unique.
-        let categories: Category[];
-        if (Array.isArray(cData.categories) && cData.categories.length) {
-          categories = cData.categories.map((c: Partial<Category>) => ({
-            id: c.id || rid(),
-            label: c.label || "",
-            emoji: c.emoji || "",
-            description: c.description || "",
-            placeholder: c.placeholder || "",
-            games: (c.games || []).map(mapGame),
-          }));
-        } else if (Array.isArray(cData.games) && cData.games.length) {
-          categories = [
-            { ...newCategory(), label: "Jeux", games: cData.games.map(mapGame) },
-          ];
-        } else {
-          categories = [];
-        }
-
-        setCfg({
-          enabled: !!cData.enabled,
-          channel_id: cData.channel_id != null ? String(cData.channel_id) : null,
-          title: cData.title || "",
-          description: cData.description || "",
-          categories,
-        });
-      } catch {
-        setError("La Fripouille est injoignable.");
-      }
-    })();
+    Promise.all([
+      fetch("/api/fripouille/roles", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { roles: [] })),
+      fetch("/api/fripouille/channels", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { channels: [] })),
+    ])
+      .then(([r, c]) => {
+        setRoles(r.roles || []);
+        setChannels(c.channels || []);
+      })
+      .catch(() => undefined);
   }, []);
 
-  const set = (patch: Partial<JeuxCfg>) => setCfg((c) => (c ? { ...c, ...patch } : c));
+  const cfg = mod.draft;
+  const set = (patch: Partial<JeuxCfg>) => mod.patch(patch);
+  const patchCatGames = (cid: string, fn: (games: Game[]) => Game[]) =>
+    cfg && mod.setDraft({
+      ...cfg,
+      categories: cfg.categories.map((k) => (k.id === cid ? { ...k, games: fn(k.games) } : k)),
+    });
   const patchCat = (cid: string, patch: Partial<Category>) =>
-    setCfg((c) =>
-      c ? { ...c, categories: c.categories.map((k) => (k.id === cid ? { ...k, ...patch } : k)) } : c
-    );
+    cfg && mod.setDraft({
+      ...cfg,
+      categories: cfg.categories.map((k) => (k.id === cid ? { ...k, ...patch } : k)),
+    });
   const patchGame = (cid: string, gid: string, patch: Partial<Game>) =>
     patchCatGames(cid, (games) => games.map((g) => (g.id === gid ? { ...g, ...patch } : g)));
-  const patchCatGames = (cid: string, fn: (games: Game[]) => Game[]) =>
-    setCfg((c) =>
-      c
-        ? { ...c, categories: c.categories.map((k) => (k.id === cid ? { ...k, games: fn(k.games) } : k)) }
-        : c
-    );
 
-  const save = useCallback(async () => {
-    if (!cfg) return;
-    setSaving(true);
-    setSaved(false);
-    setError(null);
-    try {
-      const categories = cfg.categories
-        .map((k) => ({
-          id: k.id,
-          label: k.label.trim(),
-          emoji: k.emoji.trim(),
-          description: k.description.trim(),
-          placeholder: k.placeholder.trim(),
-          games: k.games
-            .filter((g) => g.label.trim() && g.role_id)
-            .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id, emoji: g.emoji.trim() })),
-        }))
-        .filter((k) => k.label && k.games.length);
-      const res = await fetch("/api/fripouille/config/jeux", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: cfg.enabled,
-          channel_id: cfg.channel_id,
-          title: cfg.title.trim(),
-          description: cfg.description.trim(),
-          categories,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch {
-      setError("Échec de l'enregistrement.");
-    } finally {
-      setSaving(false);
-    }
-  }, [cfg]);
+  const save = mod.save;
+  const saving = mod.saving;
+  const error = mod.error;
 
-  if (error && !cfg) return <div className="empty-state">{error}</div>;
-  if (!cfg || !roles || !channels)
-    return <div className="empty-state">Chargement de la config…</div>;
+  if (mod.loading) return <Loading lignes={6} />;
+  if (!cfg) return <Vide>{error || "La Fripouille est injoignable."}</Vide>;
 
   const validCats = cfg.categories.filter(
     (k) => k.label.trim() && k.games.some((g) => g.label.trim() && g.role_id)
@@ -340,10 +329,14 @@ export default function Games() {
 
         <div className="cfg-actions">
           <button className="btn primary" onClick={save} disabled={saving || !canSave}>
-            {saving ? "Enregistrement…" : "Enregistrer & publier"}
+            <Icon name="sceau" />
+            {saving ? "Publication…" : "Enregistrer & publier"}
           </button>
-          {saved && <span className="cfg-ok">✓ Enregistré</span>}
-          {error && <span className="cfg-err">{error}</span>}
+          {!canSave && (
+            <span className="cfg-err">
+              Il faut un salon et au moins une catégorie avec un jeu relié à un rôle.
+            </span>
+          )}
         </div>
 
         <p className="cfg-hint">
@@ -353,6 +346,15 @@ export default function Games() {
           des rôles-jeux dans la hiérarchie.
         </p>
       </section>
+
+      <DirtyBar
+        dirty={mod.dirty}
+        dirtyKeys={mod.dirtyKeys}
+        saving={saving}
+        onSave={save}
+        onReset={mod.reset}
+        labels={LABELS}
+      />
     </div>
   );
 }

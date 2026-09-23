@@ -12,8 +12,8 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, economie, farewell, help as help_module, jeux, messages,
-    tempvoice, tickets, welcome,
+    anonyme, autorole, bapteme, economie, farewell, help as help_module, jeux, journal,
+    membres, messages, moderation, tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
 
@@ -64,6 +64,7 @@ class FripouilleBot(discord.Client):
         anonyme.setup(self.tree, guild)
         economie.install(self, guild)
         economie.start_scheduler(self)
+        moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         await self.tree.sync(guild=guild)
 
@@ -86,6 +87,7 @@ class FripouilleBot(discord.Client):
             return
         # Écran de règles (Membership Screening) : on attend la validation, gérée
         # par on_member_update. Sans écran, member.pending est False → arrivée directe.
+        await journal.on_member_join(self, member)
         if member.pending:
             log.info("%s en attente de validation des règles", member)
             return
@@ -98,16 +100,26 @@ class FripouilleBot(discord.Client):
             await self._on_arrival(after)
         if before.premium_since is None and after.premium_since is not None:
             await economie.on_boost(self, after)
+        await journal.on_member_update(self, before, after)
 
     async def on_member_remove(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
         await farewell.on_leave(self, member)
+        await journal.on_member_remove(self, member)
 
     async def on_voice_state_update(self, member, before, after):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
         await tempvoice.on_voice(self, member, before, after)
+        await journal.on_voice(self, member, before, after)
+
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        # Métadonnées uniquement : sans l'intent message_content, le contenu d'un
+        # message supprimé n'est pas accessible — et c'est très bien ainsi.
+        if config.GUILD_ID and payload.guild_id != config.GUILD_ID:
+            return
+        await journal.on_raw_message_delete(self, payload)
 
     async def on_message(self, message: discord.Message):
         # Gain de monnaie sur message (module Économie). On ignore les MP, les bots

@@ -22,7 +22,7 @@ import logging
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import discord
@@ -123,6 +123,15 @@ class EconomyDB:
                     last_ts TEXT NOT NULL,
                     PRIMARY KEY (user_id, kind)
                 );
+                CREATE TABLE IF NOT EXISTS account_flags (
+                    user_id TEXT PRIMARY KEY,
+                    frozen  INTEGER NOT NULL DEFAULT 0,
+                    note    TEXT,
+                    ts      TEXT,
+                    by_who  TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_tx_ts ON transactions(ts DESC);
+                CREATE INDEX IF NOT EXISTS idx_tx_to ON transactions(to_id, ts DESC);
                 """
             )
 
@@ -142,8 +151,15 @@ class EconomyDB:
         )
 
     def credit(self, user_id, amount, reason, from_id=None) -> int:
-        """Crédite (ou débite si ``amount`` < 0) un solde. Renvoie le nouveau solde."""
+        """Crédite (ou débite si ``amount`` < 0) un solde. Renvoie le nouveau solde.
+
+        Un compte **gelé** ne gagne rien : le crédit est ignoré silencieusement (le
+        gain est simplement perdu, pas mis en attente). Les ajustements de trésorerie
+        passent par ``force=True`` via :meth:`adjust`.
+        """
         amount = int(amount)
+        if self.is_frozen(user_id):
+            return self.balance(user_id)
         with self._lock, self._conn:
             self._conn.execute(
                 "INSERT INTO balances(user_id, amount) VALUES (?, ?) "
@@ -161,6 +177,8 @@ class EconomyDB:
         amount = int(amount)
         if amount <= 0:
             raise ValueError("montant invalide")
+        if self.is_frozen(user_id):
+            raise ValueError("compte gelé")
         with self._lock, self._conn:
             row = self._conn.execute(
                 "SELECT amount FROM balances WHERE user_id = ?", (str(user_id),)
@@ -180,6 +198,8 @@ class EconomyDB:
         amount = int(amount)
         if amount <= 0:
             raise ValueError("montant invalide")
+        if self.is_frozen(from_id) or self.is_frozen(to_id):
+            raise ValueError("compte gelé")
         with self._lock, self._conn:
             row = self._conn.execute(
                 "SELECT amount FROM balances WHERE user_id = ?", (str(from_id),)
@@ -247,6 +267,154 @@ class EconomyDB:
                 "ON CONFLICT(user_id, kind) DO UPDATE SET last_ts = excluded.last_ts",
                 (str(user_id), kind, when.isoformat()),
             )
+
+    # --- Gel de compte (anti-triche) ---
+    def is_frozen(self, user_id) -> bool:
+        row = self._conn.execute(
+            "SELECT frozen FROM account_flags WHERE user_id = ?", (str(user_id),)
+        ).fetchone()
+        return bool(row and int(row["frozen"]))
+
+    def set_frozen(self, user_id, frozen: bool, note: str = "", by: str = "") -> bool:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO account_flags(user_id, frozen, note, ts, by_who) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET frozen = excluded.frozen, "
+                "note = excluded.note, ts = excluded.ts, by_who = excluded.by_who",
+                (str(user_id), 1 if frozen else 0, note, _now_iso(), by),
+            )
+        return frozen
+
+    def frozen_accounts(self) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT user_id, note, ts, by_who FROM account_flags WHERE frozen = 1 ORDER BY ts DESC"
+        ).fetchall()
+
+    # --- Trésorerie : lecture seule, tout est mesuré, rien n'est estimé ---
+    def money_supply(self) -> dict:
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS holders, "
+            "COALESCE(MAX(amount), 0) AS max FROM balances WHERE amount > 0"
+        ).fetchone()
+        total, holders = int(row["total"]), int(row["holders"])
+        median = 0
+        if holders:
+            mid = self._conn.execute(
+                "SELECT amount FROM balances WHERE amount > 0 ORDER BY amount "
+                "LIMIT 1 OFFSET ?", (holders // 2,),
+            ).fetchone()
+            median = int(mid["amount"]) if mid else 0
+        return {
+            "total": total,
+            "porteurs": holders,
+            "moyenne": round(total / holders, 1) if holders else 0,
+            "mediane": median,
+            "max": int(row["max"]),
+        }
+
+    def flows_since(self, since: datetime) -> dict:
+        """Entrées (création de monnaie) et sorties (dépenses) par source, depuis ``since``.
+
+        La source est le préfixe de ``reason`` (``gain:message`` → ``gain``) — les
+        crédits/débits d'admin et d'événements sont donc isolés d'un coup d'œil.
+        """
+        rows = self._conn.execute(
+            "SELECT reason, amount FROM transactions WHERE ts >= ?", (since.isoformat(),)
+        ).fetchall()
+        entrees: dict[str, int] = {}
+        sorties: dict[str, int] = {}
+        for r in rows:
+            reason = r["reason"] or "inconnu"
+            amount = int(r["amount"])
+            bucket = entrees if amount > 0 else sorties
+            bucket[reason] = bucket.get(reason, 0) + abs(amount)
+        return {
+            "entrees": dict(sorted(entrees.items(), key=lambda kv: -kv[1])),
+            "sorties": dict(sorted(sorties.items(), key=lambda kv: -kv[1])),
+            "total_entrees": sum(entrees.values()),
+            "total_sorties": sum(sorties.values()),
+        }
+
+    def top_earners(self, since: datetime, limit=10) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT to_id AS user_id, SUM(amount) AS gagne, COUNT(*) AS n "
+            "FROM transactions WHERE ts >= ? AND amount > 0 AND to_id IS NOT NULL "
+            "GROUP BY to_id ORDER BY gagne DESC LIMIT ?",
+            (since.isoformat(), int(limit)),
+        ).fetchall()
+        return [{"user_id": r["user_id"], "gagne": int(r["gagne"]), "mouvements": int(r["n"])}
+                for r in rows]
+
+    def anomalies(self, since: datetime, factor: float = 10.0, floor: int = 50) -> list[dict]:
+        """Comptes dont les gains sur la période dépassent ``factor`` × la médiane.
+
+        Ce n'est pas un verdict : c'est un écart mesuré, à regarder. ``floor`` évite
+        de signaler tout le monde quand la médiane est proche de zéro.
+        """
+        earners = self.top_earners(since, limit=200)
+        if len(earners) < 4:
+            return []
+        gains = sorted(e["gagne"] for e in earners)
+        median = gains[len(gains) // 2] or 1
+        seuil = max(median * factor, floor)
+        return [
+            {**e, "mediane": median, "seuil": int(seuil), "ratio": round(e["gagne"] / median, 1)}
+            for e in earners if e["gagne"] >= seuil
+        ]
+
+    def transactions(self, limit=60, user_id=None, before_id=None) -> list[dict]:
+        sql = "SELECT * FROM transactions WHERE 1=1"
+        args: list = []
+        if user_id:
+            sql += " AND (to_id = ? OR from_id = ?)"
+            args.extend([str(user_id), str(user_id)])
+        if before_id:
+            sql += " AND id < ?"
+            args.append(int(before_id))
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(min(int(limit), 300))
+        rows = self._conn.execute(sql, args).fetchall()
+        return [{"id": int(r["id"]), "from_id": r["from_id"], "to_id": r["to_id"],
+                 "amount": int(r["amount"]), "reason": r["reason"] or "", "ts": r["ts"]}
+                for r in rows]
+
+    def revert(self, tx_id: int, by: str) -> dict:
+        """Annule une transaction par **compensation** (on n'efface jamais une ligne).
+
+        Le solde peut devenir négatif si les écus ont déjà été dépensés : c'est voulu,
+        ça rend la dette visible plutôt que de la faire disparaître.
+        """
+        row = self._conn.execute(
+            "SELECT * FROM transactions WHERE id = ?", (int(tx_id),)
+        ).fetchone()
+        if row is None:
+            raise ValueError("transaction introuvable")
+        if (row["reason"] or "").startswith("annulation:"):
+            raise ValueError("cette ligne est déjà une annulation")
+        amount, target = int(row["amount"]), row["to_id"] or row["from_id"]
+        if not target:
+            raise ValueError("transaction sans destinataire")
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO balances(user_id, amount) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET amount = amount + excluded.amount",
+                (str(target), -amount),
+            )
+            self._log_tx(None, target, -amount, f"annulation:{tx_id} par {by}")
+        return {"user_id": target, "montant": -amount, "solde": self.balance(target)}
+
+    def adjust(self, user_id, amount: int, reason: str) -> int:
+        """Ajustement de trésorerie : passe outre le gel (sinon on ne pourrait pas
+        corriger le solde d'un compte qu'on vient de geler)."""
+        amount = int(amount)
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO balances(user_id, amount) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET amount = amount + excluded.amount",
+                (str(user_id), amount),
+            )
+            self._log_tx(None, user_id, amount, reason)
+        return self.balance(user_id)
 
 
 # ───────────────────────── Helpers config / format ─────────────────────────
@@ -984,6 +1152,107 @@ async def action_acheter(bot, payload) -> dict:
     return {"ok": True, "balance": reste, "item": {"id": item.get("id"), "nom": item.get("nom")}}
 
 
+# ───────────────────────── Trésorerie (dashboard) ─────────────────────────
+def _tag(bot, user_id) -> str:
+    member = _resolve_member(bot, user_id)
+    return str(member) if member else str(user_id)
+
+
+async def action_tresorerie(bot, payload) -> dict:
+    """Photo chiffrée de l'économie : masse monétaire, flux, écarts, comptes gelés.
+
+    Tout est calculé depuis la base — aucun indicateur composite inventé.
+    """
+    heures = max(1, min(int(payload.get("heures") or 24), 24 * 30))
+    since = datetime.now(timezone.utc) - timedelta(hours=heures)
+    db = bot.economy
+    flux = db.flows_since(since)
+    top = db.top_earners(since, int(payload.get("top") or 10))
+    anomalies = db.anomalies(since, float(payload.get("facteur") or 10))
+    frozen = db.frozen_accounts()
+    return {
+        "heures": heures,
+        "masse": db.money_supply(),
+        "flux": flux,
+        "top_gains": [{**e, "tag": _tag(bot, e["user_id"])} for e in top],
+        "anomalies": [{**a, "tag": _tag(bot, a["user_id"])} for a in anomalies],
+        "geles": [{"user_id": r["user_id"], "tag": _tag(bot, r["user_id"]),
+                   "note": r["note"] or "", "ts": r["ts"], "par": r["by_who"] or ""}
+                  for r in frozen],
+        "devise": _cfg(bot).get("devise", DEFAULTS["devise"]),
+    }
+
+
+async def action_mouvements(bot, payload) -> dict:
+    rows = bot.economy.transactions(
+        int(payload.get("limit") or 60),
+        payload.get("user_id") or None,
+        payload.get("before_id") or None,
+    )
+    tags = {}
+    for r in rows:
+        for uid in (r["from_id"], r["to_id"]):
+            if uid and uid not in tags:
+                tags[uid] = _tag(bot, uid)
+    return {"mouvements": rows, "tags": tags}
+
+
+async def action_annuler(bot, payload) -> dict:
+    """Annulation par compensation d'une transaction suspecte."""
+    from . import journal
+
+    tx_id = payload.get("id")
+    if tx_id is None:
+        raise ValueError("id requis")
+    par = str(payload.get("par") or payload.get("_acteur") or "Dashboard")
+    res = bot.economy.revert(int(tx_id), par)
+    await journal.record(
+        bot, "economie", f"Transaction #{tx_id} annulée ({res['montant']:+d})",
+        actor_tag=par, target_id=res["user_id"], target_tag=_tag(bot, res["user_id"]),
+        detail={"transaction": int(tx_id), "nouveau solde": res["solde"]},
+    )
+    return {"ok": True, **res}
+
+
+async def action_geler(bot, payload) -> dict:
+    """Gèle (ou dégèle) un compte : plus aucun gain ni dépense tant qu'il l'est."""
+    from . import journal
+
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("user_id requis")
+    frozen = bool(payload.get("gele", True))
+    par = str(payload.get("par") or payload.get("_acteur") or "Dashboard")
+    note = str(payload.get("note") or "")
+    bot.economy.set_frozen(user_id, frozen, note, par)
+    await journal.record(
+        bot, "economie",
+        f"Compte {'gelé' if frozen else 'dégelé'} — {_tag(bot, user_id)}",
+        actor_tag=par, target_id=str(user_id), target_tag=_tag(bot, user_id),
+        detail={"motif": note} if note else None,
+    )
+    return {"ok": True, "gele": frozen, "solde": bot.economy.balance(user_id)}
+
+
+async def action_ajuster(bot, payload) -> dict:
+    """Correction manuelle d'un solde (passe outre le gel, toujours tracée)."""
+    from . import journal
+
+    user_id = payload.get("user_id")
+    montant = payload.get("montant")
+    if not user_id or montant is None:
+        raise ValueError("user_id et montant requis")
+    par = str(payload.get("par") or payload.get("_acteur") or "Dashboard")
+    motif = str(payload.get("motif") or "correction")
+    solde = bot.economy.adjust(user_id, int(montant), f"tresorerie:{motif} par {par}")
+    await journal.record(
+        bot, "economie", f"Ajustement {int(montant):+d} — {_tag(bot, user_id)}",
+        actor_tag=par, target_id=str(user_id), target_tag=_tag(bot, user_id),
+        detail={"motif": motif, "nouveau solde": solde},
+    )
+    return {"ok": True, "solde": solde}
+
+
 MODULE = register(Module(
     key="economie",
     label="Économie",
@@ -995,5 +1264,10 @@ MODULE = register(Module(
         "solde": action_solde,
         "crediter_evenement": action_crediter_evenement,
         "acheter": action_acheter,
+        "tresorerie": action_tresorerie,
+        "mouvements": action_mouvements,
+        "annuler": action_annuler,
+        "geler": action_geler,
+        "ajuster": action_ajuster,
     },
 ))

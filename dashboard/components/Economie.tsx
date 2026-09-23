@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DirtyBar, Loading, Vide } from "@/components/ui";
+import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 
 type Devise = {
   nom: string;
@@ -107,139 +109,112 @@ function formatAmount(devise: Devise, amount: number): string {
   return `${n} ${label}`.trim();
 }
 
+type EcoCfg = {
+  category_id: string | null;
+  devise: Devise;
+  gains: Gains;
+  boutique: Item[];
+};
+
+const LABELS: Record<string, string> = {
+  category_id: "Catégorie « espace RP »",
+  devise: "Devise",
+  gains: "Sources de gains",
+  boutique: "Boutique",
+};
+
+const normalize = (d: Record<string, unknown>): EcoCfg => {
+  const recus = (d.gains || {}) as Record<string, Partial<GainRule>>;
+  return {
+    category_id: d.category_id != null ? String(d.category_id) : null,
+    devise: { ...DEFAULT_DEVISE, ...((d.devise as Partial<Devise>) || {}) },
+    gains: Object.fromEntries(
+      GAIN_META.map((m) => [m.key, { ...DEFAULT_GAIN_RULE, ...(recus[m.key] || {}) }])
+    ) as Gains,
+    boutique: (((d.boutique as Partial<Item>[]) || []).map((it) => ({
+      ...newItem(),
+      ...it,
+      role_id: it.role_id != null ? String(it.role_id) : null,
+      stock: it.stock == null || Number(it.stock) < 0 ? null : Number(it.stock),
+    }))),
+  };
+};
+
+/** Nettoyage au moment de l'envoi : la frappe en cours n'est jamais corrigée sous
+ *  les doigts, mais le bot ne reçoit ni article sans nom ni champ parasite. */
+const serialize = (cfg: EcoCfg) => ({
+  category_id: cfg.category_id,
+  devise: {
+    nom: cfg.devise.nom.trim() || "points",
+    nom_singulier: cfg.devise.nom_singulier.trim() || cfg.devise.nom.trim() || "point",
+    symbole: cfg.devise.symbole.trim(),
+    symbole_avant: cfg.devise.symbole_avant,
+  },
+  gains: Object.fromEntries(GAIN_META.map((m) => [m.key, sanitizeGainRule(m, cfg.gains[m.key])])),
+  boutique: cfg.boutique
+    .filter((it) => it.nom.trim())
+    .map((it) => ({
+      id: it.id,
+      nom: it.nom.trim(),
+      description: it.description.trim(),
+      prix: Math.max(0, Number(it.prix) || 0),
+      type: it.type,
+      role_id: it.type === "role" ? it.role_id : null,
+      stock: it.stock == null ? null : Math.max(0, Number(it.stock) || 0),
+      enabled: it.enabled,
+    })),
+});
+
 export default function Economie() {
+  const mod = useModuleConfig<EcoCfg>("economie", normalize, serialize);
+  useUnsavedGuard(mod.dirty);
+
   const [tab, setTab] = useState<"reglages" | "boutique">("reglages");
-  const [devise, setDevise] = useState<Devise | null>(null);
-  const [gains, setGains] = useState<Gains | null>(null);
-  const [boutique, setBoutique] = useState<Item[] | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-
-  const [savingCfg, setSavingCfg] = useState(false);
-  const [savedCfg, setSavedCfg] = useState(false);
-  const [savingShop, setSavingShop] = useState(false);
-  const [savedShop, setSavedShop] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [cRes, rRes, catRes] = await Promise.all([
-          fetch("/api/fripouille/config/economie", { cache: "no-store" }),
-          fetch("/api/fripouille/roles", { cache: "no-store" }),
-          fetch("/api/fripouille/categories", { cache: "no-store" }),
-        ]);
-        if (!cRes.ok) throw new Error();
-        const d = await cRes.json();
-        const rData = rRes.ok ? await rRes.json() : { roles: [] };
-        const catData = catRes.ok ? await catRes.json() : { categories: [] };
-        setCategoryId(d.category_id != null ? String(d.category_id) : null);
-        setCategories(catData.categories || []);
-        setDevise({ ...DEFAULT_DEVISE, ...(d.devise || {}) });
-        const fetchedGains = d.gains || {};
-        setGains(
-          Object.fromEntries(
-            GAIN_META.map((m) => [m.key, { ...DEFAULT_GAIN_RULE, ...(fetchedGains[m.key] || {}) }])
-          ) as Gains
-        );
-        setBoutique(
-          (d.boutique || []).map((it: Partial<Item>) => ({
-            ...newItem(),
-            ...it,
-            role_id: it.role_id != null ? String(it.role_id) : null,
-            stock: it.stock == null || Number(it.stock) < 0 ? null : Number(it.stock),
-          }))
-        );
-        setRoles(rData.roles || []);
-      } catch {
-        setError("La Fripouille est injoignable.");
-      }
-    })();
+    Promise.all([
+      fetch("/api/fripouille/roles", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { roles: [] })),
+      fetch("/api/fripouille/categories", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { categories: [] })),
+    ])
+      .then(([r, c]) => {
+        setRoles(r.roles || []);
+        setCategories(c.categories || []);
+      })
+      .catch(() => undefined);
   }, []);
 
+  // La devise, les gains et la boutique sont trois vues d'une même config : un seul
+  // brouillon, un seul enregistrement — les boutons par carte le déclenchent aussi.
+  const draft = mod.draft;
+  const devise = draft?.devise ?? null;
+  const gains = draft?.gains ?? null;
+  const boutique = draft?.boutique ?? null;
+  const categoryId = draft?.category_id ?? null;
+
+  const setCategoryId = (v: string | null) => mod.patch({ category_id: v });
   const setDev = (patch: Partial<Devise>) =>
-    setDevise((d) => (d ? { ...d, ...patch } : d));
+    draft && mod.patch({ devise: { ...draft.devise, ...patch } });
   const setGain = (key: keyof Gains, patch: Partial<GainRule>) =>
-    setGains((g) => (g ? { ...g, [key]: { ...g[key], ...patch } } : g));
+    draft && mod.patch({ gains: { ...draft.gains, [key]: { ...draft.gains[key], ...patch } } });
+  const setBoutique = (items: Item[]) => mod.patch({ boutique: items });
   const patchItem = (id: string, patch: Partial<Item>) =>
-    setBoutique((items) =>
-      items ? items.map((it) => (it.id === id ? { ...it, ...patch } : it)) : items
-    );
+    draft && mod.patch({
+      boutique: draft.boutique.map((it) => (it.id === id ? { ...it, ...patch } : it)),
+    });
 
-  const saveCfg = useCallback(async () => {
-    if (!devise || !gains) return;
-    setSavingCfg(true);
-    setSavedCfg(false);
-    setError(null);
-    try {
-      const res = await fetch("/api/fripouille/config/economie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category_id: categoryId,
-          devise: {
-            nom: devise.nom.trim() || "points",
-            nom_singulier: devise.nom_singulier.trim() || devise.nom.trim() || "point",
-            symbole: devise.symbole.trim(),
-            symbole_avant: devise.symbole_avant,
-          },
-          gains: Object.fromEntries(
-            GAIN_META.map((m) => [m.key, sanitizeGainRule(m, gains[m.key])])
-          ),
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setSavedCfg(true);
-      setTimeout(() => setSavedCfg(false), 2500);
-    } catch {
-      setError("Échec de l'enregistrement.");
-    } finally {
-      setSavingCfg(false);
-    }
-  }, [categoryId, devise, gains]);
+  const saveCfg = mod.save;
+  const saveShop = mod.save;
+  const savingCfg = mod.saving;
+  const savingShop = mod.saving;
 
-  const saveShop = useCallback(async () => {
-    if (!boutique) return;
-    setSavingShop(true);
-    setSavedShop(false);
-    setError(null);
-    try {
-      const payload = boutique
-        .filter((it) => it.nom.trim())
-        .map((it) => ({
-          id: it.id,
-          nom: it.nom.trim(),
-          description: it.description.trim(),
-          prix: Math.max(0, Number(it.prix) || 0),
-          type: it.type,
-          role_id: it.type === "role" ? it.role_id : null,
-          stock: it.stock == null ? null : Math.max(0, Number(it.stock) || 0),
-          enabled: it.enabled,
-        }));
-      const res = await fetch("/api/fripouille/config/economie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boutique: payload }),
-      });
-      if (!res.ok) throw new Error();
-      setSavedShop(true);
-      setTimeout(() => setSavedShop(false), 2500);
-    } catch {
-      setError("Échec de l'enregistrement.");
-    } finally {
-      setSavingShop(false);
-    }
-  }, [boutique]);
+  const preview = useMemo(() => (devise ? formatAmount(devise, 1500) : ""), [devise]);
 
-  const preview = useMemo(
-    () => (devise ? formatAmount(devise, 1500) : ""),
-    [devise]
-  );
-
-  if (error && !devise) return <div className="empty-state">{error}</div>;
-  if (!devise || !gains || !boutique)
-    return <div className="empty-state">Chargement de l'économie…</div>;
+  if (mod.loading) return <Loading lignes={6} />;
+  if (!devise || !gains || !boutique) {
+    return <Vide>{mod.error || "La Fripouille est injoignable."}</Vide>;
+  }
 
   return (
     <div>
@@ -292,8 +267,6 @@ export default function Economie() {
               <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
                 {savingCfg ? "Enregistrement…" : "Enregistrer"}
               </button>
-              {savedCfg && <span className="cfg-ok">✓ Enregistré</span>}
-              {error && <span className="cfg-err">{error}</span>}
             </div>
           </section>
 
@@ -359,8 +332,6 @@ export default function Economie() {
               <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
                 {savingCfg ? "Enregistrement…" : "Enregistrer"}
               </button>
-              {savedCfg && <span className="cfg-ok">✓ Enregistré</span>}
-              {error && <span className="cfg-err">{error}</span>}
             </div>
           </section>
 
@@ -453,8 +424,6 @@ export default function Economie() {
               <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
                 {savingCfg ? "Enregistrement…" : "Enregistrer"}
               </button>
-              {savedCfg && <span className="cfg-ok">✓ Enregistré</span>}
-              {error && <span className="cfg-err">{error}</span>}
             </div>
           </section>
         </div>
@@ -599,8 +568,6 @@ export default function Economie() {
                 <button className="btn primary" onClick={saveShop} disabled={savingShop}>
                   {savingShop ? "Enregistrement…" : "Enregistrer"}
                 </button>
-                {savedShop && <span className="cfg-ok">✓ Enregistré</span>}
-                {error && <span className="cfg-err">{error}</span>}
               </div>
             </div>
 
@@ -611,6 +578,15 @@ export default function Economie() {
           </section>
         </div>
       )}
+
+      <DirtyBar
+        dirty={mod.dirty}
+        dirtyKeys={mod.dirtyKeys}
+        saving={mod.saving}
+        onSave={mod.save}
+        onReset={mod.reset}
+        labels={LABELS}
+      />
     </div>
   );
 }

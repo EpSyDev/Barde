@@ -57,11 +57,18 @@ def _cors(resp):
 
 async def health(request):
     bot = request.app["bot"]
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    latency = bot.latency  # secondes ; nan tant que le premier heartbeat n'a pas eu lieu
     return web.json_response({
         "ok": True,
         "user": str(bot.user) if bot.user else None,
         "guild": config.GUILD_ID,
+        "guild_nom": guild.name if guild else None,
+        "membres": guild.member_count if guild else None,
+        "latence_ms": round(latency * 1000) if latency == latency else None,
         "modules": list(registry.all_modules()),
+        "modules_actifs": sorted(k for k in bot.store.keys()
+                                 if bot.store.get(k).get("enabled")),
     })
 
 
@@ -130,6 +137,15 @@ async def guild_categories(request):
     return web.json_response({"categories": cats})
 
 
+def _actor(request) -> str:
+    """Qui agit, tel que le proxy du dashboard l'a déclaré (header ``X-Actor``).
+
+    Purement informatif pour l'audit : l'autorisation, elle, tient au token d'API et
+    à la liste blanche Discord côté dashboard — pas à cet en-tête.
+    """
+    return (request.headers.get("X-Actor") or "").strip()[:80] or "inconnu"
+
+
 async def list_config(request):
     bot = request.app["bot"]
     return web.json_response({
@@ -156,7 +172,7 @@ async def set_config(request):
     if not isinstance(data, dict):
         raise web.HTTPBadRequest(reason="corps JSON attendu (objet)")
     bot = request.app["bot"]
-    merged = bot.store.set(key, data)
+    merged = bot.store.set(key, data, actor=_actor(request))
     if mod.apply is not None:
         try:
             await mod.apply(bot, merged)
@@ -176,6 +192,9 @@ async def run_action(request):
     data = await request.json()
     if not isinstance(data, dict):
         raise web.HTTPBadRequest(reason="corps JSON attendu (objet)")
+    # L'appelant déclaré est injecté dans le payload : les actions qui attribuent un
+    # geste (sanction, ajustement de solde) s'en servent comme auteur par défaut.
+    data.setdefault("_acteur", _actor(request))
     try:
         result = await mod.actions[action](request.app["bot"], data)
     except ValueError as exc:
@@ -237,11 +256,48 @@ async def media_delete(request):
     return web.json_response({"ok": True})
 
 
+async def audit_log(request):
+    """Journal des modifications de configuration (qui a changé quoi, et depuis quoi)."""
+    bot = request.app["bot"]
+    limit = int(request.query.get("limit") or 100)
+    module = request.query.get("module") or ""
+    return web.json_response({"entrees": bot.store.audit(limit, module)})
+
+
+async def export_config(request):
+    """Sauvegarde complète de la configuration (à télécharger depuis le dashboard)."""
+    return web.json_response(request.app["bot"].store.export())
+
+
+async def import_config(request):
+    """Restauration d'une sauvegarde. Additive : ne supprime jamais un module absent."""
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise web.HTTPBadRequest(reason="corps JSON attendu (objet)")
+    bot = request.app["bot"]
+    try:
+        result = bot.store.import_data(data, actor=_actor(request))
+    except ValueError as exc:
+        raise web.HTTPBadRequest(reason=str(exc))
+    # Répercute à chaud tout ce qui sait s'appliquer sans redémarrage.
+    for key in result["restaures"]:
+        mod = registry.get(key)
+        if mod and mod.apply is not None:
+            try:
+                await mod.apply(bot, bot.store.get(key))
+            except Exception as exc:  # noqa: BLE001
+                log.error("apply(%s) après restauration : %s", key, exc)
+    return web.json_response({"ok": True, **result})
+
+
 def build_app(bot):
     app = web.Application(middlewares=[_auth], client_max_size=_MAX_MEDIA + 1024 * 1024)
     app["bot"] = bot
     app.add_routes([
         web.get("/api/health", health),
+        web.get("/api/audit", audit_log),
+        web.get("/api/export", export_config),
+        web.post("/api/import", import_config),
         web.get("/api/guild/roles", guild_roles),
         web.get("/api/guild/channels", guild_channels),
         web.get("/api/guild/voice-channels", guild_voice_channels),

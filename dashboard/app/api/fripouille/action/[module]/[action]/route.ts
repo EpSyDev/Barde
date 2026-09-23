@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { fripouilleFetch } from "@/lib/fripouille";
+import { fripouilleFetch, actorFrom } from "@/lib/fripouille";
 
 // Proxy générique vers /api/action/{module}/{action} de la Fripouille (actions
 // ponctuelles : ex. envoi immédiat d'un message).
@@ -25,6 +25,7 @@ export async function POST(
     const res = await fripouilleFetch(`/api/action/${module}/${action}`, {
       method: "POST",
       body: JSON.stringify(body),
+      actor: actorFrom(session),
     });
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
