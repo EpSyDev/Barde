@@ -19,7 +19,12 @@ type Tableau = {
   serveur?: { nom: string; icone: string | null; membres: number; boosts: number; niveau_boost: number };
   vocal?: { total: number; salons: { nom: string; membres: number }[] };
   tickets?: { ouverts: number; non_pris: number };
-  bapteme?: { total: number; derniers: { user_id: string; nom?: string; at?: string }[] };
+  // Le registre du baptême stocke `name` (nom RP) et `pseudo` (nom stylisé posé
+  // comme pseudo serveur) — pas `nom`. Voir le roster dans modules/bapteme.py.
+  bapteme?: {
+    total: number;
+    derniers: { user_id: string; name?: string; race_label?: string; at?: string }[];
+  };
   economie?: {
     masse: { total: number; porteurs: number; moyenne: number; mediane: number; max: number };
     flux_24h: { entrees: Record<string, number>; sorties: Record<string, number>;
@@ -201,7 +206,8 @@ export default function Accueil({ aller }: { aller: (id: string, membre?: string
                     <span className="tl-time">{depuis(b.at)}</span>
                   </div>
                   <div className="tl-body">
-                    <strong>{b.nom || "—"}</strong>
+                    <strong>{b.name || "—"}</strong>
+                    {b.race_label && <span className="muted"> · {b.race_label}</span>}
                   </div>
                   <button
                     className="link"

@@ -23,6 +23,18 @@ type Membre = {
   roles?: { id: string; nom: string; couleur: number }[];
 };
 
+// Champs du roster de `modules/bapteme.py` : `name` est le nom RP, `pseudo` le nom
+// stylisé posé comme pseudo serveur, et les `*_label` les libellés lisibles.
+type FicheBapteme = {
+  name?: string;
+  pseudo?: string;
+  race_label?: string;
+  trait_label?: string;
+  origin_label?: string;
+  faith_label?: string;
+  at?: string;
+};
+
 type Sanction = {
   id: number; user_id: string; kind: string; reason: string; moderator: string;
   ts: string; expires_ts: string | null; active: boolean; lifted_by: string;
@@ -39,7 +51,7 @@ type Fiche = {
     inventaire: { item_id: string; qty: number; nom: string }[];
     mouvements: Mouvement[];
   };
-  bapteme: { nom?: string; race?: string; trait?: string; at?: string } | null;
+  bapteme: FicheBapteme | null;
   moderation: { sanctions: Sanction[]; warns_actifs: number };
   tickets: { channel_id: string; nom: string; cree_le: string | null }[];
   journal: Evenement[];
@@ -419,7 +431,7 @@ function FicheEntete({ fiche }: { fiche: Fiche }) {
       <div className="sheet-id">
         <h2>{m.nom}</h2>
         <div className="sheet-tag">{m.tag} · {m.id}</div>
-        {b?.nom && <div className="sheet-rp">« {b.nom} »</div>}
+        {b?.name && <div className="sheet-rp">« {b.name} »</div>}
         <div className="sheet-facts">
           {m.absent && <span className="tag danger">a quitté le serveur</span>}
           {exclu && (
@@ -443,7 +455,8 @@ function FicheEntete({ fiche }: { fiche: Fiche }) {
                 : duree(m.anciennete_jours * 1440)}
             </span>
           )}
-          {b?.race && <span className="tag">{b.race}</span>}
+          {b?.race_label && <span className="tag">{b.race_label}</span>}
+          {b?.trait_label && <span className="tag">{b.trait_label}</span>}
           {m.roles?.slice(0, 4).map((r) => (
             <span className="tag" key={r.id}>
               <span
