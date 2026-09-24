@@ -1,0 +1,16 @@
+[Unit]
+Description=Chasse a la capacite Oracle ARM A1 (retente la creation jusqu'au succes)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/bin/bash /home/ubuntu/Barde/deploy/oci-a1/chasse-a1.sh
+# 0 = instance creee (fin normale), 2 = config fausse : pas de relance dans ces cas.
+Restart=on-failure
+RestartSec=300
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=multi-user.target
