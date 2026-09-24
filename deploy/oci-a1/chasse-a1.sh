@@ -37,8 +37,8 @@ fi
 
 # Résolus une seule fois : domaine de disponibilité (Marseille n'en a qu'un) et
 # dernière image Ubuntu 24.04 compatible ARM.
-AD=$("$OCI" iam availability-domain list --compartment-id "$TENANCY_OCID" \
-  --query 'data[0].name' --raw-output) || { log "AD introuvable"; exit 2; }
+AD="${AD:-$("$OCI" iam availability-domain list --compartment-id "$TENANCY_OCID" \
+  --query 'data[0].name' --raw-output)}" || { log "AD introuvable"; exit 2; }
 IMAGE=$("$OCI" compute image list --compartment-id "$TENANCY_OCID" \
   --operating-system "Canonical Ubuntu" --operating-system-version "24.04" \
   --shape "$SHAPE" --sort-by TIMECREATED --sort-order DESC --limit 1 \
