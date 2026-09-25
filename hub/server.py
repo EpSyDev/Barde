@@ -120,19 +120,20 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
         self.refused = False            # jeton présenté mais invalide ou expiré
         self.w, self.p, self.yaw, self.a = "in", [0.0, 0.0, 0.0], 0.0, "i"
         self.dirty = True
+        self.o = ""                     # objet tenu (c : chope)
         self.last_chat = self.last_emote = 0.0
         self.active_t, self.active_p = time.monotonic(), [0.0, 0.0, 0.0]
         self.rate_t, self.rate_n = time.monotonic(), 0
 
     def pub(self):
-        return {"id": self.id, "name": self.name, "look": self.look, "guest": self.guest, "w": self.w, "p": self.p, "yaw": self.yaw, "a": self.a}
+        return {"id": self.id, "name": self.name, "look": self.look, "guest": self.guest, "w": self.w, "p": self.p, "yaw": self.yaw, "a": self.a, "o": self.o}
 
 players: dict[int, Player] = {}
 _next_id = 1
@@ -203,6 +204,7 @@ async def ws_handler(request: web.Request):
                         me.active_t, me.active_p = time.monotonic(), list(me.p)
                 me.yaw = fnum(m.get("yaw"), -10, 10)
                 me.a = m.get("a") if m.get("a") in ("i", "w", "r", "s") else "i"  # s : assis
+                me.o = "c" if m.get("o") == "c" else ""
                 me.dirty = True
             elif t == "chat" and not me.guest:
                 text = re.sub(r"[\x00-\x1f\x7f]", "", str(m.get("m", ""))).strip()[:CHAT_MAX]
@@ -295,7 +297,7 @@ async def ticker():
         key = now - last_key > KEYFRAME
         if key:
             last_key = now
-        rows = [[p.id, p.p[0], p.p[1], p.p[2], round(p.yaw, 3), p.a, p.w] for p in players.values() if key or p.dirty]
+        rows = [[p.id, p.p[0], p.p[1], p.p[2], round(p.yaw, 3), p.a, p.w, p.o] for p in players.values() if key or p.dirty]
         for p in players.values():
             p.dirty = False
         if rows:
