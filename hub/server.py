@@ -190,7 +190,8 @@ async def ws_handler(request: web.Request):
                 await send(me, {"t": "welcome", "id": me.id, "name": me.name, "guest": me.guest, "look": me.look,
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
-                                "tournee": max(0, int(_next_tournee - time.monotonic()))})
+                                "tournee": max(0, int(_next_tournee - time.monotonic())),
+                                "borgne": borgne_etat("etat")["s"]})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -218,12 +219,16 @@ async def ws_handler(request: web.Request):
                     me.look["_locked"] = True
                 await broadcast({"t": "look", "id": me.id, "look": me.look})
             # liste alignée sur public/proto/taverne-3d/src/emotes.js (repo jeu) ; une émote par seconde au plus
+            elif t == "borgne" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "garder", "quitter"):
+                me.active_t = time.monotonic()
+                await borgne_action(me, m["a"])
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
                     me.last_emote = me.active_t = now
                     await broadcast({"t": "emote", "id": me.id, "e": m["e"]})
     finally:
+        await borgne_abandon(me.id)
         if players.pop(me.id, None):
             await broadcast({"t": "leave", "id": me.id})
             log.info("départ #%d %s (%d en ligne)", me.id, me.name, len(players))
@@ -264,6 +269,80 @@ async def hello(me: Player, m: dict):
     p = m.get("p")
     if isinstance(p, list) and len(p) == 3:
         me.p = [fnum(p[0]), fnum(p[1], -20, 60), fnum(p[2])]
+
+# ---------------------------------------------------------------- le Borgne entre voyageurs
+# Une seule table (la table longue). Le hub est l'arbitre : il tire les dés, applique les règles
+# (un 1 = pot perdu, garder = pot en poche, premier à 30) et diffuse l'état à tous — les spectateurs
+# voient le dé rouler. Joueurs identifiés seulement ; 90 s sans jouer à son tour = abandon.
+BORGNE_BUT, BORGNE_ATTENTE, BORGNE_LENT = 30, 180, 90
+borgne: dict | None = None
+
+def borgne_etat(evt: str, v: int | None = None) -> dict:
+    b = borgne
+    if not b:
+        return {"t": "borgne", "s": None}
+    return {"t": "borgne", "s": {"j": b["j"], "n": b["n"], "sc": b["sc"], "pot": b["pot"], "tour": b["tour"],
+                                 "g": b.get("g"), "evt": evt, "v": v}}
+
+async def borgne_action(me: Player, a: str):
+    global borgne
+    now = time.monotonic()
+    b = borgne
+    if a == "ouvrir" and not me.guest:
+        if b:
+            return  # une seule table : partie déjà en attente ou en cours
+        borgne = {"j": [me.id, None], "n": [me.name, None], "sc": [0, 0], "pot": 0, "tour": 0, "t": now, "last": now}
+        await broadcast(borgne_etat("attente"))
+    elif a == "rejoindre" and not me.guest and b and b["j"][1] is None and b["j"][0] != me.id and b.get("g") is None:
+        b["j"][1], b["n"][1] = me.id, me.name
+        b["tour"], b["t"], b["last"] = random.randint(0, 1), now, now
+        await broadcast(borgne_etat("debut"))
+    elif a in ("lancer", "garder") and b and b["j"][1] is not None and b.get("g") is None and b["j"][b["tour"]] == me.id:
+        if now - b["last"] < 0.9:  # le dé roule encore
+            return
+        b["last"] = b["t"] = now
+        if a == "lancer":
+            v = random.randint(1, 6)
+            if v == 1:
+                b["pot"], b["tour"] = 0, 1 - b["tour"]
+                await broadcast(borgne_etat("borgne", v))
+            else:
+                b["pot"] += v
+                await broadcast(borgne_etat("lance", v))
+        elif b["pot"] > 0:
+            b["sc"][b["tour"]] += b["pot"]
+            b["pot"] = 0
+            if b["sc"][b["tour"]] >= BORGNE_BUT:
+                b["g"] = b["tour"]
+                await broadcast(borgne_etat("fin"))
+                borgne = None
+            else:
+                b["tour"] = 1 - b["tour"]
+                await broadcast(borgne_etat("garde"))
+    elif a == "quitter" and b and me.id in b["j"]:
+        await borgne_abandon(me.id)
+
+async def borgne_abandon(pid: int):
+    global borgne
+    b = borgne
+    if not b or pid not in b["j"]:
+        return
+    if b["j"][1] is not None and b.get("g") is None:
+        b["g"] = 1 - b["j"].index(pid)
+        await broadcast(borgne_etat("abandon"))
+    borgne = None
+    await broadcast(borgne_etat("ferme"))
+
+async def borgne_veille():
+    while True:
+        await asyncio.sleep(5)
+        b, now = borgne, time.monotonic()
+        if not b:
+            continue
+        if b["j"][1] is None and now - b["t"] > BORGNE_ATTENTE:
+            await borgne_abandon(b["j"][0])
+        elif b["j"][1] is not None and now - b["t"] > BORGNE_LENT:
+            await borgne_abandon(b["j"][b["tour"]])
 
 # ---------------------------------------------------------------- la tournée de Brom
 # Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
@@ -312,12 +391,14 @@ async def on_start(app):
     await load_races()
     app["ticker"] = asyncio.create_task(ticker())
     app["tournees"] = asyncio.create_task(tournees())
+    app["borgne"] = asyncio.create_task(borgne_veille())
     if not SECRET:
         log.warning("GAME_SESSION_SECRET absent : seuls les invités peuvent se connecter")
 
 async def on_stop(app):
     app["ticker"].cancel()
     app["tournees"].cancel()
+    app["borgne"].cancel()
     if _http:
         await _http.close()
 
