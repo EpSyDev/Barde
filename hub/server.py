@@ -187,6 +187,7 @@ async def ws_handler(request: web.Request):
                 await hello(me, m)
                 joined = True
                 players[me.id] = me
+                registre_passage(me)
                 await send(me, {"t": "welcome", "id": me.id, "name": me.name, "guest": me.guest, "look": me.look,
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
@@ -219,6 +220,8 @@ async def ws_handler(request: web.Request):
                     me.look["_locked"] = True
                 await broadcast({"t": "look", "id": me.id, "look": me.look})
             # liste alignée sur public/proto/taverne-3d/src/emotes.js (repo jeu) ; une émote par seconde au plus
+            elif t == "registre":
+                await send(me, registre_vue())
             elif t == "borgne" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "garder", "quitter"):
                 me.active_t = time.monotonic()
                 await borgne_action(me, m["a"])
@@ -270,6 +273,48 @@ async def hello(me: Player, m: dict):
     if isinstance(p, list) and len(p) == 3:
         me.p = [fnum(p[0]), fnum(p[1], -20, 60), fnum(p[2])]
 
+# ---------------------------------------------------------------- registre de la taverne
+# Tableau d'affichage : derniers passages (joueurs identifiés) et palmarès du Borgne entre voyageurs.
+# Petit JSON à côté du hub, réécrit de façon atomique à chaque changement.
+REGISTRE = Path(os.getenv("HUB_REGISTRE") or (Path(__file__).parent / "registre.json"))
+try:
+    registre = json.loads(REGISTRE.read_text(encoding="utf8"))
+except (OSError, ValueError):
+    registre = {}
+registre.setdefault("passages", {})   # discord → {"n": nom, "ts": epoch}
+registre.setdefault("borgne", {})     # discord → {"n": nom, "v": victoires, "p": parties}
+
+def registre_sauver():
+    try:
+        tmp = REGISTRE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(registre, ensure_ascii=False), encoding="utf8")
+        tmp.replace(REGISTRE)
+    except OSError as e:
+        log.warning("registre non enregistré : %s", e)
+
+def registre_passage(p: "Player"):
+    if p.guest or not p.discord:
+        return
+    registre["passages"][p.discord] = {"n": p.name, "ts": int(time.time())}
+    if len(registre["passages"]) > 200:  # on ne garde que les plus récents
+        for k, _ in sorted(registre["passages"].items(), key=lambda kv: kv[1]["ts"])[:50]:
+            registre["passages"].pop(k, None)
+    registre_sauver()
+
+def registre_partie(gagnant: "Player | None", perdant: "Player | None"):
+    for pl, win in ((gagnant, 1), (perdant, 0)):
+        if pl and pl.discord:
+            e = registre["borgne"].setdefault(pl.discord, {"n": pl.name, "v": 0, "p": 0})
+            e["n"], e["v"], e["p"] = pl.name, e["v"] + win, e["p"] + 1
+    registre_sauver()
+
+def registre_vue() -> dict:
+    now = int(time.time())
+    pas = sorted(registre["passages"].values(), key=lambda e: -e["ts"])[:12]
+    top = sorted(registre["borgne"].values(), key=lambda e: (-e["v"], e["p"]))[:8]
+    return {"t": "registre", "passages": [[e["n"], now - e["ts"]] for e in pas],
+            "borgne": [[e["n"], e["v"], e["p"]] for e in top], "tournee": max(0, int(_next_tournee - time.monotonic()))}
+
 # ---------------------------------------------------------------- le Borgne entre voyageurs
 # Une seule table (la table longue). Le hub est l'arbitre : il tire les dés, applique les règles
 # (un 1 = pot perdu, garder = pot en poche, premier à 30) et diffuse l'état à tous — les spectateurs
@@ -314,6 +359,7 @@ async def borgne_action(me: Player, a: str):
             b["pot"] = 0
             if b["sc"][b["tour"]] >= BORGNE_BUT:
                 b["g"] = b["tour"]
+                registre_partie(players.get(b["j"][b["g"]]), players.get(b["j"][1 - b["g"]]))
                 await broadcast(borgne_etat("fin"))
                 borgne = None
             else:
@@ -329,6 +375,7 @@ async def borgne_abandon(pid: int):
         return
     if b["j"][1] is not None and b.get("g") is None:
         b["g"] = 1 - b["j"].index(pid)
+        registre_partie(players.get(b["j"][b["g"]]), players.get(pid))
         await broadcast(borgne_etat("abandon"))
     borgne = None
     await broadcast(borgne_etat("ferme"))
