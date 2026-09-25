@@ -10,6 +10,7 @@ from . import journal  # noqa: F401
 from . import membres  # noqa: F401
 from . import messages  # noqa: F401
 from . import moderation  # noqa: F401
+from . import taverne3d  # noqa: F401
 from . import tempvoice  # noqa: F401
 from . import tickets  # noqa: F401
 from . import welcome  # noqa: F401

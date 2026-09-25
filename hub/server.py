@@ -186,8 +186,11 @@ async def ws_handler(request: web.Request):
                     continue
                 await hello(me, m)
                 joined = True
+                seul = not any(not p.guest for p in players.values())
                 players[me.id] = me
                 registre_passage(me)
+                if seul:
+                    asyncio.create_task(annoncer("ouverture", me))
                 await send(me, {"t": "welcome", "id": me.id, "name": me.name, "guest": me.guest, "look": me.look,
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
@@ -315,6 +318,24 @@ def registre_vue() -> dict:
     return {"t": "registre", "passages": [[e["n"], now - e["ts"]] for e in pas],
             "borgne": [[e["n"], e["v"], e["p"]] for e in top], "tournee": max(0, int(_next_tournee - time.monotonic()))}
 
+# ---------------------------------------------------------------- annonces sur Discord
+# La taverne fait signe (module Fripouille taverne3d) : un voyageur identifié entre dans une salle
+# vide, ou quelqu'un cherche un adversaire au Borgne. Fréquences bornées ici, texte rédigé par le bot.
+_annonce_t = {"ouverture": 0.0, "borgne": 0.0}
+_annonce_joueur: dict[str, float] = {}
+ANNONCE_ECART = {"ouverture": 15 * 60, "borgne": 10 * 60}
+ANNONCE_JOUEUR = 3 * 3600
+
+async def annoncer(kind: str, p: "Player"):
+    now = time.monotonic()
+    if p.guest or not p.discord or now - _annonce_t[kind] < ANNONCE_ECART[kind]:
+        return
+    if kind == "ouverture" and now - _annonce_joueur.get(p.discord, -1e9) < ANNONCE_JOUEUR:
+        return
+    _annonce_t[kind] = now
+    _annonce_joueur[p.discord] = now
+    await frip("annonce", {"type": kind, "nom": p.name}, "taverne3d")
+
 # ---------------------------------------------------------------- le Borgne entre voyageurs
 # Une seule table (la table longue). Le hub est l'arbitre : il tire les dés, applique les règles
 # (un 1 = pot perdu, garder = pot en poche, premier à 30) et diffuse l'état à tous — les spectateurs
@@ -338,6 +359,7 @@ async def borgne_action(me: Player, a: str):
             return  # une seule table : partie déjà en attente ou en cours
         borgne = {"j": [me.id, None], "n": [me.name, None], "sc": [0, 0], "pot": 0, "tour": 0, "t": now, "last": now}
         await broadcast(borgne_etat("attente"))
+        asyncio.create_task(annoncer("borgne", me))
     elif a == "rejoindre" and not me.guest and b and b["j"][1] is None and b["j"][0] != me.id and b.get("g") is None:
         b["j"][1], b["n"][1] = me.id, me.name
         b["tour"], b["t"], b["last"] = random.randint(0, 1), now, now
