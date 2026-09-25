@@ -117,10 +117,11 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "w", "p", "yaw", "a", "dirty", "last_chat", "rate_t", "rate_n")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "rate_t", "rate_n")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
+        self.refused = False            # jeton présenté mais invalide ou expiré
         self.w, self.p, self.yaw, self.a = "in", [0.0, 0.0, 0.0], 0.0, "i"
         self.dirty = True
         self.last_chat = 0.0
@@ -182,6 +183,7 @@ async def ws_handler(request: web.Request):
                 joined = True
                 players[me.id] = me
                 await send(me, {"t": "welcome", "id": me.id, "name": me.name, "guest": me.guest, "look": me.look,
+                                "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id]})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
@@ -215,8 +217,14 @@ async def ws_handler(request: web.Request):
     return ws
 
 async def hello(me: Player, m: dict):
-    sess = verify_token(m.get("token") or "")
+    token = m.get("token") or ""
+    sess = verify_token(token) if isinstance(token, str) else None
+    if token and not sess:
+        # secret désaccordé avec le dashboard ou session expirée : à voir tout de suite dans le journal
+        me.refused = True
+        log.warning("jeton refusé (signature invalide ou expiré) — connexion en invité")
     race_forced = None
+    stored = None
     if sess:
         me.guest, me.discord = False, sess["sub"]
         me.name = str(sess.get("username") or "Voyageur")[:32]
@@ -224,13 +232,16 @@ async def hello(me: Player, m: dict):
         if st and st.get("baptise"):
             me.name = str(st.get("nom_rp") or me.name)[:40]
             race_forced = st.get("race")
+        # apparence enregistrée chez le bot : fait foi (le client peut en avoir une copie périmée)
+        got = await frip("apparence", {"user_id": sess["sub"]})
+        stored = got.get("look") if got else None
         # une seule présence par compte : l'ancienne connexion laisse la place
         for p in list(players.values()):
             if p.discord == me.discord:
                 await p.ws.close(code=4009, message=b"connecte ailleurs")
     else:
         me.name = f"Voyageur {random.randint(100, 999)}"
-    me.look = clean_look(m.get("look"), race_forced) if sess else {"race": None, "cape": True}
+    me.look = clean_look(stored or m.get("look"), race_forced) if sess else {"race": None, "cape": True}
     if race_forced:
         me.look["_locked"] = True
     w = m.get("w")

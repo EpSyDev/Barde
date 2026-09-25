@@ -13,7 +13,9 @@ dans ``fancy`` — cf. mémoire.
 Vue persistante : le bouton du panneau (`bapteme:start`). Le parcours d'après est une
 suite de vues éphémères à état (durée de vie = l'interaction).
 """
+import json
 import logging
+import re
 from datetime import datetime, timezone
 
 import discord
@@ -706,6 +708,65 @@ async def setup_persistent(bot):
         bot.add_view(PanelView(cfg.get("button_label")))
 
 
+# --- Apparence du personnage (Taverne 3D) ---
+# Fichier dédié, hors du ConfigStore : une sauvegarde de la config du baptême depuis le
+# dashboard ne doit pas pouvoir écraser les apparences avec une copie périmée.
+# Mêmes bornes que le hub (hub/server.py:clean_look) ; la race suit toujours le baptême.
+APPARENCES_PATH = config.DATA_DIR / "apparences.json"
+_LOOK_KEY = re.compile(r"^[a-z_]{1,20}$")
+
+
+def _load_apparences() -> dict:
+    try:
+        return json.loads(APPARENCES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _clean_look(look, race_forced):
+    look = look if isinstance(look, dict) else {}
+    out = {}
+    race = race_forced or look.get("race")
+    if race in data.RACES:
+        out["race"] = race
+    if look.get("genre") in ("m", "f"):
+        out["genre"] = look["genre"]
+    for k in ("teint", "cCheveux", "tenue"):
+        v = look.get(k)
+        if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 16:
+            out[k] = v
+    for k in ("cheveux", "barbe"):
+        v = look.get(k)
+        if isinstance(v, str) and _LOOK_KEY.match(v):
+            out[k] = v
+    out["cape"] = bool(look.get("cape"))
+    return out
+
+
+async def action_apparence(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    return {"ok": True, "look": _load_apparences().get(uid)}
+
+
+async def action_apparence_enregistrer(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    statut = await action_statut(bot, {"user_id": uid})
+    look = _clean_look(payload.get("look"), statut.get("race") if statut.get("baptise") else None)
+    if "race" not in look:
+        raise ValueError("race inconnue")
+    apparences = _load_apparences()
+    apparences[uid] = look
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = APPARENCES_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(apparences, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(APPARENCES_PATH)
+    return {"ok": True, "look": look}
+
+
 MODULE = register(Module(
     key="bapteme",
     label="Baptême",
@@ -718,5 +779,7 @@ MODULE = register(Module(
         "options": action_options,
         "generer_nom": action_generer_nom,
         "consacrer": action_consacrer,
+        "apparence": action_apparence,
+        "apparence_enregistrer": action_apparence_enregistrer,
     },
 ))
