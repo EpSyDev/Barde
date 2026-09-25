@@ -196,7 +196,7 @@ async def ws_handler(request: web.Request):
                 if isinstance(p, list) and len(p) == 3:
                     me.p = [fnum(p[0]), fnum(p[1], -20, 60), fnum(p[2])]
                 me.yaw = fnum(m.get("yaw"), -10, 10)
-                me.a = m.get("a") if m.get("a") in ("i", "w", "r") else "i"
+                me.a = m.get("a") if m.get("a") in ("i", "w", "r", "s") else "i"  # s : assis
                 me.dirty = True
             elif t == "chat" and not me.guest:
                 text = re.sub(r"[\x00-\x1f\x7f]", "", str(m.get("m", ""))).strip()[:CHAT_MAX]
