@@ -78,6 +78,7 @@ type Item = {
   role_id: string | null;
   stock: number | null; // null = illimité
   enabled: boolean;
+  taverne: boolean; // objet servi par Brom dans la Taverne 3D (jeu MYRHAVEN)
 };
 type Role = { id: string; name: string; color: number };
 type Category = { id: string; name: string };
@@ -98,6 +99,7 @@ const newItem = (): Item => ({
   role_id: null,
   stock: null,
   enabled: true,
+  taverne: false,
 });
 
 function formatAmount(devise: Devise, amount: number): string {
@@ -162,6 +164,7 @@ const serialize = (cfg: EcoCfg) => ({
       role_id: it.type === "role" ? it.role_id : null,
       stock: it.stock == null ? null : Math.max(0, Number(it.stock) || 0),
       enabled: it.enabled,
+      taverne: it.type === "objet" && it.taverne,
     })),
 });
 
@@ -508,6 +511,17 @@ export default function Economie() {
                       <option value="role">🎭 Rôle Discord</option>
                       <option value="objet">📦 Objet (cosmétique / custom)</option>
                     </select>
+                    {it.type === "objet" && (
+                      <label className="cfg-toggle compact" style={{ marginTop: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={it.taverne}
+                          onChange={(e) => patchItem(it.id, { taverne: e.target.checked })}
+                        />
+                        <span className="switch" />
+                        <span>Servi par Brom à la Taverne (jeu 3D)</span>
+                      </label>
+                    )}
                   </div>
                   <div className="cfg-field">
                     <label>Stock</label>

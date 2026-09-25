@@ -63,7 +63,8 @@ DEFAULTS = {
         "seuil_reactions": {"enabled": False, "montant": 20, "seuil": 10},  # auteur d'un message très réagi
     },
     # Catalogue de la boutique : liste d'articles éditée au dashboard.
-    # Article = {id, nom, description, prix, type("role"|"objet"), role_id, stock, enabled}
+    # Article = {id, nom, description, prix, type("role"|"objet"), role_id, stock, enabled, taverne}
+    # taverne : objet servi par Brom dans la Taverne 3D (voir action_taverne).
     # stock : None ou -1 = illimité.
     "boutique": [],
     # Récompenses ponctuelles déclenchables depuis d'autres systèmes (ex. le jeu MYRHAVEN),
@@ -1105,6 +1106,29 @@ async def action_solde(bot, payload) -> dict:
     return {"ok": True, "balance": bot.economy.balance(user_id)}
 
 
+async def action_taverne(bot, payload) -> dict:
+    """Carte de Brom dans la Taverne 3D : articles « objet » en vente marqués ``taverne``
+    au dashboard, la devise pour l'affichage et, si ``user_id`` est fourni, le solde.
+    L'achat reste ``acheter`` (prix résolu ici, jamais par l'appelant)."""
+    cfg = _cfg(bot)
+    carte = [
+        {
+            "id": str(it.get("id")),
+            "nom": it.get("nom") or "",
+            "description": it.get("description") or "",
+            "prix": _int(it.get("prix"), 0),
+            "epuise": not _stock_illimite(it) and _int(it.get("stock"), 0) <= 0,
+        }
+        for it in (cfg.get("boutique") or [])
+        if it.get("enabled") and it.get("type") == "objet" and it.get("taverne")
+    ]
+    out = {"ok": True, "devise": cfg.get("devise") or {}, "carte": carte}
+    user_id = payload.get("user_id")
+    if user_id:
+        out["balance"] = bot.economy.balance(user_id)
+    return out
+
+
 async def action_crediter_evenement(bot, payload) -> dict:
     """Crédite une récompense d'``evenements`` — une seule fois par joueur et par
     ``event_id`` (anti-rejeu via le même mécanisme de cooldown que ``/daily``), pour
@@ -1264,6 +1288,7 @@ MODULE = register(Module(
         "solde": action_solde,
         "crediter_evenement": action_crediter_evenement,
         "acheter": action_acheter,
+        "taverne": action_taverne,
         "tresorerie": action_tresorerie,
         "mouvements": action_mouvements,
         "annuler": action_annuler,
