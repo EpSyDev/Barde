@@ -13,6 +13,8 @@ type Devise = {
 
 type GainKey =
   | "message"
+  | "taverne_visite"
+  | "taverne_tournee"
   | "daily"
   | "reaction"
   | "vocal"
@@ -52,6 +54,8 @@ const GAIN_META: GainMeta[] = [
   { key: "ticket_resolu", label: "Ticket résolu (staff)", hint: "Crédité au membre qui a pris en charge le ticket." },
   { key: "seuil_reactions", label: "Message très réagi (auteur)", hint: "Récompense l'auteur, une fois par message.", extra: "seuil" },
   { key: "anciennete", label: "Palier d'ancienneté", hint: "Paliers en jours depuis l'arrivée, séparés par des virgules (ex. 30, 90, 365).", extra: "paliers" },
+  { key: "taverne_visite", label: "Taverne 3D : première visite du jour", hint: "Crédité en entrant dans la Taverne 3D. Délai en secondes entre deux visites récompensées (72000 = 20 h).", extra: "cooldown" },
+  { key: "taverne_tournee", label: "Taverne 3D : tournée de Brom", hint: "Toutes les 20 min, à chaque joueur présent et actif dans la taverne ou sur l'esplanade (6 fois par jour au plus)." },
 ];
 
 const DEFAULT_GAIN_RULE: GainRule = { enabled: false, montant: 0, cooldown: 60, minutes: 30, seuil: 10, paliers_jours: [30, 90, 365] };

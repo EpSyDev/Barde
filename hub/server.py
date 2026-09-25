@@ -49,6 +49,8 @@ CHAT_GAP = 1.2                  # secondes entre deux messages de discussion
 CHAT_MAX = 140
 WORLDS = {"in", "out"}
 EMOTES = {"salut", "trinque", "danse", "oui", "non", "bras"}
+TOURNEE = int(os.getenv("HUB_TOURNEE") or 20 * 60)  # la tournée de Brom sonne toutes les 20 min
+ACTIF = 10 * 60                  # compte pour la tournée : a bougé / parlé / fait une émote depuis 10 min
 BOUND = 250.0
 
 log = logging.getLogger("hub")
@@ -75,11 +77,11 @@ def verify_token(token: str) -> dict | None:
 _http: ClientSession | None = None
 _races: set[str] = set()
 
-async def frip(action: str, payload: dict) -> dict | None:
+async def frip(action: str, payload: dict, module: str = "bapteme") -> dict | None:
     if not FRIP_TOKEN or _http is None:
         return None
     try:
-        async with _http.post(f"{FRIP_BASE}/api/action/bapteme/{action}", json=payload,
+        async with _http.post(f"{FRIP_BASE}/api/action/{module}/{action}", json=payload,
                               headers={"X-Api-Token": FRIP_TOKEN}) as r:
             if r.status != 200:
                 return None
@@ -118,7 +120,7 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
@@ -126,6 +128,7 @@ class Player:
         self.w, self.p, self.yaw, self.a = "in", [0.0, 0.0, 0.0], 0.0, "i"
         self.dirty = True
         self.last_chat = self.last_emote = 0.0
+        self.active_t, self.active_p = time.monotonic(), [0.0, 0.0, 0.0]
         self.rate_t, self.rate_n = time.monotonic(), 0
 
     def pub(self):
@@ -185,7 +188,8 @@ async def ws_handler(request: web.Request):
                 players[me.id] = me
                 await send(me, {"t": "welcome", "id": me.id, "name": me.name, "guest": me.guest, "look": me.look,
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
-                                "players": [p.pub() for p in players.values() if p.id != me.id]})
+                                "players": [p.pub() for p in players.values() if p.id != me.id],
+                                "tournee": max(0, int(_next_tournee - time.monotonic()))})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -195,13 +199,15 @@ async def ws_handler(request: web.Request):
                 p = m.get("p")
                 if isinstance(p, list) and len(p) == 3:
                     me.p = [fnum(p[0]), fnum(p[1], -20, 60), fnum(p[2])]
+                    if abs(me.p[0] - me.active_p[0]) + abs(me.p[2] - me.active_p[2]) > 0.5:
+                        me.active_t, me.active_p = time.monotonic(), list(me.p)
                 me.yaw = fnum(m.get("yaw"), -10, 10)
                 me.a = m.get("a") if m.get("a") in ("i", "w", "r", "s") else "i"  # s : assis
                 me.dirty = True
             elif t == "chat" and not me.guest:
                 text = re.sub(r"[\x00-\x1f\x7f]", "", str(m.get("m", ""))).strip()[:CHAT_MAX]
                 if text and now - me.last_chat >= CHAT_GAP:
-                    me.last_chat = now
+                    me.last_chat = me.active_t = now
                     await broadcast({"t": "chat", "id": me.id, "m": text})
             elif t == "look" and not me.guest:
                 locked = me.look.get("_locked")
@@ -213,7 +219,7 @@ async def ws_handler(request: web.Request):
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
-                    me.last_emote = now
+                    me.last_emote = me.active_t = now
                     await broadcast({"t": "emote", "id": me.id, "e": m["e"]})
     finally:
         if players.pop(me.id, None):
@@ -257,6 +263,27 @@ async def hello(me: Player, m: dict):
     if isinstance(p, list) and len(p) == 3:
         me.p = [fnum(p[0]), fnum(p[1], -20, 60), fnum(p[2])]
 
+# ---------------------------------------------------------------- la tournée de Brom
+# Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
+# reçoit la tournée — le bot décide du montant, du plafond quotidien et du rôle requis.
+_next_tournee = 0.0
+
+async def tournees():
+    global _next_tournee
+    while True:
+        _next_tournee = time.monotonic() + TOURNEE
+        await asyncio.sleep(TOURNEE)
+        if not players:
+            continue
+        now = time.monotonic()
+        actifs = [p for p in players.values() if not p.guest and p.discord and now - p.active_t < ACTIF]
+        res = await frip("tournee", {"user_ids": [p.discord for p in actifs]}, "economie") if actifs else None
+        ok = set((res or {}).get("credites") or [])
+        montant = int((res or {}).get("montant") or 0)
+        _next_tournee = time.monotonic() + TOURNEE
+        await broadcast({"t": "tournee", "m": montant, "ids": [p.id for p in actifs if p.discord in ok], "next": TOURNEE})
+        log.info("tournée : %d actif(s), %d crédité(s) de %d", len(actifs), len(ok), montant)
+
 # ---------------------------------------------------------------- boucle d'instantanés
 async def ticker():
     last_key = 0.0
@@ -282,11 +309,13 @@ async def on_start(app):
     _http = ClientSession(timeout=ClientTimeout(total=4))
     await load_races()
     app["ticker"] = asyncio.create_task(ticker())
+    app["tournees"] = asyncio.create_task(tournees())
     if not SECRET:
         log.warning("GAME_SESSION_SECRET absent : seuls les invités peuvent se connecter")
 
 async def on_stop(app):
     app["ticker"].cancel()
+    app["tournees"].cancel()
     if _http:
         await _http.close()
 

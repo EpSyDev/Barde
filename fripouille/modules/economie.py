@@ -58,6 +58,10 @@ DEFAULTS = {
         "bapteme": {"enabled": False, "montant": 100},                    # baptême complété, une fois/compte
         "role_jeu": {"enabled": False, "montant": 25},                    # premier rôle-jeu choisi, une fois/compte
         "boost": {"enabled": False, "montant": 200},                      # à chaque nouveau boost du serveur
+        # Taverne 3D (jeu MYRHAVEN) : première visite du jour, et « tournée de Brom » sonnée par le hub
+        # toutes les 20 min pour les joueurs présents et actifs (plafond TOURNEES_MAX par jour).
+        "taverne_visite": {"enabled": False, "montant": 30, "cooldown": 72000},
+        "taverne_tournee": {"enabled": False, "montant": 5},
         "ticket_resolu": {"enabled": False, "montant": 30},                # au membre staff qui a pris en charge
         "anciennete": {"enabled": False, "montant": 100, "paliers_jours": [30, 90, 365]},
         "seuil_reactions": {"enabled": False, "montant": 20, "seuil": 10},  # auteur d'un message très réagi
@@ -1129,6 +1133,64 @@ async def action_taverne(bot, payload) -> dict:
     return out
 
 
+TOURNEES_MAX = 6  # tournées créditées par joueur et par jour (anti-AFK)
+
+
+def _jour() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+async def action_visite_taverne(bot, payload) -> dict:
+    """Première visite de la Taverne 3D dans la fenêtre ``cooldown`` (20 h par défaut) :
+    crédite ``gains.taverne_visite``. Appelée par le jeu via le dashboard (session Discord)."""
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValueError("user_id requis")
+    rule = (_cfg(bot).get("gains") or {}).get("taverne_visite") or {}
+    if not rule.get("enabled") or _int(rule.get("montant"), 0) <= 0:
+        return {"ok": False, "error": "inactif"}
+    member = _resolve_member(bot, user_id)
+    if not member or not _has_race_role(member):
+        return {"ok": False, "error": "role_requis"}
+    now = datetime.now(timezone.utc)
+    last = bot.economy.get_cooldown(user_id, "taverne_visite")
+    cd = max(3600, _int(rule.get("cooldown"), 72000))
+    if last and (now - last).total_seconds() < cd:
+        return {"ok": False, "error": "deja", "prochaine": int(cd - (now - last).total_seconds())}
+    bot.economy.set_cooldown(user_id, "taverne_visite", now)
+    montant = _int(rule.get("montant"), 0)
+    bal = bot.economy.credit(user_id, montant, "taverne:visite")
+    return {"ok": True, "montant": montant, "balance": bal}
+
+
+async def action_tournee(bot, payload) -> dict:
+    """Tournée de Brom : appelée par le hub temps réel (serveur de confiance, jeton API) avec la
+    liste des joueurs présents ET actifs. Crédite ``gains.taverne_tournee`` à chacun, au plus
+    ``TOURNEES_MAX`` fois par jour et par joueur (créneaux ``tournee1..N`` datés du jour)."""
+    ids = [str(u) for u in (payload.get("user_ids") or [])][:100]
+    rule = (_cfg(bot).get("gains") or {}).get("taverne_tournee") or {}
+    montant = _int(rule.get("montant"), 0)
+    if not rule.get("enabled") or montant <= 0:
+        return {"ok": True, "montant": 0, "credites": []}
+    jour, credites = _jour(), []
+    for uid in dict.fromkeys(ids):
+        member = _resolve_member(bot, uid)
+        if not member or not _has_race_role(member):
+            continue
+        slot = None
+        for k in range(1, TOURNEES_MAX + 1):
+            last = bot.economy.get_cooldown(uid, f"tournee{k}")
+            if not last or last.strftime("%Y-%m-%d") != jour:
+                slot = k
+                break
+        if slot is None:
+            continue
+        bot.economy.set_cooldown(uid, f"tournee{slot}", datetime.now(timezone.utc))
+        bot.economy.credit(uid, montant, "taverne:tournee")
+        credites.append(uid)
+    return {"ok": True, "montant": montant, "credites": credites}
+
+
 async def action_crediter_evenement(bot, payload) -> dict:
     """Crédite une récompense d'``evenements`` — une seule fois par joueur et par
     ``event_id`` (anti-rejeu via le même mécanisme de cooldown que ``/daily``), pour
@@ -1289,6 +1351,8 @@ MODULE = register(Module(
         "crediter_evenement": action_crediter_evenement,
         "acheter": action_acheter,
         "taverne": action_taverne,
+        "visite_taverne": action_visite_taverne,
+        "tournee": action_tournee,
         "tresorerie": action_tresorerie,
         "mouvements": action_mouvements,
         "annuler": action_annuler,
