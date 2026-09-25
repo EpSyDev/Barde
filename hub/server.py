@@ -217,6 +217,8 @@ async def ws_handler(request: web.Request):
     return ws
 
 async def hello(me: Player, m: dict):
+    if not _races:  # bot pas encore prêt au démarrage du hub (redémarrage simultané)
+        await load_races()
     token = m.get("token") or ""
     sess = verify_token(token) if isinstance(token, str) else None
     if token and not sess:
