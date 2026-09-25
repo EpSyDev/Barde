@@ -48,6 +48,7 @@ MAX_RATE = 40                   # messages / seconde avant expulsion
 CHAT_GAP = 1.2                  # secondes entre deux messages de discussion
 CHAT_MAX = 140
 WORLDS = {"in", "out"}
+EMOTES = {"salut", "trinque", "danse", "oui", "non", "bras"}
 BOUND = 250.0
 
 log = logging.getLogger("hub")
@@ -117,14 +118,14 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "rate_t", "rate_n")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
         self.refused = False            # jeton présenté mais invalide ou expiré
         self.w, self.p, self.yaw, self.a = "in", [0.0, 0.0, 0.0], 0.0, "i"
         self.dirty = True
-        self.last_chat = 0.0
+        self.last_chat = self.last_emote = 0.0
         self.rate_t, self.rate_n = time.monotonic(), 0
 
     def pub(self):
@@ -208,8 +209,12 @@ async def ws_handler(request: web.Request):
                 if locked:
                     me.look["_locked"] = True
                 await broadcast({"t": "look", "id": me.id, "look": me.look})
-            elif t == "emote" and m.get("e") in ("salut", "trinque", "danse"):
-                await broadcast({"t": "emote", "id": me.id, "e": m["e"]})
+            # liste alignée sur public/proto/taverne-3d/src/emotes.js (repo jeu) ; une émote par seconde au plus
+            elif t == "emote" and m.get("e") in EMOTES:
+                now = time.monotonic()
+                if now - me.last_emote >= 1:
+                    me.last_emote = now
+                    await broadcast({"t": "emote", "id": me.id, "e": m["e"]})
     finally:
         if players.pop(me.id, None):
             await broadcast({"t": "leave", "id": me.id})
