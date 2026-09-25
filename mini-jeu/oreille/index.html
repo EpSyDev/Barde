@@ -1,0 +1,57 @@
+<meta charset="utf-8">
+<title>L'Oreille de Myrhaven</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,600;0,700;1,400&family=Alegreya+SC:wght@500;700&family=Pirata+One&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div id="app">
+  <header class="hud">
+    <div class="enseigne" aria-label="L'Oreille de Myrhaven">L'Oreille <span>de Myrhaven</span></div>
+    <div class="jauges">
+      <div class="jauge" title="Écus"><span class="piece" aria-hidden="true"></span><b id="h-ecus">0</b><small>écus</small></div>
+      <div class="jauge renom" title="Renommée">
+        <div><b id="h-titre">Commis</b> <small id="h-niv">niv. 1</small></div>
+        <div class="barre"><i id="h-xp"></i></div>
+      </div>
+      <div class="jauge" title="Rumeurs recueillies"><span class="sceau" aria-hidden="true"></span><b id="h-rum">0</b><small>/48</small></div>
+      <div class="jauge heure" title="Heure de Myrhaven (la tienne)"><span id="h-lune" aria-hidden="true"></span><b id="h-heure">--:--</b></div>
+    </div>
+    <div class="outils">
+      <button id="b-son" class="mini" type="button" aria-pressed="false">Son : non</button>
+      <button id="b-menu" class="mini" type="button">Registre</button>
+    </div>
+  </header>
+
+  <nav class="onglets" aria-label="Lieux">
+    <button type="button" data-onglet="salle" class="actif">La salle <em id="badge-salle" hidden></em></button>
+    <button type="button" data-onglet="cave">La cave <em id="badge-cave" hidden></em></button>
+    <button type="button" data-onglet="marche">Le marché <em id="badge-marche" hidden></em></button>
+    <button type="button" data-onglet="carte">La carte</button>
+    <button type="button" data-onglet="ardoise">L'ardoise <em id="badge-ardoise" hidden></em></button>
+    <button type="button" data-onglet="travaux">Travaux</button>
+  </nav>
+
+  <main>
+    <section class="scene" id="scene" aria-live="polite">
+      <img class="fond" id="fond" src="assets/salle.webp" alt="La salle commune de la Taverne du Gaming">
+      <div class="lueur" aria-hidden="true"></div>
+      <div class="calque" id="calque"></div>
+    </section>
+
+    <div class="bandeau" id="bandeau">
+      <img src="assets/tavernier.webp" alt="" class="portrait">
+      <div><b>Le tavernier</b><p id="replique">…</p></div>
+    </div>
+
+    <section class="panneau" id="panneau"></section>
+  </main>
+
+  <div id="flottants" aria-hidden="true"></div>
+  <div id="toasts" role="status"></div>
+  <div id="modale" class="modale" hidden></div>
+</div>
+
+<script src="data.js" charset="utf-8"></script>
+<script src="game.js" charset="utf-8"></script>
