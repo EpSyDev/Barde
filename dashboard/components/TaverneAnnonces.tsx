@@ -8,7 +8,7 @@ type Channel = { id: string; name: string; category: string | null };
 type Cfg = { enabled: boolean; channel_id: string | null; lien: string };
 
 /** Annonces Discord de la Taverne 3D (module Fripouille « taverne3d ») : le hub du jeu fait signe
- *  quand un voyageur entre dans une salle vide ou cherche un adversaire au Borgne. */
+ *  quand un voyageur entre dans une salle vide ou cherche des adversaires (Borgne, Dé menteur). */
 export default function TaverneAnnonces() {
   const mod = useModuleConfig<Cfg>("taverne3d", (d) => ({
     enabled: !!d.enabled,
@@ -33,7 +33,7 @@ export default function TaverneAnnonces() {
           <h2>Taverne 3D : annonces sur Discord</h2>
           <p>
             Le jeu fait signe quand un voyageur pousse la porte d'une taverne vide (au plus une fois
-            par quart d'heure, et toutes les 3 h par joueur) ou cherche un adversaire au Borgne.
+            par quart d'heure, et toutes les 3 h par joueur) ou cherche des adversaires (Borgne, Dé menteur).
           </p>
         </div>
       </div>

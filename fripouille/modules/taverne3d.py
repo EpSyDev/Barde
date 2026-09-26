@@ -2,7 +2,7 @@
 
 Le hub temps réel de la Taverne 3D (``hub/server.py``) appelle l'action ``annonce`` quand la
 taverne s'anime : un voyageur pousse la porte d'une salle vide, ou quelqu'un cherche un
-adversaire au Borgne. Le texte est rédigé ici (nom échappé), le hub ne fait que choisir le type
+adversaire au Borgne ou au Dé menteur. Le texte est rédigé ici (nom échappé), le hub ne fait que choisir le type
 et limite la fréquence de son côté.
 
 Config (dashboard, page Jeux) :
@@ -27,6 +27,7 @@ DEFAULTS = {
 TEXTES = {
     "ouverture": "🍺 **{nom}** vient de pousser la porte de la Taverne. Le feu crépite, Brom essuie une chope… [Entrer]({lien})",
     "borgne": "🎲 **{nom}** cherche un adversaire au **Borgne**, à la table longue. Qui relève le défi ? [Entrer dans la Taverne]({lien})",
+    "menteur": "🎲 **{nom}** ouvre une partie de **Dé menteur** à la table ronde (2 à 6 voyageurs). Gobelets en main ! [Entrer dans la Taverne]({lien})",
 }
 
 

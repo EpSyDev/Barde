@@ -195,7 +195,7 @@ async def ws_handler(request: web.Request):
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
                                 "tournee": max(0, int(_next_tournee - time.monotonic())),
-                                "borgne": borgne_etat("etat")["s"]})
+                                "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"]})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -228,6 +228,9 @@ async def ws_handler(request: web.Request):
             elif t == "borgne" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "garder", "quitter"):
                 me.active_t = time.monotonic()
                 await borgne_action(me, m["a"])
+            elif t == "menteur" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "miser", "menteur", "quitter"):
+                me.active_t = time.monotonic()
+                await menteur_action(me, m["a"], m)
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
@@ -235,6 +238,7 @@ async def ws_handler(request: web.Request):
                     await broadcast({"t": "emote", "id": me.id, "e": m["e"]})
     finally:
         await borgne_abandon(me.id)
+        await menteur_quitte(me.id)
         if players.pop(me.id, None):
             await broadcast({"t": "leave", "id": me.id})
             log.info("départ #%d %s (%d en ligne)", me.id, me.name, len(players))
@@ -286,6 +290,7 @@ except (OSError, ValueError):
     registre = {}
 registre.setdefault("passages", {})   # discord → {"n": nom, "ts": epoch}
 registre.setdefault("borgne", {})     # discord → {"n": nom, "v": victoires, "p": parties}
+registre.setdefault("menteur", {})    # idem pour le Dé menteur
 
 def registre_sauver():
     try:
@@ -304,26 +309,27 @@ def registre_passage(p: "Player"):
             registre["passages"].pop(k, None)
     registre_sauver()
 
-def registre_partie(gagnant: "Player | None", perdant: "Player | None"):
-    for pl, win in ((gagnant, 1), (perdant, 0)):
+def registre_partie(gagnant: "Player | None", perdant: "Player | None", jeu: str = "borgne", autres=()):
+    for pl, win in ((gagnant, 1), (perdant, 0), *((a, 0) for a in autres)):
         if pl and pl.discord:
-            e = registre["borgne"].setdefault(pl.discord, {"n": pl.name, "v": 0, "p": 0})
+            e = registre[jeu].setdefault(pl.discord, {"n": pl.name, "v": 0, "p": 0})
             e["n"], e["v"], e["p"] = pl.name, e["v"] + win, e["p"] + 1
     registre_sauver()
 
 def registre_vue() -> dict:
     now = int(time.time())
     pas = sorted(registre["passages"].values(), key=lambda e: -e["ts"])[:12]
-    top = sorted(registre["borgne"].values(), key=lambda e: (-e["v"], e["p"]))[:8]
+    def top(jeu):
+        return [[e["n"], e["v"], e["p"]] for e in sorted(registre[jeu].values(), key=lambda e: (-e["v"], e["p"]))[:8]]
     return {"t": "registre", "passages": [[e["n"], now - e["ts"]] for e in pas],
-            "borgne": [[e["n"], e["v"], e["p"]] for e in top], "tournee": max(0, int(_next_tournee - time.monotonic()))}
+            "borgne": top("borgne"), "menteur": top("menteur"), "tournee": max(0, int(_next_tournee - time.monotonic()))}
 
 # ---------------------------------------------------------------- annonces sur Discord
 # La taverne fait signe (module Fripouille taverne3d) : un voyageur identifié entre dans une salle
 # vide, ou quelqu'un cherche un adversaire au Borgne. Fréquences bornées ici, texte rédigé par le bot.
-_annonce_t = {"ouverture": 0.0, "borgne": 0.0}
+_annonce_t = {"ouverture": 0.0, "borgne": 0.0, "menteur": 0.0}
 _annonce_joueur: dict[str, float] = {}
-ANNONCE_ECART = {"ouverture": 15 * 60, "borgne": 10 * 60}
+ANNONCE_ECART = {"ouverture": 15 * 60, "borgne": 10 * 60, "menteur": 10 * 60}
 ANNONCE_JOUEUR = 3 * 3600
 
 async def annoncer(kind: str, p: "Player"):
@@ -413,6 +419,159 @@ async def borgne_veille():
         elif b["j"][1] is not None and now - b["t"] > BORGNE_LENT:
             await borgne_abandon(b["j"][b["tour"]])
 
+# ---------------------------------------------------------------- le Dé menteur entre voyageurs
+# Perudo à la table ronde : 2 à 6 voyageurs, 5 dés chacun sous un gobelet. Le hub tire les dés et ne
+# les envoie qu'à leur propriétaire (message « menteur_des ») ; l'état public (mises, nombre de dés)
+# va à toute la salle. Les 1 (l'œil du Borgne) sont jokers, sauf quand on mise sur les 1.
+# « Menteur ! » : on soulève tous les gobelets (dés révélés à tous), le perdant laisse un dé.
+# Liste d'actions et règle de surenchère alignées sur public/proto/taverne-3d/src/menteur.js (repo jeu).
+MENTEUR_MAX, MENTEUR_DES, MENTEUR_ATTENTE, MENTEUR_LENT, MENTEUR_REVELE = 6, 5, 240, 60, 5.5
+menteur: dict | None = None
+
+def menteur_etat(evt: str, extra: dict | None = None) -> dict:
+    m = menteur
+    if not m:
+        return {"t": "menteur", "s": None, "evt": evt}
+    return {"t": "menteur", "s": {"j": m["j"], "n": m["n"], "nd": [len(d) for d in m["d"]], "tour": m["tour"],
+                                  "mise": m["mise"], "mi": m["mi"], "manche": m["manche"], "jeu": m["jeu"],
+                                  "pause": m["pause"], "g": m.get("g"), "evt": evt, **(extra or {})}}
+
+def menteur_legal(mise, q, f, total: int) -> bool:
+    """Surenchère : plus de dés, ou autant d'une face plus forte. Passer aux 1 divise par deux, en revenir double."""
+    if not (isinstance(q, int) and isinstance(f, int) and 1 <= f <= 6 and 1 <= q <= total):
+        return False
+    if not mise:
+        return f != 1  # on n'ouvre pas une manche sur l'œil
+    q0, f0 = mise
+    if f0 == 1 and f == 1:
+        return q > q0
+    if f0 == 1:
+        return q >= q0 * 2 + 1
+    if f == 1:
+        return q >= (q0 + 1) // 2
+    return q > q0 or (q == q0 and f > f0)
+
+def menteur_suivant(i: int) -> int:
+    """Prochain joueur qui a encore des dés après i."""
+    m = menteur
+    n = len(m["j"])
+    for k in range(1, n + 1):
+        if m["d"][(i + k) % n]:
+            return (i + k) % n
+    return i
+
+async def menteur_manche(evt: str, extra: dict | None = None):
+    """Nouvelle manche : chacun secoue son gobelet (dés envoyés en privé) ; le tour est déjà posé."""
+    m = menteur
+    m["d"] = [[random.randint(1, 6) for _ in d] for d in m["d"]]
+    m["mise"], m["mi"], m["pause"], m["manche"] = None, None, False, m["manche"] + 1
+    m["t"] = m["last"] = time.monotonic()
+    await broadcast(menteur_etat(evt, extra))
+    for pid, d in zip(m["j"], m["d"]):
+        if pid in players:
+            await send(players[pid], {"t": "menteur_des", "d": d, "manche": m["manche"]})
+
+async def menteur_fin(evt: str, extra: dict | None = None):
+    global menteur
+    m = menteur
+    vivants = [i for i, d in enumerate(m["d"]) if d]
+    m["g"] = vivants[0] if len(vivants) == 1 else None
+    if m["g"] is not None:
+        g = m["j"][m["g"]]
+        autres = [players.get(pid) for pid in m["j"] + m["sortis"] if pid != g]
+        registre_partie(players.get(g), None, "menteur", autres)
+    await broadcast(menteur_etat(evt, extra))
+    menteur = None
+
+async def menteur_apres_revele(m: dict, manche: int):
+    await asyncio.sleep(MENTEUR_REVELE)  # le temps de lever les gobelets et de compter
+    if menteur is m and m["manche"] == manche:
+        await menteur_manche("manche")
+
+async def menteur_action(me: Player, a: str, msg: dict):
+    global menteur
+    now = time.monotonic()
+    m = menteur
+    mon_tour = bool(m and m["jeu"] and not m["pause"] and m["j"][m["tour"]] == me.id and now - m["last"] > 0.4)
+    if a == "ouvrir" and not me.guest and not m:
+        menteur = {"j": [me.id], "n": [me.name], "d": [[0] * MENTEUR_DES], "tour": 0, "mise": None, "mi": None,
+                   "manche": 0, "jeu": False, "pause": False, "t": now, "last": now, "sortis": []}
+        await broadcast(menteur_etat("attente"))
+        asyncio.create_task(annoncer("menteur", me))
+    elif a == "rejoindre" and not me.guest and m and not m["jeu"] and me.id not in m["j"] and len(m["j"]) < MENTEUR_MAX:
+        m["j"].append(me.id)
+        m["n"].append(me.name)
+        m["d"].append([0] * MENTEUR_DES)
+        m["t"] = now
+        await broadcast(menteur_etat("rejoint"))
+    elif a == "lancer" and m and not m["jeu"] and m["j"][0] == me.id and len(m["j"]) >= 2:
+        m["jeu"], m["tour"] = True, random.randrange(len(m["j"]))
+        await menteur_manche("debut")
+    elif a == "miser" and mon_tour:
+        q, f = msg.get("q"), msg.get("f")
+        if not menteur_legal(m["mise"], q, f, sum(len(d) for d in m["d"])):
+            return
+        m["mise"], m["mi"] = [q, f], m["tour"]
+        m["tour"] = menteur_suivant(m["tour"])
+        m["t"] = m["last"] = now
+        await broadcast(menteur_etat("mise"))
+    elif a == "menteur" and mon_tour and m["mise"]:
+        q, f = m["mise"]
+        compte = sum(1 for d in m["d"] for v in d if v == f or (f != 1 and v == 1))
+        perdant = m["tour"] if compte >= q else m["mi"]
+        rev = {"des": m["d"], "compte": compte, "accuse": m["mi"], "crieur": m["tour"], "perdant": perdant}
+        m["d"] = [list(d) for d in m["d"]]
+        m["d"][perdant].pop()
+        # le perdant ouvre la manche suivante (son voisin s'il vient de perdre son dernier dé)
+        m["tour"] = perdant if m["d"][perdant] else menteur_suivant(perdant)
+        if sum(1 for d in m["d"] if d) <= 1:
+            return await menteur_fin("fin", {"rev": rev})
+        m["pause"], m["t"] = True, now
+        await broadcast(menteur_etat("revele", {"rev": rev}))
+        asyncio.create_task(menteur_apres_revele(m, m["manche"]))
+    elif a == "quitter" and m and me.id in m["j"]:
+        await menteur_quitte(me.id)
+
+async def menteur_quitte(pid: int):
+    """Départ (ou trop lent) : ses dés quittent la table et les autres relancent une manche."""
+    global menteur
+    m = menteur
+    if not m or pid not in m["j"]:
+        return
+    i = m["j"].index(pid)
+    if not m["jeu"] and i == 0:  # l'hôte s'en va avant le début : la table se referme
+        menteur = None
+        return await broadcast(menteur_etat("ferme"))
+    nom, avait_des = m["n"][i], bool(m["d"][i])
+    tour_id = m["j"][m["tour"]]
+    if tour_id == pid:
+        tour_id = m["j"][menteur_suivant(i)]
+    for k in ("j", "n", "d"):
+        m[k].pop(i)
+    if not m["jeu"]:
+        return await broadcast(menteur_etat("parti", {"parti": nom}))
+    m["sortis"].append(pid)
+    if sum(1 for d in m["d"] if d) <= 1:
+        return await menteur_fin("abandon", {"parti": nom})
+    m["tour"] = m["j"].index(tour_id) if tour_id in m["j"] else 0
+    if avait_des and not m["pause"]:
+        await menteur_manche("parti", {"parti": nom})
+    else:  # simple spectateur éliminé, ou gobelets déjà levés : la manche suit son cours
+        if m["mi"] is not None and i < m["mi"]:  # les places suivantes glissent d'un cran
+            m["mi"] -= 1
+        await broadcast(menteur_etat("parti", {"parti": nom}))
+
+async def menteur_veille():
+    while True:
+        await asyncio.sleep(5)
+        m, now = menteur, time.monotonic()
+        if not m:
+            continue
+        if not m["jeu"] and now - m["t"] > MENTEUR_ATTENTE:
+            await menteur_quitte(m["j"][0])
+        elif m["jeu"] and not m["pause"] and now - m["t"] > MENTEUR_LENT:
+            await menteur_quitte(m["j"][m["tour"]])
+
 # ---------------------------------------------------------------- la tournée de Brom
 # Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
 # reçoit la tournée — le bot décide du montant, du plafond quotidien et du rôle requis.
@@ -461,6 +620,7 @@ async def on_start(app):
     app["ticker"] = asyncio.create_task(ticker())
     app["tournees"] = asyncio.create_task(tournees())
     app["borgne"] = asyncio.create_task(borgne_veille())
+    app["menteur"] = asyncio.create_task(menteur_veille())
     if not SECRET:
         log.warning("GAME_SESSION_SECRET absent : seuls les invités peuvent se connecter")
 
@@ -468,6 +628,7 @@ async def on_stop(app):
     app["ticker"].cancel()
     app["tournees"].cancel()
     app["borgne"].cancel()
+    app["menteur"].cancel()
     if _http:
         await _http.close()
 
