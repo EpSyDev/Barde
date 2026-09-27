@@ -28,6 +28,7 @@ from pathlib import Path
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from dotenv import load_dotenv
 
+from hub.marelle import Marelle
 from hub.palet import Palet
 
 BASE_DIR = Path(__file__).parent.parent
@@ -590,7 +591,7 @@ class _Ctx:
     registre_partie = staticmethod(lambda g, p, jeu: registre_partie(g, p, jeu))
     annoncer = staticmethod(lambda kind, p: annoncer(kind, p))
 
-JEUX = {"palet": Palet(_Ctx)}
+JEUX = {"palet": Palet(_Ctx), "marelle": Marelle(_Ctx)}
 
 # ---------------------------------------------------------------- la tournée de Brom
 # Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
