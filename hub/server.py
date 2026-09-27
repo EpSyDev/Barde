@@ -123,7 +123,7 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o", "siege", "siege_t")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
@@ -131,6 +131,7 @@ class Player:
         self.w, self.p, self.yaw, self.a = "in", [0.0, 0.0, 0.0], 0.0, "i"
         self.dirty = True
         self.o = ""                     # objet tenu (c : chope)
+        self.siege, self.siege_t = None, 0.0  # siège occupé (clé « x,z ») et depuis quand
         self.last_chat = self.last_emote = 0.0
         self.active_t, self.active_p = time.monotonic(), [0.0, 0.0, 0.0]
         self.rate_t, self.rate_n = time.monotonic(), 0
@@ -199,7 +200,8 @@ async def ws_handler(request: web.Request):
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
                                 "tournee": max(0, int(_next_tournee - time.monotonic())),
                                 "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"],
-                                "jeux": {k: j.etat("etat")["s"] for k, j in JEUX.items()}})
+                                "jeux": {k: j.etat("etat")["s"] for k, j in JEUX.items()},
+                                "traces": traces_vue()})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -235,6 +237,11 @@ async def ws_handler(request: web.Request):
             elif t == "menteur" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "miser", "menteur", "quitter"):
                 me.active_t = time.monotonic()
                 await menteur_action(me, m["a"], m)
+            elif t == "assis":
+                k = m.get("k")
+                if k is None or (isinstance(k, str) and _CLE_SIEGE.match(k)):
+                    await place_quitte(me)
+                    me.siege, me.siege_t = k, time.monotonic()
             elif t in JEUX and isinstance(m.get("a"), str):
                 me.active_t = time.monotonic()
                 await JEUX[t].action(me, m["a"], m)
@@ -246,6 +253,7 @@ async def ws_handler(request: web.Request):
     finally:
         await borgne_abandon(me.id)
         await menteur_quitte(me.id)
+        await place_quitte(me)
         for jeu in JEUX.values():
             await jeu.quitte(me.id)
         if players.pop(me.id, None):
@@ -302,6 +310,9 @@ registre.setdefault("borgne", {})     # discord → {"n": nom, "v": victoires, "
 registre.setdefault("menteur", {})    # idem pour le Dé menteur
 for _jeu in ("palet", "marelle"):
     registre.setdefault(_jeu, {})
+registre.setdefault("habitues", {})   # discord → {"n": nom, "j": jours de passage distincts, "d": dernier jour}
+registre.setdefault("places", {})     # clé du siège « x,z » → {discord: [nom, secondes assis]}
+HABITUE_JOURS, PLACE_SECONDES = 3, 30 * 60
 
 def registre_sauver():
     try:
@@ -315,6 +326,14 @@ def registre_passage(p: "Player"):
     if p.guest or not p.discord:
         return
     registre["passages"][p.discord] = {"n": p.name, "ts": int(time.time())}
+    # jours de passage distincts : à trois, Brom grave une chope à son nom (étagère des habitués)
+    jour = time.strftime("%Y-%m-%d")
+    h = registre["habitues"].setdefault(p.discord, {"n": p.name, "j": 0, "d": ""})
+    h["n"] = p.name
+    if h["d"] != jour:
+        h["j"], h["d"] = h["j"] + 1, jour
+        if h["j"] == HABITUE_JOURS:
+            asyncio.get_running_loop().create_task(broadcast(traces_vue()))
     if len(registre["passages"]) > 200:  # on ne garde que les plus récents
         for k, _ in sorted(registre["passages"].items(), key=lambda kv: kv[1]["ts"])[:50]:
             registre["passages"].pop(k, None)
@@ -326,6 +345,47 @@ def registre_partie(gagnant: "Player | None", perdant: "Player | None", jeu: str
             e = registre[jeu].setdefault(pl.discord, {"n": pl.name, "v": 0, "p": 0})
             e["n"], e["v"], e["p"] = pl.name, e["v"] + win, e["p"] + 1
     registre_sauver()
+    asyncio.get_running_loop().create_task(broadcast(traces_vue()))  # le trophée a pu changer de main
+
+# ---------------------------------------------------------------- traces de soi
+# Chopes gravées des habitués, trophées des champions en titre, places attitrées (temps assis cumulé).
+def traces_vue() -> dict:
+    chopes = sorted(((e["n"], e["j"]) for e in registre["habitues"].values() if e["j"] >= HABITUE_JOURS), key=lambda x: -x[1])[:24]
+    trophees = {}
+    for jeu in ("borgne", "menteur", "palet", "marelle"):
+        top = max(registre[jeu].values(), key=lambda e: (e["v"], -e["p"]), default=None)
+        if top and top["v"] > 0:
+            trophees[jeu] = [top["n"], top["v"]]
+    return {"t": "traces", "chopes": [list(c) for c in chopes], "trophees": trophees, "places": _titulaires()}
+
+def _titulaires() -> dict:
+    out = {}
+    for cle, occ in registre["places"].items():
+        best = max(occ.values(), key=lambda e: e[1], default=None)
+        if best and best[1] >= PLACE_SECONDES:
+            out[cle] = best[0]
+    return out
+
+_CLE_SIEGE = re.compile(r"^-?\d{1,3}\.\d,-?\d{1,3}\.\d$")
+
+async def place_quitte(p: "Player"):
+    """Le joueur se lève (ou part) : son temps assis s'ajoute au siège."""
+    cle, p.siege = p.siege, None
+    if not cle or p.guest or not p.discord:
+        return
+    secs = min(4 * 3600, time.monotonic() - p.siege_t)
+    if secs < 5:
+        return
+    avant = _titulaires().get(cle)
+    occ = registre["places"].setdefault(cle, {})
+    e = occ.setdefault(p.discord, [p.name, 0])
+    e[0], e[1] = p.name, int(e[1] + secs)
+    if len(occ) > 5:  # on ne garde que les cinq plus assidus par siège
+        for k, _ in sorted(occ.items(), key=lambda kv: kv[1][1])[:len(occ) - 5]:
+            occ.pop(k, None)
+    registre_sauver()
+    if _titulaires().get(cle) != avant:
+        await broadcast(traces_vue())
 
 def registre_vue() -> dict:
     now = int(time.time())
