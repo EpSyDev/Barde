@@ -227,7 +227,7 @@ async def ws_handler(request: web.Request):
                         me.active_t, me.active_p = time.monotonic(), list(me.p)
                 me.yaw = fnum(m.get("yaw"), -10, 10)
                 me.a = m.get("a") if m.get("a") in ("i", "w", "r", "s") else "i"  # s : assis
-                me.o = "c" if m.get("o") == "c" else ""
+                me.o = "".join(ch for ch in "ct" if ch in str(m.get("o") or ""))  # c : chope, t : torche
                 me.dirty = True
             elif t == "chat" and not me.guest:
                 text = re.sub(r"[\x00-\x1f\x7f]", "", str(m.get("m", ""))).strip()[:CHAT_MAX]
