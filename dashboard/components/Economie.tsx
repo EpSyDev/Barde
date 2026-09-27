@@ -117,11 +117,15 @@ function formatAmount(devise: Devise, amount: number): string {
   return `${n} ${label}`.trim();
 }
 
+/** Récompense ponctuelle déclenchée par le jeu (une seule fois par joueur et par événement). */
+type Evenement = { enabled: boolean; montant: number; label: string };
+
 type EcoCfg = {
   category_id: string | null;
   devise: Devise;
   gains: Gains;
   boutique: Item[];
+  evenements: Record<string, Evenement>;
 };
 
 const LABELS: Record<string, string> = {
@@ -129,6 +133,7 @@ const LABELS: Record<string, string> = {
   devise: "Devise",
   gains: "Sources de gains",
   boutique: "Boutique",
+  evenements: "Récompenses du jeu",
 };
 
 const normalize = (d: Record<string, unknown>): EcoCfg => {
@@ -145,6 +150,12 @@ const normalize = (d: Record<string, unknown>): EcoCfg => {
       role_id: it.role_id != null ? String(it.role_id) : null,
       stock: it.stock == null || Number(it.stock) < 0 ? null : Number(it.stock),
     }))),
+    evenements: Object.fromEntries(
+      Object.entries((d.evenements || {}) as Record<string, Partial<Evenement>>).map(([k, e]) => [
+        k,
+        { enabled: !!e.enabled, montant: Number(e.montant) || 0, label: String(e.label || k) },
+      ])
+    ),
   };
 };
 
@@ -172,6 +183,9 @@ const serialize = (cfg: EcoCfg) => ({
       enabled: it.enabled,
       taverne: it.type === "objet" && it.taverne,
     })),
+  evenements: Object.fromEntries(
+    Object.entries(cfg.evenements).map(([k, e]) => [k, { enabled: e.enabled, montant: Math.max(0, Number(e.montant) || 0), label: e.label }])
+  ),
 });
 
 export default function Economie() {
@@ -208,6 +222,8 @@ export default function Economie() {
   const setGain = (key: keyof Gains, patch: Partial<GainRule>) =>
     draft && mod.patch({ gains: { ...draft.gains, [key]: { ...draft.gains[key], ...patch } } });
   const setBoutique = (items: Item[]) => mod.patch({ boutique: items });
+  const setEvenement = (key: string, patch: Partial<Evenement>) =>
+    draft && mod.patch({ evenements: { ...draft.evenements, [key]: { ...draft.evenements[key], ...patch } } });
   const patchItem = (id: string, patch: Partial<Item>) =>
     draft && mod.patch({
       boutique: draft.boutique.map((it) => (it.id === id ? { ...it, ...patch } : it)),
@@ -429,6 +445,38 @@ export default function Economie() {
               );
             })}
 
+            <div className="cfg-actions">
+              <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
+                {savingCfg ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          </section>
+
+          <section className="cfg-card">
+            <div className="cfg-card-head">
+              <h2>🏆 Récompenses du jeu</h2>
+              <p>
+                Versées une seule fois par joueur, quand le jeu les déclenche (première victoire à un jeu de
+                la Taverne 3D…). Désactivées, elles ne versent rien.
+              </p>
+            </div>
+            {Object.keys(draft?.evenements ?? {}).length === 0 && <p className="cfg-hint">Aucune récompense déclarée.</p>}
+            {Object.entries(draft?.evenements ?? {}).map(([key, evt]) => (
+              <div className="rec-item" key={key}>
+                <label className="cfg-toggle compact">
+                  <input type="checkbox" checked={evt.enabled} onChange={(e) => setEvenement(key, { enabled: e.target.checked })} />
+                  <span className="switch" />
+                  <span>{evt.label}</span>
+                </label>
+                <div className="field-2col">
+                  <div className="cfg-field">
+                    <label>Montant</label>
+                    <input type="number" min={0} value={evt.montant} onChange={(e) => setEvenement(key, { montant: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <p className="cfg-hint"><code>{key}</code></p>
+              </div>
+            ))}
             <div className="cfg-actions">
               <button className="btn primary" onClick={saveCfg} disabled={savingCfg}>
                 {savingCfg ? "Enregistrement…" : "Enregistrer"}
