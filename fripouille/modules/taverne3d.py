@@ -9,6 +9,8 @@ Config (dashboard, page Jeux) :
 - ``enabled`` : active les annonces.
 - ``channel_id`` : salon texte où poster.
 - ``lien`` : adresse du jeu, ajoutée à chaque annonce.
+- ``signalement_channel_id`` : salon (privé, modération) où tombent les signalements du vocal de
+  proximité. Sans salon, le signalement reste dans le journal du hub.
 """
 import logging
 
@@ -22,7 +24,9 @@ DEFAULTS = {
     "enabled": False,
     "channel_id": None,
     "lien": "https://myrhaven.vercel.app/proto/taverne-3d/",
+    "signalement_channel_id": None,
 }
+MOTIFS = {"insultes": "Insultes", "harcelement": "Harcèlement", "bruit": "Bruit / micro saturé", "autre": "Autre"}
 
 TEXTES = {
     "ouverture": "🍺 **{nom}** vient de pousser la porte de la Taverne. Le feu crépite, Brom essuie une chope… [Entrer]({lien})",
@@ -57,10 +61,39 @@ async def action_annonce(bot, payload) -> dict:
     return {"ok": True}
 
 
+async def action_signalement(bot, payload) -> dict:
+    """Signalement d'un voyageur depuis le vocal de proximité (le hub a vérifié l'identité des deux
+    joueurs et limité la fréquence). Posté tel quel pour la modération, mentions désactivées."""
+    cfg = bot.store.get("taverne3d")
+    salon = cfg.get("signalement_channel_id")
+    if not salon:
+        return {"ok": False, "error": "aucun_salon"}
+    channel = bot.get_channel(int(salon))
+    if not isinstance(channel, discord.abc.Messageable):
+        return {"ok": False, "error": "salon_introuvable"}
+    def propre(v, n=60):
+        return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v or "?")[:n]))
+    try:
+        cible, auteur = int(payload["cible_id"]), int(payload["auteur_id"])
+    except (KeyError, TypeError, ValueError):
+        return {"ok": False, "error": "ids"}
+    motif = MOTIFS.get(str(payload.get("motif")), "Autre")
+    texte = (f"⚑ **Signalement — Taverne 3D (vocal)**\n"
+             f"Signalé : **{propre(payload.get('cible_nom'))}** (<@{cible}>)\n"
+             f"Par : {propre(payload.get('auteur_nom'))} (<@{auteur}>)\n"
+             f"Motif : {motif}")
+    try:
+        await channel.send(texte, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException as e:
+        log.warning("signalement non posté : %s", e)
+        return {"ok": False, "error": "discord"}
+    return {"ok": True}
+
+
 MODULE = register(Module(
     key="taverne3d",
     label="Taverne 3D",
     defaults=DEFAULTS,
     apply=None,
-    actions={"annonce": action_annonce},
+    actions={"annonce": action_annonce, "signalement": action_signalement},
 ))

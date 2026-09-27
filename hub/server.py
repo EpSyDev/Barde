@@ -47,8 +47,9 @@ FRIP_TOKEN = (os.getenv("FRIPOUILLE_API_TOKEN") or os.getenv("WEB_API_TOKEN", ""
 MAX_PLAYERS = 80
 TICK = 0.1                      # 10 instantanés par seconde
 KEYFRAME = 2.0                  # tout le monde renvoyé toutes les 2 s (rattrapage)
-MAX_MSG = 2048                  # octets
+MAX_MSG = 8192                  # octets (une offre WebRTC du vocal tient en 3 à 5 Ko)
 MAX_RATE = 40                   # messages / seconde avant expulsion
+MAX_RTC = 120                   # messages de signalisation du vocal / seconde (candidats ICE en rafale)
 CHAT_GAP = 1.2                  # secondes entre deux messages de discussion
 CHAT_MAX = 140
 WORLDS = {"in", "out"}
@@ -124,7 +125,7 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o", "siege", "siege_t")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o", "siege", "siege_t", "voix", "rtc_n", "signal_t")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
@@ -133,12 +134,13 @@ class Player:
         self.dirty = True
         self.o = ""                     # objet tenu (c : chope)
         self.siege, self.siege_t = None, 0.0  # siège occupé (clé « x,z ») et depuis quand
+        self.voix, self.rtc_n, self.signal_t = False, 0, -1e9  # vocal de proximité activé
         self.last_chat = self.last_emote = 0.0
         self.active_t, self.active_p = time.monotonic(), [0.0, 0.0, 0.0]
         self.rate_t, self.rate_n = time.monotonic(), 0
 
     def pub(self):
-        return {"id": self.id, "name": self.name, "look": self.look, "guest": self.guest, "w": self.w, "p": self.p, "yaw": self.yaw, "a": self.a, "o": self.o}
+        return {"id": self.id, "name": self.name, "look": self.look, "guest": self.guest, "w": self.w, "p": self.p, "yaw": self.yaw, "a": self.a, "o": self.o, "v": self.voix}
 
 players: dict[int, Player] = {}
 _next_id = 1
@@ -173,19 +175,24 @@ async def ws_handler(request: web.Request):
         async for msg in ws:
             if msg.type != WSMsgType.TEXT:
                 break
-            # débit : au-delà, c'est un client défaillant ou malveillant
-            now = time.monotonic()
-            if now - me.rate_t > 1:
-                me.rate_t, me.rate_n = now, 0
-            me.rate_n += 1
-            if me.rate_n > MAX_RATE:
-                await ws.close(code=4008, message=b"trop de messages")
-                break
             try:
                 m = json.loads(msg.data)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(m, dict):
+                continue
             t = m.get("t")
+            # débit : au-delà, c'est un client défaillant ou malveillant (la signalisation du vocal a son propre compteur)
+            now = time.monotonic()
+            if now - me.rate_t > 1:
+                me.rate_t, me.rate_n, me.rtc_n = now, 0, 0
+            if t == "rtc":
+                me.rtc_n += 1
+            else:
+                me.rate_n += 1
+            if me.rate_n > MAX_RATE or me.rtc_n > MAX_RTC:
+                await ws.close(code=4008, message=b"trop de messages")
+                break
             if not joined:
                 if t != "hello":
                     continue
@@ -202,7 +209,8 @@ async def ws_handler(request: web.Request):
                                 "tournee": max(0, int(_next_tournee - time.monotonic())),
                                 "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"],
                                 "jeux": {k: j.etat("etat")["s"] for k, j in JEUX.items()},
-                                "traces": traces_vue(), "veillee": veillee.etat()})
+                                "traces": traces_vue(), "veillee": veillee.etat(),
+                                "ice": None if me.guest else ice_servers(me)})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -238,6 +246,18 @@ async def ws_handler(request: web.Request):
             elif t == "menteur" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "miser", "menteur", "quitter"):
                 me.active_t = time.monotonic()
                 await menteur_action(me, m["a"], m)
+            elif t == "voix" and not me.guest:
+                on = bool(m.get("on"))
+                if on != me.voix:
+                    me.voix = on
+                    await broadcast({"t": "voix", "id": me.id, "on": on})
+            elif t == "rtc" and me.voix and not me.guest:
+                # signalisation WebRTC relayée telle quelle, seulement entre deux voyageurs au vocal activé
+                cible, d = players.get(m.get("a")), m.get("d")
+                if cible and cible.id != me.id and cible.voix and not cible.guest and isinstance(d, dict):
+                    await send(cible, {"t": "rtc", "de": me.id, "d": d})
+            elif t == "signaler" and not me.guest:
+                await signaler(me, players.get(m.get("id")), m.get("motif"))
             elif t == "assis":
                 k = m.get("k")
                 if k is None or (isinstance(k, str) and _CLE_SIEGE.match(k)):
@@ -347,6 +367,34 @@ def registre_partie(gagnant: "Player | None", perdant: "Player | None", jeu: str
             e["n"], e["v"], e["p"] = pl.name, e["v"] + win, e["p"] + 1
     registre_sauver()
     asyncio.get_running_loop().create_task(broadcast(traces_vue()))  # le trophée a pu changer de main
+
+# ---------------------------------------------------------------- vocal de proximité
+# Le son passe en pair-à-pair (WebRTC) ; le hub ne fait que présenter les pairs l'un à l'autre, donner
+# les serveurs STUN/TURN (identifiants TURN temporaires, coturn « use-auth-secret ») et recevoir
+# les signalements.
+TURN_URLS = [u.strip() for u in os.getenv("TURN_URLS", "").split(",") if u.strip()]
+TURN_SECRET = os.getenv("TURN_SECRET", "").strip()
+STUN = ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"]
+MOTIFS = {"insultes", "harcelement", "bruit", "autre"}
+
+def ice_servers(p: "Player") -> list[dict]:
+    out = [{"urls": STUN}]
+    if TURN_URLS and TURN_SECRET:
+        user = f"{int(time.time()) + 12 * 3600}:{p.id}"
+        cred = base64.b64encode(hmac.new(TURN_SECRET.encode(), user.encode(), hashlib.sha1).digest()).decode()
+        out.append({"urls": TURN_URLS, "username": user, "credential": cred})
+    return out
+
+async def signaler(auteur: "Player", cible: "Player | None", motif):
+    now = time.monotonic()
+    if not cible or cible.guest or not cible.discord or cible.id == auteur.id or now - auteur.signal_t < 60:
+        return await send(auteur, {"t": "signale", "ok": False})
+    auteur.signal_t = now
+    motif = motif if motif in MOTIFS else "autre"
+    log.warning("signalement : %s (%s) par %s (%s) — %s", cible.name, cible.discord, auteur.name, auteur.discord, motif)
+    res = await frip("signalement", {"cible_id": cible.discord, "cible_nom": cible.name, "auteur_id": auteur.discord,
+                                     "auteur_nom": auteur.name, "motif": motif}, "taverne3d")
+    await send(auteur, {"t": "signale", "ok": True, "poste": bool(res and res.get("ok"))})
 
 # ---------------------------------------------------------------- traces de soi
 # Chopes gravées des habitués, trophées des champions en titre, places attitrées (temps assis cumulé).
