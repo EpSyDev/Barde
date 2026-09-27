@@ -28,6 +28,8 @@ from pathlib import Path
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from dotenv import load_dotenv
 
+from hub.palet import Palet
+
 BASE_DIR = Path(__file__).parent.parent
 load_dotenv(BASE_DIR / ".env")
 load_dotenv()
@@ -195,7 +197,8 @@ async def ws_handler(request: web.Request):
                                 "auth": "refuse" if me.refused else ("invite" if me.guest else "ok"),
                                 "players": [p.pub() for p in players.values() if p.id != me.id],
                                 "tournee": max(0, int(_next_tournee - time.monotonic())),
-                                "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"]})
+                                "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"],
+                                "jeux": {k: j.etat("etat")["s"] for k, j in JEUX.items()}})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -231,6 +234,9 @@ async def ws_handler(request: web.Request):
             elif t == "menteur" and m.get("a") in ("ouvrir", "rejoindre", "lancer", "miser", "menteur", "quitter"):
                 me.active_t = time.monotonic()
                 await menteur_action(me, m["a"], m)
+            elif t in JEUX and isinstance(m.get("a"), str):
+                me.active_t = time.monotonic()
+                await JEUX[t].action(me, m["a"], m)
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
@@ -239,6 +245,8 @@ async def ws_handler(request: web.Request):
     finally:
         await borgne_abandon(me.id)
         await menteur_quitte(me.id)
+        for jeu in JEUX.values():
+            await jeu.quitte(me.id)
         if players.pop(me.id, None):
             await broadcast({"t": "leave", "id": me.id})
             log.info("départ #%d %s (%d en ligne)", me.id, me.name, len(players))
@@ -291,6 +299,8 @@ except (OSError, ValueError):
 registre.setdefault("passages", {})   # discord → {"n": nom, "ts": epoch}
 registre.setdefault("borgne", {})     # discord → {"n": nom, "v": victoires, "p": parties}
 registre.setdefault("menteur", {})    # idem pour le Dé menteur
+for _jeu in ("palet", "marelle"):
+    registre.setdefault(_jeu, {})
 
 def registre_sauver():
     try:
@@ -322,14 +332,14 @@ def registre_vue() -> dict:
     def top(jeu):
         return [[e["n"], e["v"], e["p"]] for e in sorted(registre[jeu].values(), key=lambda e: (-e["v"], e["p"]))[:8]]
     return {"t": "registre", "passages": [[e["n"], now - e["ts"]] for e in pas],
-            "borgne": top("borgne"), "menteur": top("menteur"), "tournee": max(0, int(_next_tournee - time.monotonic()))}
+            "borgne": top("borgne"), "menteur": top("menteur"), "palet": top("palet"), "marelle": top("marelle"), "tournee": max(0, int(_next_tournee - time.monotonic()))}
 
 # ---------------------------------------------------------------- annonces sur Discord
 # La taverne fait signe (module Fripouille taverne3d) : un voyageur identifié entre dans une salle
 # vide, ou quelqu'un cherche un adversaire au Borgne. Fréquences bornées ici, texte rédigé par le bot.
-_annonce_t = {"ouverture": 0.0, "borgne": 0.0, "menteur": 0.0}
+_annonce_t = {"ouverture": 0.0, "borgne": 0.0, "menteur": 0.0, "palet": 0.0, "marelle": 0.0}
 _annonce_joueur: dict[str, float] = {}
-ANNONCE_ECART = {"ouverture": 15 * 60, "borgne": 10 * 60, "menteur": 10 * 60}
+ANNONCE_ECART = {"ouverture": 15 * 60, "borgne": 10 * 60, "menteur": 10 * 60, "palet": 10 * 60, "marelle": 10 * 60}
 ANNONCE_JOUEUR = 3 * 3600
 
 async def annoncer(kind: str, p: "Player"):
@@ -572,6 +582,16 @@ async def menteur_veille():
         elif m["jeu"] and not m["pause"] and now - m["t"] > MENTEUR_LENT:
             await menteur_quitte(m["j"][m["tour"]])
 
+# ---------------------------------------------------------------- jeux de table en modules (hub/palet.py…)
+# Chaque jeu reçoit ce contexte ; il expose etat(), action(), quitte() et veille().
+class _Ctx:
+    players = players
+    broadcast = staticmethod(lambda msg: broadcast(msg))
+    registre_partie = staticmethod(lambda g, p, jeu: registre_partie(g, p, jeu))
+    annoncer = staticmethod(lambda kind, p: annoncer(kind, p))
+
+JEUX = {"palet": Palet(_Ctx)}
+
 # ---------------------------------------------------------------- la tournée de Brom
 # Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
 # reçoit la tournée — le bot décide du montant, du plafond quotidien et du rôle requis.
@@ -621,6 +641,7 @@ async def on_start(app):
     app["tournees"] = asyncio.create_task(tournees())
     app["borgne"] = asyncio.create_task(borgne_veille())
     app["menteur"] = asyncio.create_task(menteur_veille())
+    app["jeux"] = [asyncio.create_task(j.veille()) for j in JEUX.values()]
     if not SECRET:
         log.warning("GAME_SESSION_SECRET absent : seuls les invités peuvent se connecter")
 
@@ -629,6 +650,8 @@ async def on_stop(app):
     app["tournees"].cancel()
     app["borgne"].cancel()
     app["menteur"].cancel()
+    for tache in app["jeux"]:
+        tache.cancel()
     if _http:
         await _http.close()
 

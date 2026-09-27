@@ -27,6 +27,8 @@ DEFAULTS = {
 TEXTES = {
     "ouverture": "🍺 **{nom}** vient de pousser la porte de la Taverne. Le feu crépite, Brom essuie une chope… [Entrer]({lien})",
     "borgne": "🎲 **{nom}** cherche un adversaire au **Borgne**, à la table longue. Qui relève le défi ? [Entrer dans la Taverne]({lien})",
+    "palet": "🥇 **{nom}** attend un adversaire au **palet de comptoir**, à la table de Jehanne. Qui a le poignet ? [Entrer dans la Taverne]({lien})",
+    "marelle": "♟️ **{nom}** attend un adversaire à la **marelle**, à la table de l'étranger encapuchonné. [Entrer dans la Taverne]({lien})",
     "menteur": "🎲 **{nom}** ouvre une partie de **Dé menteur** à la table ronde (2 à 6 voyageurs). Gobelets en main ! [Entrer dans la Taverne]({lien})",
 }
 
