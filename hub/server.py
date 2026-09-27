@@ -54,6 +54,9 @@ CHAT_GAP = 1.2                  # secondes entre deux messages de discussion
 CHAT_MAX = 140
 WORLDS = {"in", "out"}
 EMOTES = {"salut", "trinque", "danse", "oui", "non", "bras"}
+# airs des bardes : nombre aligné sur TUNES de public/proto/taverne-3d/src/music.js (repo jeu)
+NB_MORCEAUX, BARDES_GAP = 5, 20.0
+bardes_t = 0.0  # dernière demande acceptée (une à la fois pour toute la taverne)
 TOURNEE = int(os.getenv("HUB_TOURNEE") or 20 * 60)  # la tournée de Brom sonne toutes les 20 min
 ACTIF = 10 * 60                  # compte pour la tournée : a bougé / parlé / fait une émote depuis 10 min
 BOUND = 250.0
@@ -165,7 +168,7 @@ async def ws_handler(request: web.Request):
         return web.Response(status=403, text="origine refusée")
     if len(players) >= MAX_PLAYERS:
         return web.Response(status=503, text="taverne pleine")
-    global _next_id
+    global _next_id, bardes_t
     ws = web.WebSocketResponse(heartbeat=20, max_msg_size=MAX_MSG)
     await ws.prepare(request)
     me = Player(_next_id, ws)
@@ -266,6 +269,13 @@ async def ws_handler(request: web.Request):
             elif t in JEUX and isinstance(m.get("a"), str):
                 me.active_t = time.monotonic()
                 await JEUX[t].action(me, m["a"], m)
+            elif t == "bardes" and m.get("a") == "jouer" and type(m.get("i")) is int and 0 <= m["i"] < NB_MORCEAUX:
+                now = time.monotonic()
+                if now - bardes_t < BARDES_GAP:
+                    await send(me, {"t": "bardes", "ok": False, "dans": int(BARDES_GAP - (now - bardes_t)) + 1})
+                else:
+                    bardes_t = me.active_t = now
+                    await broadcast({"t": "bardes", "i": m["i"], "n": me.name})
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
