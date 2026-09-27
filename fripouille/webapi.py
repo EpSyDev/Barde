@@ -13,6 +13,7 @@ Routes génériques (le cœur du « moule répétable ») :
 import logging
 import re
 import uuid
+from urllib.parse import unquote
 from pathlib import Path
 
 from aiohttp import web
@@ -143,7 +144,8 @@ def _actor(request) -> str:
     Purement informatif pour l'audit : l'autorisation, elle, tient au token d'API et
     à la liste blanche Discord côté dashboard — pas à cet en-tête.
     """
-    return (request.headers.get("X-Actor") or "").strip()[:80] or "inconnu"
+    # le dashboard l'encode (pseudos Discord avec emoji, hors Latin-1)
+    return unquote(request.headers.get("X-Actor") or "").strip()[:80] or "inconnu"
 
 
 async def list_config(request):

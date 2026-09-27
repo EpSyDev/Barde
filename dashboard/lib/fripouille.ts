@@ -17,7 +17,9 @@ export async function fripouilleFetch(path: string, init?: Options) {
       ...(rest.headers || {}),
       "X-Api-Token": TOKEN,
       "Content-Type": "application/json",
-      ...(actor ? { "X-Actor": actor } : {}),
+      // encodé : un en-tête HTTP n'accepte pas les emoji ni les caractères hors Latin-1 d'un pseudo
+      // Discord (fetch lève une exception et la requête ne part jamais) ; le bot décode.
+      ...(actor ? { "X-Actor": encodeURIComponent(actor) } : {}),
     },
     cache: "no-store",
   });

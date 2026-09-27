@@ -29,7 +29,8 @@ export async function POST(
     });
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (e) {
+    console.error(`fripouille action ${module}/${action}`, e);
     return NextResponse.json({ error: "bot injoignable" }, { status: 502 });
   }
 }
