@@ -15,6 +15,7 @@ type GainKey =
   | "message"
   | "taverne_visite"
   | "taverne_tournee"
+  | "taverne_veillee"
   | "daily"
   | "reaction"
   | "vocal"
@@ -56,6 +57,7 @@ const GAIN_META: GainMeta[] = [
   { key: "anciennete", label: "Palier d'ancienneté", hint: "Paliers en jours depuis l'arrivée, séparés par des virgules (ex. 30, 90, 365).", extra: "paliers" },
   { key: "taverne_visite", label: "Taverne 3D : première visite du jour", hint: "Crédité en entrant dans la Taverne 3D. Délai en secondes entre deux visites récompensées (72000 = 20 h).", extra: "cooldown" },
   { key: "taverne_tournee", label: "Taverne 3D : tournée de Brom", hint: "Toutes les 20 min, à chaque joueur présent et actif dans la taverne ou sur l'esplanade (6 fois par jour au plus)." },
+  { key: "taverne_veillee", label: "Taverne 3D : veillée du conteur", hint: "À chaque joueur resté au coin du feu pendant au moins la moitié du récit (une fois par jour au plus)." },
 ];
 
 const DEFAULT_GAIN_RULE: GainRule = { enabled: false, montant: 0, cooldown: 60, minutes: 30, seuil: 10, paliers_jours: [30, 90, 365] };

@@ -29,6 +29,8 @@ TEXTES = {
     "borgne": "🎲 **{nom}** cherche un adversaire au **Borgne**, à la table longue. Qui relève le défi ? [Entrer dans la Taverne]({lien})",
     "palet": "🥇 **{nom}** attend un adversaire au **palet de comptoir**, à la table de Jehanne. Qui a le poignet ? [Entrer dans la Taverne]({lien})",
     "marelle": "♟️ **{nom}** attend un adversaire à la **marelle**, à la table de l'étranger encapuchonné. [Entrer dans la Taverne]({lien})",
+    "veillee_bientot": "🔥 **La veillée commence dans un quart d'heure** au coin du feu de la Taverne. Ce soir : *{titre}*. Prenez place sur les bancs. [Entrer dans la Taverne]({lien})",
+    "veillee_resume": "🔥 **Veillée du conteur — {titre}**\n{resume}\n\nAutour du feu : {presents}. [La Taverne]({lien})",
     "menteur": "🎲 **{nom}** ouvre une partie de **Dé menteur** à la table ronde (2 à 6 voyageurs). Gobelets en main ! [Entrer dans la Taverne]({lien})",
 }
 
@@ -38,12 +40,16 @@ async def action_annonce(bot, payload) -> dict:
     kind = str(payload.get("type") or "")
     if not cfg.get("enabled") or not cfg.get("channel_id") or kind not in TEXTES:
         return {"ok": False, "error": "inactif"}
-    nom = discord.utils.escape_mentions(discord.utils.escape_markdown(str(payload.get("nom") or "Un voyageur")[:40]))
+    def propre(v, n):
+        return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)[:n]))
+    nom = propre(payload.get("nom") or "Un voyageur", 40)
+    champs = {"titre": propre(payload.get("titre") or "", 80), "resume": propre(payload.get("resume") or "", 900),
+              "presents": propre(payload.get("presents") or "personne… le conteur a parlé aux braises", 600)}
     channel = bot.get_channel(int(cfg["channel_id"]))
     if not isinstance(channel, discord.abc.Messageable):
         return {"ok": False, "error": "salon_introuvable"}
     try:
-        await channel.send(TEXTES[kind].format(nom=nom, lien=cfg.get("lien") or DEFAULTS["lien"]),
+        await channel.send(TEXTES[kind].format(nom=nom, lien=cfg.get("lien") or DEFAULTS["lien"], **champs),
                            allowed_mentions=discord.AllowedMentions.none(), suppress_embeds=True)
     except discord.HTTPException as e:
         log.warning("annonce taverne impossible : %s", e)

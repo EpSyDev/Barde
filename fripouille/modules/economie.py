@@ -62,6 +62,7 @@ DEFAULTS = {
         # toutes les 20 min pour les joueurs présents et actifs (plafond TOURNEES_MAX par jour).
         "taverne_visite": {"enabled": False, "montant": 30, "cooldown": 72000},
         "taverne_tournee": {"enabled": False, "montant": 5},
+        "taverne_veillee": {"enabled": False, "montant": 20},
         "ticket_resolu": {"enabled": False, "montant": 30},                # au membre staff qui a pris en charge
         "anciennete": {"enabled": False, "montant": 100, "paliers_jours": [30, 90, 365]},
         "seuil_reactions": {"enabled": False, "montant": 20, "seuil": 10},  # auteur d'un message très réagi
@@ -1191,6 +1192,28 @@ async def action_tournee(bot, payload) -> dict:
     return {"ok": True, "montant": montant, "credites": credites}
 
 
+async def action_veillee(bot, payload) -> dict:
+    """Veillée du conteur (Taverne 3D) : le hub envoie la liste des présents au coin du feu à la
+    fin du récit. Crédite ``gains.taverne_veillee`` une fois par jour et par joueur."""
+    ids = [str(u) for u in (payload.get("user_ids") or [])][:100]
+    rule = (_cfg(bot).get("gains") or {}).get("taverne_veillee") or {}
+    montant = _int(rule.get("montant"), 0)
+    if not rule.get("enabled") or montant <= 0:
+        return {"ok": True, "montant": 0, "credites": []}
+    jour, credites = _jour(), []
+    for uid in dict.fromkeys(ids):
+        member = _resolve_member(bot, uid)
+        if not member or not _has_race_role(member):
+            continue
+        last = bot.economy.get_cooldown(uid, "veillee")
+        if last and last.strftime("%Y-%m-%d") == jour:
+            continue
+        bot.economy.set_cooldown(uid, "veillee", datetime.now(timezone.utc))
+        bot.economy.credit(uid, montant, "taverne:veillee")
+        credites.append(uid)
+    return {"ok": True, "montant": montant, "credites": credites}
+
+
 async def action_crediter_evenement(bot, payload) -> dict:
     """Crédite une récompense d'``evenements`` — une seule fois par joueur et par
     ``event_id`` (anti-rejeu via le même mécanisme de cooldown que ``/daily``), pour
@@ -1353,6 +1376,7 @@ MODULE = register(Module(
         "taverne": action_taverne,
         "visite_taverne": action_visite_taverne,
         "tournee": action_tournee,
+        "veillee": action_veillee,
         "tresorerie": action_tresorerie,
         "mouvements": action_mouvements,
         "annuler": action_annuler,

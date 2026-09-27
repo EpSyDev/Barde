@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 
 from hub.marelle import Marelle
 from hub.palet import Palet
+from hub.veillee import Veillee
 
 BASE_DIR = Path(__file__).parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -201,7 +202,7 @@ async def ws_handler(request: web.Request):
                                 "tournee": max(0, int(_next_tournee - time.monotonic())),
                                 "borgne": borgne_etat("etat")["s"], "menteur": menteur_etat("etat")["s"],
                                 "jeux": {k: j.etat("etat")["s"] for k, j in JEUX.items()},
-                                "traces": traces_vue()})
+                                "traces": traces_vue(), "veillee": veillee.etat()})
                 await broadcast({"t": "join", **me.pub()}, skip=me.id)
                 log.info("arrivée #%d %s%s (%d en ligne)", me.id, me.name, " (invité)" if me.guest else "", len(players))
             elif t == "s":
@@ -650,8 +651,12 @@ class _Ctx:
     broadcast = staticmethod(lambda msg: broadcast(msg))
     registre_partie = staticmethod(lambda g, p, jeu: registre_partie(g, p, jeu))
     annoncer = staticmethod(lambda kind, p: annoncer(kind, p))
+    frip = staticmethod(lambda action, payload, module="bapteme": frip(action, payload, module))
+    registre = registre
+    registre_sauver = staticmethod(lambda: registre_sauver())
 
 JEUX = {"palet": Palet(_Ctx), "marelle": Marelle(_Ctx)}
+veillee = Veillee(_Ctx)
 
 # ---------------------------------------------------------------- la tournée de Brom
 # Toutes les TOURNEE secondes : chaque joueur identifié, présent (dedans ou sur l'esplanade) et actif
@@ -702,7 +707,7 @@ async def on_start(app):
     app["tournees"] = asyncio.create_task(tournees())
     app["borgne"] = asyncio.create_task(borgne_veille())
     app["menteur"] = asyncio.create_task(menteur_veille())
-    app["jeux"] = [asyncio.create_task(j.veille()) for j in JEUX.values()]
+    app["jeux"] = [asyncio.create_task(j.veille()) for j in JEUX.values()] + [asyncio.create_task(veillee.boucle())]
     if not SECRET:
         log.warning("GAME_SESSION_SECRET absent : seuls les invités peuvent se connecter")
 

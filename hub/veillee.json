@@ -1,0 +1,140 @@
+{
+  "_note": "Chapitres de la veillée du conteur (Taverne 3D). Écrits UNIQUEMENT à partir des faits [établi] de docs/lore-myrhaven.md (repo jeu) — aucun élément [proposé] tant que Nico ne l'a pas validé. Un chapitre par veillée, dans l'ordre, puis on recommence. Pas de chiffres arabes, pas de vocabulaire moderne.",
+  "chapitres": [
+    {
+      "titre": "La maison au milieu de tout",
+      "resume": "Gaspard a raconté pourquoi tout passe par la porte de la Taverne : dix-sept contrées, une seule table, et une monnaie que Brom préfère aux pièces — les nouvelles.",
+      "lignes": [
+        "Approchez. Plus près. Le feu ne mord pas, c'est Brom qui mord.",
+        "On vous a dit que Myrhaven compte dix-sept contrées. On vous a moins dit que cette maison se tient pile au milieu. Pas à peu près : au milieu.",
+        "Ce n'est pas un royaume, ici. C'est un carrefour. Un terrain neutre.",
+        "Des peuples qui se détestent partout ailleurs viennent boire à la même table. Ils se regardent de travers, ils boivent quand même.",
+        "J'ai vu un gars de Vor'Kel et un des cimes de Kael'Syl se disputer la salière trois heures durant.",
+        "Au bout de trois heures, ils avaient oublié pourquoi. Ils sont repartis ensemble. La salière, elle, n'est jamais revenue.",
+        "Brom le dit mieux que moi : « Tout passe par cette porte. »",
+        "Et ce qui passe la porte laisse quelque chose derrière. Pas des pièces — enfin, pas seulement.",
+        "Des nouvelles. Qui a vu quoi, sur quelle route, dans quelle brume.",
+        "Cette salle, c'est l'oreille de Myrhaven. Et une oreille, voyageurs, ça ne dort jamais tout à fait.",
+        "Alors ce soir, parlez bas. Ou parlez fort, mais dites des choses intéressantes. La maison écoute."
+      ]
+    },
+    {
+      "titre": "Seize contrées sous la brume",
+      "resume": "Gaspard a parlé de la carte du monde, noyée sous la brume presque partout, et du meilleur cartographe qu'on ait vu passer — qui dort en bas, derrière des barreaux.",
+      "lignes": [
+        "Qui ici a déjà vu la carte du monde en entier ? … Personne. Moi non plus. Brom encore moins, il ne sort jamais.",
+        "Dix-sept contrées, et seize d'entre elles sous la brume. On sait qu'elles sont là. On ne sait pas ce qu'elles font.",
+        "Un voyageur qui arrive à Myrhaven ne sait littéralement rien du monde. Comme vous. Ne rougissez pas, c'est la règle.",
+        "Il y avait pourtant quelqu'un qui savait tracer ce monde-là. Le meilleur cartographe qu'on ait vu passer.",
+        "Altus. Retenez le nom, il vous resservira.",
+        "Il trace encore, d'ailleurs. Des terres qu'il ne foulera plus.",
+        "Parce qu'Altus dort en bas. Sous nos pieds. Derrière des barreaux.",
+        "Ce qu'il a fait pour en arriver là ? Brom vous répondra ce qu'il répond toujours : « c'est son histoire à lui ».",
+        "Et Altus, son histoire, il ne la vend pas. J'ai essayé. Trois chopes. Rien.",
+        "On raconte qu'il a déchiré sa propre carte en cinq morceaux, et qu'il les a cachés dans cette maison.",
+        "Moi, je dis : si vous trouvez un bout de parchemin sous votre chope, ne l'essuyez pas avec."
+      ]
+    },
+    {
+      "titre": "Le plus vieux locataire",
+      "resume": "Gaspard a présenté le plus vieux locataire de la maison : le crâne de cerf de l'âtre, là depuis le jour où le père a bâti la Taverne.",
+      "lignes": [
+        "Brom tient cette maison depuis plus de vingt ans. Vingt ans à essuyer la même chope, si vous voulez mon avis.",
+        "Il vous dira que sans les nouvelles des voyageurs, il aurait fermé il y a vingt ans. Il le dit tous les ans. Il ne ferme jamais.",
+        "Mais la maison est plus vieille que lui. Elle a au moins deux générations.",
+        "C'est un père qui l'a bâtie. Quelqu'un l'a écrit, noir sur blanc, sur une feuille pliée qui dormait sous clé.",
+        "Et le jour où ce père a posé la dernière poutre, on a accroché un crâne de cerf au-dessus de l'âtre.",
+        "Levez les yeux. Voilà. Le plus vieux locataire de la maison.",
+        "C'est la première chose qu'on voit en entrant, et la dernière qu'on regarde en partant.",
+        "Il n'a jamais payé une chope. Il n'a jamais rien cassé non plus. Brom dit que c'est le client idéal.",
+        "Moi, je trouve qu'il regarde la porte avec beaucoup d'attention, pour un crâne.",
+        "Allez, ne vous retournez pas tous en même temps. Il n'aime pas ça."
+      ]
+    },
+    {
+      "titre": "Une porte, fermée depuis toujours",
+      "resume": "Gaspard a décrit ce qu'il y a sous la salle commune — couloir, réserve, cuisine, cellier, puis un boyau de pierre couvert de runes — et la porte dont personne n'a la clé.",
+      "lignes": [
+        "Vous croyez que la maison s'arrête au plancher ? Elle continue. Elle continue longtemps.",
+        "Sous vos pieds : un couloir. Une réserve. Une cuisine. Un cellier, qui sent le fromage et la décision regrettable.",
+        "Et puis, plus loin, un boyau de pierre. Les murs y sont couverts de runes gravées.",
+        "Des runes que personne ici n'a gravées. Brom non plus. Brom ne grave que les ardoises des mauvais payeurs.",
+        "Au bout du boyau, la geôle. Vous savez déjà qui y dort.",
+        "Et quelque part, en bas, il y a une porte.",
+        "J'ai demandé à Brom. Il m'a répondu, et je vous le répète mot pour mot :",
+        "« Il y a une porte, fermée depuis toujours. Je n'ai pas la clé et je ne la cherche pas. »",
+        "Puis il m'a resservi, sans que je demande. C'est comme ça qu'on sait que la conversation est finie.",
+        "Moi, je ne dis rien. Je raconte. Mais si un jour vous trouvez une clé qui n'ouvre rien ici…",
+        "…gardez-la. Et venez me voir avant Brom."
+      ]
+    },
+    {
+      "titre": "Les cierges de la chapelle",
+      "resume": "Gaspard a emmené l'assistance, en paroles seulement, jusqu'au cimetière et à la chapelle en ruine — et a laissé une question sur les braises : qui allume les cierges ?",
+      "lignes": [
+        "Si vous suivez le boyau à runes jusqu'au bout, les marches remontent. À l'air libre.",
+        "Et là : un cimetière. Des tombeaux éventrés. Des chaînes. Des os sur le sentier — marchez au milieu, c'est plus poli.",
+        "Des lanternes pendues à des potences, tout du long.",
+        "Au fond, une chapelle mangée de lierre. La rosace est intacte. Pas un carreau de cassé.",
+        "La porte est entrebâillée. Toujours. Comme si on attendait quelqu'un.",
+        "Dedans : un autel en ruine. Un lutrin. Un livre, ouvert.",
+        "Et les cierges. Les cierges sont allumés.",
+        "Les lanternes aussi, d'ailleurs. Je vous laisse compter les nuits où vous avez vu quelqu'un descendre avec un briquet.",
+        "Moi, j'ai compté. Ça ne m'a pas pris longtemps.",
+        "Ne demandez pas à Brom. Il changera de sujet si vite que vous en aurez le tournis.",
+        "Bonne nuit, voyageurs. Et si vous descendez là-bas un jour… soufflez pas les cierges."
+      ]
+    },
+    {
+      "titre": "Quatre noms sur la carte",
+      "resume": "Gaspard a récité les quatre sanctuaires de la carte — Givre, Orage, Feu et Or — et s'est arrêté sur le quatrième, dont le nom est écrit à l'envers.",
+      "lignes": [
+        "Ce soir, pas d'histoire. Une récitation. Mon vieux maître me faisait répéter ça avant la soupe.",
+        "Sur la carte de Myrhaven, il y a quatre sanctuaires.",
+        "Le Givre : Isen'Drak.",
+        "L'Orage : Aer'Drak.",
+        "Le Feu : Vor'Drak.",
+        "Et l'Or : Drag'Or.",
+        "… Vous l'avez entendu, vous aussi ? Trois qui finissent pareil. Et le quatrième, retourné comme une chope vide.",
+        "J'ai posé la question à des voyageurs de toutes les contrées. Des savants, des marins, un nain de Kor'Thar qui avait bu.",
+        "Le nain m'a répondu : « Parce que c'est de l'or. » Puis il s'est endormi dans le fromage.",
+        "Les autres n'ont rien répondu du tout.",
+        "Alors je vous la laisse, cette question. Emportez-la. Elle ne pèse rien, et elle ne se boit pas."
+      ]
+    },
+    {
+      "titre": "Le pari des trois voyageurs",
+      "resume": "Gaspard a raconté le fameux pari de la Taverne : trois voyageurs, trois contrées, et un concours de la plus grosse histoire que personne n'a jamais gagné.",
+      "lignes": [
+        "Une histoire vraie. Enfin. Vraie comme toutes celles qu'on raconte ici.",
+        "Un soir, trois voyageurs à la même table. Une marinière de Nyr'Mor, un tailleur de pierre de Kor'Thar, un chasseur de Vor'Kel.",
+        "Ils parient une tournée : celui qui raconte la plus grosse histoire ne paie pas.",
+        "La marinière commence : « À Nyr'Mor, la brume est si épaisse qu'on y accroche son manteau. »",
+        "Le tailleur répond : « À Kor'Thar, on taille la pierre si fin qu'on voit la lune au travers. »",
+        "Le chasseur de Vor'Kel se lève, regarde la salle, et dit : « Moi, j'ai vu Brom sourire. »",
+        "Silence total. Même le feu s'est arrêté de crépiter.",
+        "Brom, derrière le comptoir, a posé sa chope. Il a dit : « Ça, c'est faux. »",
+        "Et tout le monde a dû reconnaître qu'il avait raison. Personne n'a gagné. Personne n'a payé.",
+        "Brom a noté les trois tournées sur l'ardoise. Elles y sont encore.",
+        "Morale : ici, les histoires sont gratuites. Les chopes, jamais."
+      ]
+    },
+    {
+      "titre": "Le marché qui s'est posé",
+      "resume": "Gaspard a parlé du marché récemment installé en périphérie, du marchand de potions qui teste les nouveaux venus… et de son vieil ami enfermé sous la Taverne.",
+      "lignes": [
+        "Vous l'avez peut-être vu en arrivant : un marché s'est installé à la périphérie. Récemment.",
+        "Des étals, des toiles, des cris. Tout ce que la maison n'est pas.",
+        "Ici on écoute. Là-bas on échange. Brom dit que c'est de la concurrence. Il le dit en souriant — non, je plaisante.",
+        "Il y a un marchand de potions, là-bas. Un drôle. Il ne vend rien à un nouveau venu sans lui poser une question.",
+        "Une seule. Sur ce qui fait une bonne potion de soin.",
+        "J'ai répondu « beaucoup de bière ». Il ne m'a rien vendu. Il m'a donné un verre d'eau. Par pitié, je crois.",
+        "Mais écoutez bien ce qui suit.",
+        "Ce marchand-là est un vieil ami d'Altus. Oui : celui d'en bas, derrière les barreaux.",
+        "Un homme enfermé qui a encore des amis dehors, c'est un homme qui n'a pas fini son histoire.",
+        "Si vous passez au marché, soyez polis avec les fioles. Et révisez vos herbes.",
+        "C'est tout pour ce soir. Les braises baissent, et moi aussi."
+      ]
+    }
+  ]
+}
