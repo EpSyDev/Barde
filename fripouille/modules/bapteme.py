@@ -767,6 +767,52 @@ async def action_apparence_enregistrer(bot, payload) -> dict:
     return {"ok": True, "look": look}
 
 
+# --- Sacoche du voyageur (Taverne 3D) ---
+# Même principe que les apparences : fichier dédié, bornes strictes. Les objets posés ici sont
+# des objets de décor (torche…) ; un objet de quête devra être accordé par le bot, pas par le client.
+SACOCHES_PATH = config.DATA_DIR / "sacoches.json"
+
+
+def _load_sacoches() -> dict:
+    try:
+        return json.loads(SACOCHES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _clean_sacoche(sac):
+    sac = sac if isinstance(sac, dict) else {}
+    objets = {}
+    for k, v in (sac.get("objets") or {}).items() if isinstance(sac.get("objets"), dict) else []:
+        if isinstance(k, str) and _LOOK_KEY.match(k) and isinstance(v, int) and not isinstance(v, bool) and 0 < v < 100:
+            objets[k] = v
+        if len(objets) >= 32:
+            break
+    en_main = sac.get("enMain")
+    return {"objets": objets, "enMain": en_main if en_main in objets else None}
+
+
+async def action_sacoche(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    return {"ok": True, "sacoche": _load_sacoches().get(uid)}
+
+
+async def action_sacoche_enregistrer(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    sac = _clean_sacoche(payload.get("sacoche"))
+    sacoches = _load_sacoches()
+    sacoches[uid] = sac
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = SACOCHES_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sacoches, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(SACOCHES_PATH)
+    return {"ok": True, "sacoche": sac}
+
+
 MODULE = register(Module(
     key="bapteme",
     label="Baptême",
@@ -781,5 +827,7 @@ MODULE = register(Module(
         "consacrer": action_consacrer,
         "apparence": action_apparence,
         "apparence_enregistrer": action_apparence_enregistrer,
+        "sacoche": action_sacoche,
+        "sacoche_enregistrer": action_sacoche_enregistrer,
     },
 ))
