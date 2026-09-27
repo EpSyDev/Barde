@@ -52,7 +52,7 @@ MAX_RATE = 40                   # messages / seconde avant expulsion
 MAX_RTC = 120                   # messages de signalisation du vocal / seconde (candidats ICE en rafale)
 CHAT_GAP = 1.2                  # secondes entre deux messages de discussion
 CHAT_MAX = 140
-WORLDS = {"in", "out"}
+WORLDS = {"in", "out", "cave"}  # salle, esplanade, sous-sol (cave.js)
 EMOTES = {"salut", "trinque", "danse", "oui", "non", "bras"}
 # airs des bardes : nombre aligné sur TUNES de public/proto/taverne-3d/src/music.js (repo jeu)
 NB_MORCEAUX, BARDES_GAP = 5, 20.0
