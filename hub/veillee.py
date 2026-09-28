@@ -79,7 +79,8 @@ class Veillee:
         out = {"t": "veillee", "evt": evt, "prochaine": max(0, int(self.prochaine_t - time.monotonic())),
                "derniere": self._reg().get("derniere")}
         if v:
-            out["s"] = {"titre": v["ch"]["titre"], "lignes": v["ch"]["lignes"], "ecoule": round(time.monotonic() - v["t0"], 2)}
+            out["s"] = {"titre": v["ch"]["titre"], "lignes": v["ch"]["lignes"], "ecoule": round(time.monotonic() - v["t0"], 2),
+                        "audio": v["ch"].get("audio"), "duree": v["ch"].get("duree")}
         return out
 
     def chapitre(self, i: int) -> dict | None:
@@ -145,7 +146,8 @@ class Veillee:
     async def raconter(self, i: int):
         ch = self.chapitre(i)
         impose = self.cfg.get("veillee_chapitre") is not None
-        duree = DEBUT_BLANC + sum(duree_ligne(l) for l in ch["lignes"])
+        # chapitre enregistré (voix de Gaspard) : sa vraie durée ; sinon, estimée sur la longueur des phrases
+        duree = DEBUT_BLANC + (float(ch["duree"]) if ch.get("audio") and ch.get("duree") else sum(duree_ligne(l) for l in ch["lignes"]))
         v = self.en_cours = {"ch": ch, "t0": time.monotonic(), "presence": {}, "noms": {}, "duree": duree}
         log.info("veillée : « %s » (%.0f s)", ch["titre"], duree)
         if impose:
@@ -167,7 +169,8 @@ class Veillee:
         self.en_cours = None
         reg = self._reg()
         reg["n"] = (i + 1) % max(1, len(self.chapitres))
-        reg["derniere"] = {"titre": ch["titre"], "lignes": ch["lignes"], "resume": ch.get("resume", ""), "date": int(time.time())}
+        reg["derniere"] = {"titre": ch["titre"], "lignes": ch["lignes"], "resume": ch.get("resume", ""), "date": int(time.time()),
+                         "audio": ch.get("audio"), "duree": ch.get("duree")}
         self.ctx.registre_sauver()
         res = await self.ctx.frip("veillee", {"user_ids": presents}, "economie") if presents else None
         montant = int((res or {}).get("montant") or 0)

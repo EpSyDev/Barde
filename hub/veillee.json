@@ -3,7 +3,7 @@
   "chapitres": [
     {
       "titre": "La maison au milieu de tout",
-      "resume": "Gaspard a raconté pourquoi tout passe par la porte de la Taverne : dix-sept contrées, une seule table, et une monnaie que Brom préfère aux pièces — les nouvelles.",
+      "resume": "Gaspard a raconté pourquoi tout passe par la porte de la Taverne : dix-sept contrées, une seule table, une salière disparue, et une monnaie que Brom préfère aux pièces — les nouvelles.",
       "lignes": [
         "Approchez. Plus près. Le feu ne mord pas, c'est Brom qui mord.",
         "On vous a dit que Myrhaven compte dix-sept contrées. On vous a moins dit que cette maison se tient pile au milieu. Pas à peu près : au milieu.",
@@ -16,7 +16,9 @@
         "Des nouvelles. Qui a vu quoi, sur quelle route, dans quelle brume.",
         "Cette salle, c'est l'oreille de Myrhaven. Et une oreille, voyageurs, ça ne dort jamais tout à fait.",
         "Alors ce soir, parlez bas. Ou parlez fort, mais dites des choses intéressantes. La maison écoute."
-      ]
+      ],
+      "audio": "chapitre-01",
+      "duree": 405.3
     },
     {
       "titre": "Seize contrées sous la brume",
