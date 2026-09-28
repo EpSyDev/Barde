@@ -813,6 +813,61 @@ async def action_sacoche_enregistrer(bot, payload) -> dict:
     return {"ok": True, "sacoche": sac}
 
 
+# --- Avancement du voyageur (Taverne 3D) ---
+# Ce qu'il a fait dans le parcours d'arrivée (à qui il a parlé, énigme de Brom, cave ouverte, règles vues)
+# et OÙ il s'est arrêté (monde + position) : il reprend là au prochain passage, sur n'importe quel appareil.
+# Rien d'économique ici : un client qui tricherait ne gagnerait qu'à sauter un dialogue.
+PROGRESSIONS_PATH = config.DATA_DIR / "progressions.json"
+_ID = re.compile(r"^[A-Za-z0-9_]{1,24}$")  # identifiants de PNJ et de jeux
+_MONDES = {"in", "out", "cave", "cimetiere", "chapelle", "reserve", "chambre", "chambre2", "grenier"}
+
+
+def _load_progressions() -> dict:
+    try:
+        return json.loads(PROGRESSIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _nombre(v, lo, hi):
+    return round(min(hi, max(lo, float(v))), 2) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _clean_progression(p):
+    p = p if isinstance(p, dict) else {}
+    liste = lambda k: [x for x in (p.get(k) or [])[:40] if isinstance(x, str) and _ID.match(x)] if isinstance(p.get(k), list) else []
+    out = {"parles": liste("parles"), "regles": liste("regles"),
+           "cave": p.get("cave") is True, "enigme": p.get("enigme") is True, "enigmeRatee": p.get("enigmeRatee") is True}
+    pos = p.get("pos")
+    if isinstance(pos, dict) and pos.get("w") in _MONDES:
+        xyz = [_nombre(pos.get(k), -80, 80) for k in ("x", "y", "z")]
+        yaw = _nombre(pos.get("yaw"), -20, 20)
+        if None not in xyz and yaw is not None:
+            out["pos"] = {"w": pos["w"], "x": xyz[0], "y": xyz[1], "z": xyz[2], "yaw": yaw}
+    return out
+
+
+async def action_progression(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    return {"ok": True, "progression": _load_progressions().get(uid)}
+
+
+async def action_progression_enregistrer(bot, payload) -> dict:
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    prog = _clean_progression(payload.get("progression"))
+    progressions = _load_progressions()
+    progressions[uid] = prog
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = PROGRESSIONS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(progressions, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(PROGRESSIONS_PATH)
+    return {"ok": True, "progression": prog}
+
+
 MODULE = register(Module(
     key="bapteme",
     label="Baptême",
@@ -829,5 +884,7 @@ MODULE = register(Module(
         "apparence_enregistrer": action_apparence_enregistrer,
         "sacoche": action_sacoche,
         "sacoche_enregistrer": action_sacoche_enregistrer,
+        "progression": action_progression,
+        "progression_enregistrer": action_progression_enregistrer,
     },
 ))
