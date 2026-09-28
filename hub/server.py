@@ -128,7 +128,7 @@ def clean_look(look, race_forced: str | None) -> dict:
 
 # ---------------------------------------------------------------- état
 class Player:
-    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o", "siege", "siege_t", "voix", "rtc_n", "signal_t")
+    __slots__ = ("id", "ws", "name", "look", "guest", "discord", "refused","w", "p", "yaw", "a", "dirty", "last_chat", "last_emote", "rate_t", "rate_n", "active_t", "active_p", "o", "siege", "siege_t", "voix", "rtc_n", "signal_t", "last_bapteme")
     def __init__(self, pid, ws):
         self.id, self.ws = pid, ws
         self.name, self.look, self.guest, self.discord = "", {}, True, None
@@ -139,6 +139,7 @@ class Player:
         self.siege, self.siege_t = None, 0.0  # siège occupé (clé « x,z ») et depuis quand
         self.voix, self.rtc_n, self.signal_t = False, 0, -1e9  # vocal de proximité activé
         self.last_chat = self.last_emote = 0.0
+        self.last_bapteme = -1e9
         self.active_t, self.active_p = time.monotonic(), [0.0, 0.0, 0.0]
         self.rate_t, self.rate_n = time.monotonic(), 0
 
@@ -276,6 +277,11 @@ async def ws_handler(request: web.Request):
                 else:
                     bardes_t = me.active_t = now
                     await broadcast({"t": "bardes", "i": m["i"], "n": me.name})
+            elif t == "bapteme" and not me.guest and me.discord:
+                # rite de la chapelle accompli : le bot fait foi (nom RP, race fixée), le client n'affirme rien
+                if now - me.last_bapteme >= 10:
+                    me.last_bapteme = now
+                    await rebaptiser(me)
             elif t == "emote" and m.get("e") in EMOTES:
                 now = time.monotonic()
                 if now - me.last_emote >= 1:
@@ -352,6 +358,23 @@ def registre_sauver():
         tmp.replace(REGISTRE)
     except OSError as e:
         log.warning("registre non enregistré : %s", e)
+
+async def rebaptiser(me: "Player"):
+    """Après le rite du baptême (jeu) : relit le statut chez le bot, renomme le voyageur pour tous."""
+    st = await frip("statut", {"user_id": me.discord})
+    if not st or not st.get("baptise"):
+        return
+    ancien = me.name
+    me.name = str(st.get("nom_rp") or me.name)[:40]
+    if st.get("race"):
+        me.look = clean_look(me.look, st["race"])
+        me.look["_locked"] = True
+    registre_passage(me)
+    await broadcast({"t": "nom", "id": me.id, "name": me.name, "look": me.look})
+    if me.name != ancien:
+        await broadcast({"t": "bapteme", "id": me.id, "name": me.name}, skip=me.id)
+    log.info("baptême #%d %s → %s", me.id, ancien, me.name)
+
 
 def registre_passage(p: "Player"):
     if p.guest or not p.discord:
