@@ -15,6 +15,7 @@ suite de vues éphémères à état (durée de vie = l'interaction).
 """
 import json
 import logging
+import time
 import re
 from datetime import datetime, timezone
 
@@ -836,8 +837,12 @@ def _nombre(v, lo, hi):
 def _clean_progression(p):
     p = p if isinstance(p, dict) else {}
     liste = lambda k: [x for x in (p.get(k) or [])[:40] if isinstance(x, str) and _ID.match(x)] if isinstance(p.get(k), list) else []
-    out = {"parles": liste("parles"), "regles": liste("regles"),
-           "cave": p.get("cave") is True, "enigme": p.get("enigme") is True, "enigmeRatee": p.get("enigmeRatee") is True}
+    out = {"parles": liste("parles"), "regles": liste("regles"), "fragments": liste("fragments"), "indices": liste("indices"),
+           "cave": p.get("cave") is True, "enigme": p.get("enigme") is True, "enigmeRatee": p.get("enigmeRatee") is True,
+           "quete": p.get("quete") is True, "queteFinie": p.get("queteFinie") is True}
+    # jeton posé par une réinitialisation (dashboard) : le client efface ses mémoires locales en le voyant
+    if isinstance(p.get("reset"), int) and not isinstance(p.get("reset"), bool) and 0 < p["reset"] < 10**11:
+        out["reset"] = p["reset"]
     pos = p.get("pos")
     if isinstance(pos, dict) and pos.get("w") in _MONDES:
         xyz = [_nombre(pos.get(k), -80, 80) for k in ("x", "y", "z")]
@@ -868,6 +873,65 @@ async def action_progression_enregistrer(bot, payload) -> dict:
     return {"ok": True, "progression": prog}
 
 
+def _ecrire_json(path, donnees):
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(donnees, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+# --- Phase de tests (dashboard) : voir et remettre à zéro le parcours d'un voyageur ---
+async def action_voyageurs(bot, payload) -> dict:
+    """Voyageurs connus de la Taverne 3D (avancement, sacoche ou baptême), avec où ils en sont."""
+    progressions, sacoches = _load_progressions(), _load_sacoches()
+    roster = (_cfg(bot) or {}).get("roster") or {}
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    out = []
+    for uid in sorted(set(progressions) | set(sacoches) | set(roster)):
+        p, r = progressions.get(uid) or {}, roster.get(uid) or {}
+        m = guild.get_member(int(uid)) if guild and uid.isdigit() else None
+        out.append({
+            "id": uid, "nom": (m.display_name if m else None) or r.get("pseudo") or r.get("user") or uid,
+            "baptise": bool(r) and not r.get("unlocked"), "nom_rp": r.get("name"),
+            "parles": len(p.get("parles") or []), "cave": bool(p.get("cave")), "quete": bool(p.get("quete")),
+            "fragments": len(p.get("fragments") or []), "monde": (p.get("pos") or {}).get("w"),
+        })
+    return {"ok": True, "voyageurs": out}
+
+
+async def action_reinitialiser(bot, payload) -> dict:
+    """Remet un voyageur au tout début : avancement, position et sacoche effacés (ses mémoires locales
+    suivront au prochain passage). Avec « bapteme » : fiche du registre supprimée, rôles de race et de
+    foi retirés, pseudo rendu — il repasse par le mage. L'économie n'est pas touchée."""
+    uid = str(payload.get("user_id") or "")
+    if not uid.isdigit():
+        raise ValueError("user_id requis")
+    progressions, sacoches = _load_progressions(), _load_sacoches()
+    progressions[uid] = {"reset": int(time.time())}
+    sacoches.pop(uid, None)
+    _ecrire_json(PROGRESSIONS_PATH, progressions)
+    _ecrire_json(SACOCHES_PATH, sacoches)
+    notes = []
+    if payload.get("bapteme") is True:
+        roster = dict((_cfg(bot) or {}).get("roster") or {})
+        if roster.pop(uid, None) is not None:
+            bot.store.set("bapteme", {"roster": roster})
+        member = await _resolve_member(bot, uid)
+        if member is not None:
+            ids = data.all_race_role_ids() | data.all_faith_role_ids()
+            roles = [r for r in member.roles if r.id in ids]
+            try:
+                if roles:
+                    await member.remove_roles(*roles, reason="Réinitialisation (phase de tests)")
+                await member.edit(nick=None, reason="Réinitialisation (phase de tests)")
+            except discord.Forbidden:
+                notes.append("rôles ou pseudo hors de portée du bot")
+        else:
+            notes.append("membre introuvable sur le serveur")
+    log.info("taverne 3D : voyageur %s réinitialisé%s", uid, " (baptême compris)" if payload.get("bapteme") else "")
+    return {"ok": True, "notes": notes}
+
+
 MODULE = register(Module(
     key="bapteme",
     label="Baptême",
@@ -886,5 +950,7 @@ MODULE = register(Module(
         "sacoche_enregistrer": action_sacoche_enregistrer,
         "progression": action_progression,
         "progression_enregistrer": action_progression_enregistrer,
+        "voyageurs": action_voyageurs,
+        "reinitialiser": action_reinitialiser,
     },
 ))

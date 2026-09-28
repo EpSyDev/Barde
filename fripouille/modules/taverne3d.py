@@ -13,6 +13,8 @@ Config (dashboard, page Jeux) :
   proximité. Sans salon, le signalement reste dans le journal du hub.
 """
 import logging
+import re
+import time
 
 import discord
 
@@ -25,6 +27,12 @@ DEFAULTS = {
     "channel_id": None,
     "lien": "https://myrhaven.vercel.app/proto/taverne-3d/",
     "signalement_channel_id": None,
+    # veillée du conteur (hub) : programmée chaque semaine, chapitre imposé ou suivant, lancement à la demande
+    "veillee_actif": True,
+    "veillee_jour": 4,          # 0 lundi … 6 dimanche
+    "veillee_heure": "21:00",   # heure de Paris
+    "veillee_chapitre": None,   # index imposé pour la prochaine veillée (None : le suivant)
+    "veillee_demande": 0,       # horodatage d'un « lancer maintenant » (le hub ne le joue qu'une fois)
 }
 MOTIFS = {"insultes": "Insultes", "harcelement": "Harcèlement", "bruit": "Bruit / micro saturé", "autre": "Autre"}
 
@@ -90,10 +98,72 @@ async def action_signalement(bot, payload) -> dict:
     return {"ok": True}
 
 
+# --- Veillée du conteur, pilotée depuis le dashboard ---
+# Le hub relit les réglages toutes les 20 s (action veillee_reglages) et y dépose son état (chapitres,
+# prochaine date, veillée en cours) ; le dashboard lit cet état et règle jour, heure, chapitre, ou lance.
+ETAT_VEILLEE: dict = {}
+_HEURE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def _reglages(cfg: dict) -> dict:
+    return {k: cfg.get(k, DEFAULTS[k]) for k in ("veillee_actif", "veillee_jour", "veillee_heure", "veillee_chapitre", "veillee_demande")}
+
+
+async def action_veillee_reglages(bot, payload) -> dict:
+    """Appelée par le hub : dépose son état, reçoit les réglages."""
+    etat = payload.get("etat")
+    if isinstance(etat, dict):
+        ETAT_VEILLEE.clear(); ETAT_VEILLEE.update(etat); ETAT_VEILLEE["vu"] = int(time.time())
+    return {"ok": True, **_reglages(bot.store.get("taverne3d"))}
+
+
+async def action_veillee_consommee(bot, payload) -> dict:
+    """Le hub a joué le chapitre imposé : on revient au chapitre suivant."""
+    bot.store.set("taverne3d", {"veillee_chapitre": None})
+    return {"ok": True}
+
+
+async def action_veillee_etat(bot, payload) -> dict:
+    """Pour le dashboard : réglages + état rapporté par le hub (vide si le hub ne répond plus)."""
+    frais = ETAT_VEILLEE and time.time() - ETAT_VEILLEE.get("vu", 0) < 90
+    return {"ok": True, "reglages": _reglages(bot.store.get("taverne3d")), "hub": dict(ETAT_VEILLEE) if frais else None}
+
+
+async def action_veillee_regler(bot, payload) -> dict:
+    maj = {}
+    if isinstance(payload.get("actif"), bool):
+        maj["veillee_actif"] = payload["actif"]
+    j = payload.get("jour")
+    if isinstance(j, int) and not isinstance(j, bool) and 0 <= j <= 6:
+        maj["veillee_jour"] = j
+    h = payload.get("heure")
+    if isinstance(h, str) and _HEURE.match(h):
+        maj["veillee_heure"] = h
+    if "chapitre" in payload:
+        c = payload["chapitre"]
+        maj["veillee_chapitre"] = c if isinstance(c, int) and not isinstance(c, bool) and 0 <= c < 200 else None
+    if not maj:
+        raise ValueError("rien à régler")
+    bot.store.set("taverne3d", maj)
+    return {"ok": True, **_reglages(bot.store.get("taverne3d"))}
+
+
+async def action_veillee_lancer(bot, payload) -> dict:
+    """« Lancer maintenant » : le hub démarre la veillée à son prochain passage (20 s au plus)."""
+    maj = {"veillee_demande": int(time.time())}
+    c = payload.get("chapitre")
+    if isinstance(c, int) and not isinstance(c, bool) and 0 <= c < 200:
+        maj["veillee_chapitre"] = c
+    bot.store.set("taverne3d", maj)
+    return {"ok": True}
+
+
 MODULE = register(Module(
     key="taverne3d",
     label="Taverne 3D",
     defaults=DEFAULTS,
     apply=None,
-    actions={"annonce": action_annonce, "signalement": action_signalement},
+    actions={"annonce": action_annonce, "signalement": action_signalement,
+             "veillee_reglages": action_veillee_reglages, "veillee_consommee": action_veillee_consommee,
+             "veillee_etat": action_veillee_etat, "veillee_regler": action_veillee_regler, "veillee_lancer": action_veillee_lancer},
 ))

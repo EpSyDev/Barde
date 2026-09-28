@@ -7,6 +7,10 @@ phrase). Un quart d'heure avant, annonce sur Discord ; à la fin, les présents 
 moins la moitié du récit) sont crédités (gain ``taverne_veillee`` du bot) et le résumé part sur Discord.
 
 ``HUB_VEILLEE_TEST=<secondes>`` : lance une veillée N secondes après le démarrage (développement).
+
+Réglages pilotés depuis le dashboard (page Jeux, module Fripouille ``taverne3d``) : actif, jour, heure,
+chapitre imposé, « lancer maintenant ». Le hub les relit toutes les 20 s et y dépose son état ; sans
+réponse du bot, il garde ses derniers réglages (au départ : ``HUB_VEILLEE``).
 """
 from __future__ import annotations
 
@@ -62,6 +66,9 @@ class Veillee:
             log.warning("veillee.json illisible : pas de veillée")
         self.en_cours: dict | None = None
         self.prochaine_t = 0.0  # time.monotonic() du prochain début
+        j, hm = self.horaire.split()
+        self.cfg = {"veillee_actif": True, "veillee_jour": int(j), "veillee_heure": hm, "veillee_chapitre": None, "veillee_demande": 0}
+        self.prochaine_d: datetime | None = None
 
     # ---- état envoyé aux clients
     def _reg(self) -> dict:
@@ -78,34 +85,73 @@ class Veillee:
     def chapitre(self, i: int) -> dict | None:
         return self.chapitres[i % len(self.chapitres)] if self.chapitres else None
 
-    # ---- déroulé
+    # ---- réglages (dashboard) et état rapporté
+    def _index(self) -> int:
+        c = self.cfg.get("veillee_chapitre")
+        return c if isinstance(c, int) and self.chapitres and 0 <= c < len(self.chapitres) else self._reg()["n"] % max(1, len(self.chapitres))
+
+    def _resume(self) -> dict:
+        v = self.en_cours
+        return {"chapitres": [c["titre"] for c in self.chapitres], "suivant": self._index(),
+                "prochaine": self.prochaine_d.isoformat(timespec="minutes") if self.prochaine_d else None,
+                "en_cours": {"titre": v["ch"]["titre"], "ecoule": int(time.monotonic() - v["t0"]), "duree": int(v["duree"])} if v else None,
+                "derniere": (self._reg().get("derniere") or {}).get("titre")}
+
+    async def _relire(self):
+        r = await self.ctx.frip("veillee_reglages", {"etat": self._resume()}, "taverne3d")
+        if r and r.get("ok"):
+            self.cfg.update({k: r[k] for k in self.cfg if k in r})
+
+    # ---- déroulé : un passage toutes les 20 s (réglages, annonce un quart d'heure avant, début)
     async def boucle(self):
         test = os.getenv("HUB_VEILLEE_TEST")
-        premier = True
+        debut_test = time.monotonic() + float(test) if test else None
+        annoncee = None
         while True:
-            if test and premier:
-                attente = float(test)
-            else:
-                attente = (prochaine(self.horaire) - _maintenant()).total_seconds()
-            premier = False
-            self.prochaine_t = time.monotonic() + attente
-            ch = self.chapitre(self._reg()["n"])
-            if not ch:
+            await self._relire()
+            reg = self._reg()
+            if not self.chapitres:
                 await asyncio.sleep(3600)
                 continue
-            if attente > AVANCE:
-                await asyncio.sleep(attente - AVANCE)
+            # « lancer maintenant » depuis le dashboard (joué une seule fois, même après un redémarrage)
+            demande = int(self.cfg.get("veillee_demande") or 0)
+            if demande > int(reg.get("demande_vue") or 0):
+                reg["demande_vue"] = demande
+                self.ctx.registre_sauver()
+                await self.raconter(self._index())
+                continue
+            if debut_test and time.monotonic() >= debut_test:
+                debut_test = None
+                await self.raconter(self._index())
+                continue
+            if not self.cfg.get("veillee_actif"):
+                self.prochaine_d, self.prochaine_t = None, 0.0
+                await asyncio.sleep(20)
+                continue
+            self.prochaine_d = prochaine(f"{self.cfg['veillee_jour']} {self.cfg['veillee_heure']}")
+            attente = (self.prochaine_d - _maintenant()).total_seconds()
+            self.prochaine_t = time.monotonic() + attente
+            ch = self.chapitre(self._index())
+            if attente <= AVANCE and annoncee != self.prochaine_d:
+                annoncee = self.prochaine_d
                 await self.ctx.frip("annonce", {"type": "veillee_bientot", "nom": "Gaspard", "titre": ch["titre"]}, "taverne3d")
-                await self.ctx.broadcast({"t": "veillee", "evt": "bientot", "titre": ch["titre"], "dans": AVANCE})
-                await asyncio.sleep(AVANCE)
-            else:
+                await self.ctx.broadcast({"t": "veillee", "evt": "bientot", "titre": ch["titre"], "dans": int(attente)})
+            if attente <= 20:
                 await asyncio.sleep(max(0.0, attente))
-            await self.raconter(ch)
+                await self.raconter(self._index())
+                continue
+            await asyncio.sleep(20)
 
-    async def raconter(self, ch: dict):
+    async def raconter(self, i: int):
+        ch = self.chapitre(i)
+        impose = self.cfg.get("veillee_chapitre") is not None
         duree = DEBUT_BLANC + sum(duree_ligne(l) for l in ch["lignes"])
-        v = self.en_cours = {"ch": ch, "t0": time.monotonic(), "presence": {}, "noms": {}}
+        v = self.en_cours = {"ch": ch, "t0": time.monotonic(), "presence": {}, "noms": {}, "duree": duree}
         log.info("veillée : « %s » (%.0f s)", ch["titre"], duree)
+        if impose:
+            self.cfg["veillee_chapitre"] = None
+            await self.ctx.frip("veillee_consommee", {}, "taverne3d")
+        await self._relire()
         await self.ctx.broadcast(self.etat("debut"))
         pas = 5.0
         fin = v["t0"] + duree
@@ -120,7 +166,7 @@ class Veillee:
         presents = [d for d, s in v["presence"].items() if s >= duree * PRESENCE]
         self.en_cours = None
         reg = self._reg()
-        reg["n"] = reg["n"] + 1
+        reg["n"] = (i + 1) % max(1, len(self.chapitres))
         reg["derniere"] = {"titre": ch["titre"], "lignes": ch["lignes"], "resume": ch.get("resume", ""), "date": int(time.time())}
         self.ctx.registre_sauver()
         res = await self.ctx.frip("veillee", {"user_ids": presents}, "economie") if presents else None
@@ -129,7 +175,6 @@ class Veillee:
         noms = [v["noms"][d] for d in presents]
         await self.ctx.frip("annonce", {"type": "veillee_resume", "nom": "Gaspard", "titre": ch["titre"], "resume": ch.get("resume", ""),
                                         "presents": ", ".join(noms)}, "taverne3d")
-        self.prochaine_t = time.monotonic() + (prochaine(self.horaire) - _maintenant()).total_seconds()
         fin_msg = self.etat("fin")
         fin_msg.update({"presents": noms, "montant": montant,
                         "ids": [p.id for p in self.ctx.players.values() if p.discord in credites]})

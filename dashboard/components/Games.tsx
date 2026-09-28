@@ -5,6 +5,8 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import TaverneAnnonces from "@/components/TaverneAnnonces";
+import TaverneVeillee from "@/components/TaverneVeillee";
+import TaverneTesteurs from "@/components/TaverneTesteurs";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
@@ -349,6 +351,8 @@ export default function Games() {
       </section>
 
       <TaverneAnnonces />
+      <TaverneVeillee />
+      <TaverneTesteurs />
 
       <DirtyBar
         dirty={mod.dirty}
