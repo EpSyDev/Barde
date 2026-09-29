@@ -22,10 +22,13 @@ from . import config, registry
 
 log = logging.getLogger("fripouille.webapi")
 
-# --- Média (images des embeds) ---
-_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-_MAX_MEDIA = 8 * 1024 * 1024        # 8 Mo par image
-_NAME_RE = re.compile(r"^[a-f0-9]{32}\.(png|jpg|jpeg|gif|webp)$")
+# --- Média (images et audios des embeds/messages) ---
+_ALLOWED_EXT_IMAGE = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_ALLOWED_EXT_AUDIO = {".mp3", ".ogg", ".wav", ".m4a"}
+_ALLOWED_EXT = _ALLOWED_EXT_IMAGE | _ALLOWED_EXT_AUDIO
+_MAX_IMAGE = 8 * 1024 * 1024         # 8 Mo par image
+_MAX_AUDIO = 10 * 1024 * 1024        # 10 Mo par audio (limite d'upload Discord standard)
+_NAME_RE = re.compile(r"^[a-f0-9]{32}\.(png|jpg|jpeg|gif|webp|mp3|ogg|wav|m4a)$")
 
 
 def _media_url(name):
@@ -214,7 +217,8 @@ async def media_list(request):
     items = []
     for p in sorted(config.MEDIA_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if p.is_file():
-            items.append({"name": p.name, "url": _media_url(p.name), "size": p.stat().st_size})
+            kind = "audio" if p.suffix.lower() in _ALLOWED_EXT_AUDIO else "image"
+            items.append({"name": p.name, "url": _media_url(p.name), "size": p.stat().st_size, "kind": kind})
     return web.json_response({"media": items})
 
 
@@ -227,7 +231,9 @@ async def media_upload(request):
         raise web.HTTPBadRequest(reason="fichier manquant")
     ext = Path(field.filename or "").suffix.lower()
     if ext not in _ALLOWED_EXT:
-        raise web.HTTPBadRequest(reason="format non supporté (png, jpg, gif, webp)")
+        raise web.HTTPBadRequest(reason="format non supporté (png, jpg, gif, webp, mp3, ogg, wav, m4a)")
+    is_audio = ext in _ALLOWED_EXT_AUDIO
+    max_size = _MAX_AUDIO if is_audio else _MAX_IMAGE
 
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     name = f"{uuid.uuid4().hex}{ext}"
@@ -240,13 +246,13 @@ async def media_upload(request):
                 if not chunk:
                     break
                 size += len(chunk)
-                if size > _MAX_MEDIA:
-                    raise web.HTTPBadRequest(reason="fichier trop lourd (max 8 Mo)")
+                if size > max_size:
+                    raise web.HTTPBadRequest(reason=f"fichier trop lourd (max {max_size // (1024 * 1024)} Mo)")
                 f.write(chunk)
     except web.HTTPException:
         dest.unlink(missing_ok=True)
         raise
-    return web.json_response({"name": name, "url": _media_url(name)})
+    return web.json_response({"name": name, "url": _media_url(name), "kind": "audio" if is_audio else "image"})
 
 
 async def media_delete(request):
@@ -293,7 +299,7 @@ async def import_config(request):
 
 
 def build_app(bot):
-    app = web.Application(middlewares=[_auth], client_max_size=_MAX_MEDIA + 1024 * 1024)
+    app = web.Application(middlewares=[_auth], client_max_size=_MAX_AUDIO + 1024 * 1024)
     app["bot"] = bot
     app.add_routes([
         web.get("/api/health", health),

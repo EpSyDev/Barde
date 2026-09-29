@@ -9,10 +9,12 @@ export default function MediaPicker({
   value,
   onChange,
   placeholder,
+  kind = "image",
 }: {
   value: string;
   onChange: (url: string) => void;
   placeholder?: string;
+  kind?: "image" | "audio";
 }) {
   const [open, setOpen] = useState(false);
   const [uploaded, setUploaded] = useState<MediaItem[] | null>(null);
@@ -26,7 +28,8 @@ export default function MediaPicker({
       .catch(() => setUploaded([]));
   }, [open, uploaded]);
 
-  const items = uploaded ? [...BUILTIN_MEDIA, ...uploaded] : null;
+  const all = uploaded ? [...BUILTIN_MEDIA, ...uploaded] : null;
+  const items = all ? all.filter((it) => (it.kind || "image") === kind) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -51,7 +54,7 @@ export default function MediaPicker({
         onClick={() => setOpen((o) => !o)}
         title="Choisir dans la bibliothèque média"
       >
-        🖼️
+        {kind === "audio" ? "🎵" : "🖼️"}
       </button>
       {open && (
         <div className="media-pop">
@@ -59,7 +62,34 @@ export default function MediaPicker({
             <div className="media-pop-empty">Chargement…</div>
           ) : items.length === 0 ? (
             <div className="media-pop-empty">
-              Aucune image. Va dans « Média » pour en uploader.
+              {kind === "audio"
+                ? "Aucun audio. Va dans « Média » pour en uploader."
+                : "Aucune image. Va dans « Média » pour en uploader."}
+            </div>
+          ) : kind === "audio" ? (
+            <div className="media-pop-list">
+              <button
+                type="button"
+                className="media-pop-clear"
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                ✕ Aucun audio
+              </button>
+              {items.map((it) => (
+                <div
+                  key={it.name}
+                  className={`media-pop-audio-item ${value === it.url ? "sel" : ""}`}
+                  onClick={() => {
+                    onChange(it.url);
+                    setOpen(false);
+                  }}
+                >
+                  🎵 {it.name}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="media-pop-grid">

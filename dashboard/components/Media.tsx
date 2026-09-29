@@ -37,7 +37,7 @@ export default function Media() {
         if (!res.ok) throw new Error();
         await load();
       } catch {
-        setError("Échec de l'upload (formats png/jpg/gif/webp, max 8 Mo).");
+        setError("Échec de l'upload (images : png/jpg/gif/webp max 8 Mo · audio : mp3/ogg/wav/m4a max 10 Mo).");
       } finally {
         setUploading(false);
         if (inputRef.current) inputRef.current.value = "";
@@ -78,16 +78,17 @@ export default function Media() {
         <div className="cfg-card-head">
           <h2>🖼️ Média</h2>
           <p>
-            Uploade des images à réutiliser dans les embeds (vignette ou grande image). Copie
-            l'URL et colle-la dans le champ « Image » d'un message.
+            Uploade des images (vignette, grande image) ou des audios (mp3, ogg, wav, m4a) à
+            réutiliser dans les messages. Copie l'URL et colle-la dans le champ correspondant,
+            ou choisis directement depuis la bibliothèque intégrée à l'éditeur.
           </p>
         </div>
         <label className="btn primary" style={{ cursor: "pointer" }}>
-          {uploading ? "Upload en cours…" : "＋ Choisir une image"}
+          {uploading ? "Upload en cours…" : "＋ Ajouter un fichier"}
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
+            accept="image/png,image/jpeg,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav,audio/x-m4a,audio/mp4,.mp3,.ogg,.wav,.m4a"
             disabled={uploading}
             style={{ display: "none" }}
             onChange={(e) => {
@@ -102,8 +103,12 @@ export default function Media() {
       <div className="media-grid">
         {[...BUILTIN_MEDIA, ...items].map((it) => (
           <div className="media-item" key={it.url}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={it.url} alt="" />
+            {it.kind === "audio" ? (
+              <audio controls src={it.url} style={{ width: "100%" }} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={it.url} alt="" />
+            )}
             {it.builtin && <span className="media-badge">intégrée</span>}
             <div className="media-actions">
               <button className="btn" onClick={() => copy(it.url)}>

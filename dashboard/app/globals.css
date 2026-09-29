@@ -1818,6 +1818,34 @@ h3 {
   box-shadow: 0 0 0 2px rgba(240, 212, 137, 0.35);
 }
 
+.media-pop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.media-pop-audio-item {
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--panel-edge);
+  font-size: var(--step--2);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-pop-audio-item:hover {
+  border-color: var(--gold);
+}
+
+.media-pop-audio-item.sel {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 0 2px rgba(240, 212, 137, 0.35);
+}
+
 /* ═══════════════════ Barre « modifications non enregistrées » ═══════════════════
    Elle n'existe que quand il y a quelque chose à perdre. */
 .dirty-bar {

@@ -21,9 +21,12 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import discord
 
+from .. import config
 from ..registry import Module, register
 
 log = logging.getLogger("fripouille.messages")
@@ -125,12 +128,26 @@ def _build_pub(data):
     return None, embed, _invite_view(f("invite_url"))
 
 
+def _audio_file(url):
+    """Résout un audio de la bibliothèque média (par son URL) en pièce jointe Discord."""
+    url = (url or "").strip()
+    if not url:
+        return None
+    name = Path(unquote(urlparse(url).path)).name
+    path = config.MEDIA_DIR / name
+    if not name or not path.is_file():
+        return None
+    return discord.File(path, filename=name)
+
+
 def _render(kind, data):
-    """(content, embed, view) selon le type de message."""
+    """(content, embed, view, file) selon le type de message."""
     if kind == "pub":
-        return _build_pub(data)
-    content, embed = _build_message(data)
-    return content, embed, None
+        content, embed, view = _build_pub(data)
+    else:
+        content, embed = _build_message(data)
+        view = None
+    return content, embed, view, _audio_file(data.get("audio_url"))
 
 
 async def _resolve_channel(bot, channel_id):
@@ -143,18 +160,23 @@ async def _resolve_channel(bot, channel_id):
 async def _send(bot, channel_id, data, kind="unique"):
     """Poste un message et renvoie l'objet ``Message`` créé."""
     channel = await _resolve_channel(bot, channel_id)
-    content, embed, view = _render(kind, data)
-    if not content and embed is None:
+    content, embed, view, file = _render(kind, data)
+    if not content and embed is None and file is None:
         raise ValueError("message vide")
-    return await channel.send(content=content, embed=embed, view=view)
+    return await channel.send(content=content, embed=embed, view=view, file=file)
 
 
 # --- Historique des envois ponctuels (unique + pub) ---
 def _payload_for(kind, data):
     """Extrait le sous-ensemble à mémoriser pour ré-édition."""
+    audio_url = (data.get("audio_url") or "").strip()
     if kind == "pub":
-        return {"pub": data.get("pub") or {}}
-    return {"content": data.get("content") or "", "embed": data.get("embed") or {}}
+        return {"pub": data.get("pub") or {}, "audio_url": audio_url}
+    return {
+        "content": data.get("content") or "",
+        "embed": data.get("embed") or {},
+        "audio_url": audio_url,
+    }
 
 
 def _label_for(kind, data):
@@ -221,12 +243,15 @@ async def action_edit(bot, payload):
     if not channel_id or not message_id:
         raise ValueError("message introuvable")
     channel = await _resolve_channel(bot, channel_id)
-    content, embed, view = _render(kind, data)
-    if not content and embed is None:
+    content, embed, view, file = _render(kind, data)
+    if not content and embed is None and file is None:
         raise ValueError("message vide")
     try:
         msg = await channel.fetch_message(int(message_id))
-        await msg.edit(content=content, embed=embed, view=view)
+        if file is not None:
+            await msg.edit(content=content, embed=embed, view=view, attachments=[file])
+        else:
+            await msg.edit(content=content, embed=embed, view=view)
     except discord.NotFound:
         _history_remove(bot, message_id)
         raise ValueError("message introuvable sur Discord (retiré de l'historique)")

@@ -26,6 +26,7 @@ type Recurring = {
   channel_id: string | null;
   content: string;
   embed: Embed;
+  audio_url: string;
   interval_value: number;
   interval_unit: Unit;
 };
@@ -47,7 +48,7 @@ type SentItem = {
   channel_id: string;
   message_id: string;
   label: string;
-  payload: { content?: string; embed?: Partial<Embed>; pub?: Partial<Pub> };
+  payload: { content?: string; embed?: Partial<Embed>; pub?: Partial<Pub>; audio_url?: string };
   sent_at: string;
   edited_at: string | null;
 };
@@ -81,6 +82,7 @@ const newRecurring = (): Recurring => ({
   channel_id: null,
   content: "",
   embed: emptyEmbed(),
+  audio_url: "",
   interval_value: 1,
   interval_unit: "days",
 });
@@ -123,13 +125,17 @@ function ChannelSelect({
 function MessageEditor({
   content,
   embed,
+  audio,
   onContent,
   onEmbed,
+  onAudio,
 }: {
   content: string;
   embed: Embed;
+  audio: string;
   onContent: (v: string) => void;
   onEmbed: (patch: Partial<Embed>) => void;
+  onAudio: (v: string) => void;
 }) {
   return (
     <div className="msg-editor">
@@ -141,6 +147,15 @@ function MessageEditor({
           onChange={(e) => onContent(e.target.value)}
           placeholder="Message simple, ou laisse vide pour n'envoyer que l'embed…"
         />
+      </div>
+
+      <div className="cfg-field">
+        <label>Audio joint</label>
+        <MediaPicker value={audio} onChange={onAudio} kind="audio" />
+        <p className="cfg-hint">
+          Le fichier est envoyé en pièce jointe (lecteur audio natif Discord), en plus du texte
+          et de l'embed.
+        </p>
       </div>
 
       <div className="embed-fields">
@@ -192,12 +207,21 @@ function MessageEditor({
   );
 }
 
-function MessagePreview({ content, embed }: { content: string; embed: Embed }) {
+function MessagePreview({
+  content,
+  embed,
+  audio,
+}: {
+  content: string;
+  embed: Embed;
+  audio?: string;
+}) {
   const hasEmbed = embed.title || embed.description || embed.image_url || embed.footer;
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
       {content && <div className="preview-content">{content}</div>}
+      {audio && <div className="preview-content">🎵 {audio.split("/").pop()}</div>}
       {hasEmbed ? (
         <div className="preview-embed" style={{ borderLeftColor: embed.color || "#c9a44a" }}>
           <div className="preview-embed-main">
@@ -217,15 +241,31 @@ function MessagePreview({ content, embed }: { content: string; embed: Embed }) {
           {embed.footer && <div className="preview-embed-footer">{embed.footer}</div>}
         </div>
       ) : (
-        !content && <div className="preview-empty">Message vide</div>
+        !content && !audio && <div className="preview-empty">Message vide</div>
       )}
     </div>
   );
 }
 
-function PubEditor({ pub, onPub }: { pub: Pub; onPub: (patch: Partial<Pub>) => void }) {
+function PubEditor({
+  pub,
+  audio,
+  onPub,
+  onAudio,
+}: {
+  pub: Pub;
+  audio: string;
+  onPub: (patch: Partial<Pub>) => void;
+  onAudio: (v: string) => void;
+}) {
   return (
     <div className="msg-editor">
+      <div className="cfg-field">
+        <label>Audio joint</label>
+        <MediaPicker value={audio} onChange={onAudio} kind="audio" />
+        <p className="cfg-hint">Le fichier est envoyé en pièce jointe, en plus de l'annonce.</p>
+      </div>
+
       <div className="pub-fields">
         <div className="cfg-field">
           <label>Nom du serveur</label>
@@ -315,11 +355,12 @@ function PubEditor({ pub, onPub }: { pub: Pub; onPub: (patch: Partial<Pub>) => v
   );
 }
 
-function PubPreview({ pub }: { pub: Pub }) {
+function PubPreview({ pub, audio }: { pub: Pub; audio?: string }) {
   const hasFields = pub.games || pub.type || pub.members;
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
+      {audio && <div className="preview-content">🎵 {audio.split("/").pop()}</div>}
       <div className="preview-embed" style={{ borderLeftColor: pub.color || "#c9a44a" }}>
         <div className="preview-embed-author">📣 Serveur partenaire</div>
         <div className="preview-embed-main">
@@ -427,6 +468,7 @@ export default function Messages() {
   const [oneChannel, setOneChannel] = useState<string | null>(null);
   const [oneContent, setOneContent] = useState("");
   const [oneEmbed, setOneEmbed] = useState<Embed>(emptyEmbed());
+  const [oneAudio, setOneAudio] = useState("");
   const [sending, setSending] = useState(false);
   const toasts = useToasts();
   const [editingOne, setEditingOne] = useState<Editing>(null);
@@ -434,6 +476,7 @@ export default function Messages() {
   // Publicité
   const [pubChannel, setPubChannel] = useState<string | null>(null);
   const [pub, setPub] = useState<Pub>(emptyPub());
+  const [pubAudio, setPubAudio] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [editingPub, setEditingPub] = useState<Editing>(null);
 
@@ -471,6 +514,7 @@ export default function Messages() {
           ...r,
           channel_id: r.channel_id != null ? String(r.channel_id) : null,
           embed: { ...emptyEmbed(), ...(r.embed || {}) },
+          audio_url: r.audio_url || "",
         }));
         setRecurring(recus);
         setRecSnapshot(recus);
@@ -496,6 +540,7 @@ export default function Messages() {
   const resetOne = () => {
     setOneContent("");
     setOneEmbed(emptyEmbed());
+    setOneAudio("");
     setOneChannel(null);
     setEditingOne(null);
   };
@@ -512,9 +557,9 @@ export default function Messages() {
             message_id: editingOne.message_id,
             channel_id: editingOne.channel_id,
             kind: "unique",
-            payload: { content: oneContent, embed: oneEmbed },
+            payload: { content: oneContent, embed: oneEmbed, audio_url: oneAudio },
           }
-        : { channel_id: oneChannel, content: oneContent, embed: oneEmbed };
+        : { channel_id: oneChannel, content: oneContent, embed: oneEmbed, audio_url: oneAudio };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -531,10 +576,11 @@ export default function Messages() {
     } finally {
       setSending(false);
     }
-  }, [editingOne, oneChannel, oneContent, oneEmbed, reloadHistory]);
+  }, [editingOne, oneChannel, oneContent, oneEmbed, oneAudio, reloadHistory]);
 
   const resetPub = () => {
     setPub(emptyPub());
+    setPubAudio("");
     setPubChannel(null);
     setEditingPub(null);
   };
@@ -551,9 +597,9 @@ export default function Messages() {
             message_id: editingPub.message_id,
             channel_id: editingPub.channel_id,
             kind: "pub",
-            payload: { pub },
+            payload: { pub, audio_url: pubAudio },
           }
-        : { channel_id: pubChannel, pub };
+        : { channel_id: pubChannel, pub, audio_url: pubAudio };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -570,17 +616,19 @@ export default function Messages() {
     } finally {
       setPublishing(false);
     }
-  }, [editingPub, pubChannel, pub, reloadHistory]);
+  }, [editingPub, pubChannel, pub, pubAudio, reloadHistory]);
 
   const editSent = useCallback((it: SentItem) => {
     if (it.kind === "pub") {
       setPub({ ...emptyPub(), ...(it.payload.pub || {}) });
+      setPubAudio(it.payload.audio_url || "");
       setPubChannel(it.channel_id);
       setEditingPub({ message_id: it.message_id, channel_id: it.channel_id });
       setTab("pub");
     } else {
       setOneContent(it.payload.content || "");
       setOneEmbed({ ...emptyEmbed(), ...(it.payload.embed || {}) });
+      setOneAudio(it.payload.audio_url || "");
       setOneChannel(it.channel_id);
       setEditingOne({ message_id: it.message_id, channel_id: it.channel_id });
       setTab("unique");
@@ -623,6 +671,7 @@ export default function Messages() {
           channel_id: r.channel_id,
           content: r.content,
           embed: r.embed,
+          audio_url: r.audio_url,
           interval_value: Math.max(1, Number(r.interval_value) || 1),
           interval_unit: r.interval_unit,
         }));
@@ -703,8 +752,10 @@ export default function Messages() {
             <MessageEditor
               content={oneContent}
               embed={oneEmbed}
+              audio={oneAudio}
               onContent={setOneContent}
               onEmbed={(p) => setOneEmbed((e) => ({ ...e, ...p }))}
+              onAudio={setOneAudio}
             />
             <div className="cfg-actions">
               <button
@@ -713,7 +764,7 @@ export default function Messages() {
                 disabled={
                   sending ||
                   (!editingOne && !oneChannel) ||
-                  !(oneContent.trim() || oneEmbed.title || oneEmbed.description)
+                  !(oneContent.trim() || oneEmbed.title || oneEmbed.description || oneAudio)
                 }
               >
                 {sending ? "…" : editingOne ? "Mettre à jour" : "Envoyer"}
@@ -732,7 +783,7 @@ export default function Messages() {
               onDelete={deleteSent}
             />
           </section>
-          <MessagePreview content={oneContent} embed={oneEmbed} />
+          <MessagePreview content={oneContent} embed={oneEmbed} audio={oneAudio} />
         </div>
       )}
 
@@ -760,7 +811,12 @@ export default function Messages() {
                 disabled={!!editingPub}
               />
             </div>
-            <PubEditor pub={pub} onPub={(p) => setPub((v) => ({ ...v, ...p }))} />
+            <PubEditor
+              pub={pub}
+              audio={pubAudio}
+              onPub={(p) => setPub((v) => ({ ...v, ...p }))}
+              onAudio={setPubAudio}
+            />
             <div className="cfg-actions">
               <button
                 className="btn primary"
@@ -783,7 +839,7 @@ export default function Messages() {
               onDelete={deleteSent}
             />
           </section>
-          <PubPreview pub={pub} />
+          <PubPreview pub={pub} audio={pubAudio} />
         </div>
       )}
 
@@ -856,10 +912,12 @@ export default function Messages() {
                 <MessageEditor
                   content={r.content}
                   embed={r.embed}
+                  audio={r.audio_url}
                   onContent={(v) => patchRec(r.id, { content: v })}
                   onEmbed={(p) => patchRec(r.id, { embed: { ...r.embed, ...p } })}
+                  onAudio={(v) => patchRec(r.id, { audio_url: v })}
                 />
-                <MessagePreview content={r.content} embed={r.embed} />
+                <MessagePreview content={r.content} embed={r.embed} audio={r.audio_url} />
               </div>
             ))}
 
