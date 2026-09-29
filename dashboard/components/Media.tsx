@@ -55,7 +55,7 @@ export default function Media() {
 
   const remove = useCallback(
     async (name: string) => {
-      if (!window.confirm("Supprimer définitivement cette image ?")) return;
+      if (!window.confirm("Supprimer définitivement ce fichier ?")) return;
       try {
         await fetch("/api/fripouille/media/delete", {
           method: "POST",
@@ -65,6 +65,25 @@ export default function Media() {
         await load();
       } catch {
         /* ignore */
+      }
+    },
+    [load]
+  );
+
+  const rename = useCallback(
+    async (it: MediaItem) => {
+      const label = window.prompt("Nouveau nom", it.label || it.name);
+      if (label === null || label.trim() === (it.label || it.name)) return;
+      try {
+        const res = await fetch("/api/fripouille/media/rename", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: it.name, label: label.trim() }),
+        });
+        if (!res.ok) throw new Error();
+        await load();
+      } catch {
+        setError("Échec du renommage.");
       }
     },
     [load]
@@ -116,19 +135,27 @@ export default function Media() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={it.url} alt="" />
             )}
+            <div className="media-name" title={it.name}>
+              {it.label || it.name}
+            </div>
             {it.builtin && <span className="media-badge">intégrée</span>}
             <div className="media-actions">
               <button className="btn" onClick={() => copy(it.url)}>
                 {copied === it.url ? "✓ Copié" : "Copier l'URL"}
               </button>
               {!it.builtin && (
-                <button
-                  className="btn icon danger"
-                  title="Supprimer"
-                  onClick={() => remove(it.name)}
-                >
-                  ✕
-                </button>
+                <>
+                  <button className="btn icon" title="Renommer" onClick={() => rename(it)}>
+                    ✎
+                  </button>
+                  <button
+                    className="btn icon danger"
+                    title="Supprimer"
+                    onClick={() => remove(it.name)}
+                  >
+                    ✕
+                  </button>
+                </>
               )}
             </div>
           </div>

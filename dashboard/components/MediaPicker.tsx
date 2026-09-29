@@ -87,7 +87,7 @@ export default function MediaPicker({
                     setOpen(false);
                   }}
                 >
-                  🎵 {it.name}
+                  🎵 {it.label || it.name}
                 </div>
               ))}
             </div>

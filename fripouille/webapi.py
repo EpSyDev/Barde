@@ -10,6 +10,7 @@ Routes génériques (le cœur du « moule répétable ») :
 - ``GET  /api/config/{module}``  → config effective d'un module
 - ``POST /api/config/{module}``  → fusionne, persiste, puis appelle ``apply()`` à chaud
 """
+import json
 import logging
 import re
 import secrets
@@ -31,6 +32,22 @@ _ALLOWED_EXT = _ALLOWED_EXT_IMAGE | _ALLOWED_EXT_AUDIO
 _MAX_IMAGE = 8 * 1024 * 1024         # 8 Mo par image
 _MAX_AUDIO = 10 * 1024 * 1024        # 10 Mo par audio (limite d'upload Discord standard)
 _NAME_RE = re.compile(r"^[a-f0-9]{32}\.(png|jpg|jpeg|gif|webp|mp3|ogg|wav|m4a)$")
+
+# Étiquette affichée (nom d'origine du fichier) associée au nom de stockage (hash).
+# Fichier séparé du dossier média (servi tel quel via /media/) pour ne pas l'exposer.
+_LABELS_PATH = config.DATA_DIR / "media_labels.json"
+
+
+def _load_labels():
+    try:
+        return json.loads(_LABELS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_labels(labels):
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _LABELS_PATH.write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
 
 # Tickets d'upload à usage unique : le fichier passe directement navigateur → Funnel,
 # en contournant la limite de taille de requête des fonctions serverless Vercel (~4,5 Mo)
@@ -241,11 +258,18 @@ async def run_action(request):
 
 async def media_list(request):
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    labels = _load_labels()
     items = []
     for p in sorted(config.MEDIA_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if p.is_file():
             kind = "audio" if p.suffix.lower() in _ALLOWED_EXT_AUDIO else "image"
-            items.append({"name": p.name, "url": _media_url(p.name), "size": p.stat().st_size, "kind": kind})
+            items.append({
+                "name": p.name,
+                "url": _media_url(p.name),
+                "size": p.stat().st_size,
+                "kind": kind,
+                "label": labels.get(p.name, p.name),
+            })
     return web.json_response({"media": items})
 
 
@@ -286,7 +310,31 @@ async def media_upload(request):
     except web.HTTPException:
         dest.unlink(missing_ok=True)
         raise
-    return web.json_response({"name": name, "url": _media_url(name), "kind": "audio" if is_audio else "image"})
+
+    label = Path(field.filename or "").stem.strip()[:120] or name
+    labels = _load_labels()
+    labels[name] = label
+    _save_labels(labels)
+    return web.json_response({
+        "name": name, "url": _media_url(name), "kind": "audio" if is_audio else "image", "label": label,
+    })
+
+
+async def media_rename(request):
+    data = await request.json()
+    name = str(data.get("name") or "")
+    label = str(data.get("label") or "").strip()[:120]
+    if not _NAME_RE.match(name):
+        raise web.HTTPBadRequest(reason="nom invalide")
+    if not (config.MEDIA_DIR / name).is_file():
+        raise web.HTTPNotFound(reason="fichier introuvable")
+    labels = _load_labels()
+    if label:
+        labels[name] = label
+    else:
+        labels.pop(name, None)
+    _save_labels(labels)
+    return web.json_response({"ok": True, "label": label or name})
 
 
 async def media_delete(request):
@@ -295,6 +343,9 @@ async def media_delete(request):
     if not _NAME_RE.match(name):
         raise web.HTTPBadRequest(reason="nom invalide")
     (config.MEDIA_DIR / name).unlink(missing_ok=True)
+    labels = _load_labels()
+    if labels.pop(name, None) is not None:
+        _save_labels(labels)
     return web.json_response({"ok": True})
 
 
@@ -351,6 +402,7 @@ def build_app(bot):
         web.get("/api/media", media_list),
         web.post("/api/media/upload-ticket", media_upload_ticket),
         web.post("/api/media/upload", media_upload),
+        web.post("/api/media/rename", media_rename),
         web.post("/api/media/delete", media_delete),
     ])
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)

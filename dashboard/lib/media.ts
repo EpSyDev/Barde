@@ -6,6 +6,7 @@ export type MediaItem = {
   size?: number;
   builtin?: boolean;
   kind?: "image" | "audio";
+  label?: string;
 };
 
 const PUBLIC_BASE = "https://taverne-ten.vercel.app";

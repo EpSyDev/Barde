@@ -1722,6 +1722,15 @@ h3 {
   border: 1px solid var(--panel-edge);
 }
 
+.media-name {
+  padding: 6px 8px 0;
+  font-size: var(--step--2);
+  color: var(--parchment-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .media-actions {
   display: flex;
   gap: 6px;
