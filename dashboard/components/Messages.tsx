@@ -211,17 +211,21 @@ function MessagePreview({
   content,
   embed,
   audio,
+  labelFor,
 }: {
   content: string;
   embed: Embed;
   audio?: string;
+  labelFor?: (url: string) => string;
 }) {
   const hasEmbed = embed.title || embed.description || embed.image_url || embed.footer;
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
       {content && <div className="preview-content">{content}</div>}
-      {audio && <div className="preview-content">🎵 {audio.split("/").pop()}</div>}
+      {audio && (
+        <div className="preview-content">🎵 {labelFor ? labelFor(audio) : audio.split("/").pop()}</div>
+      )}
       {hasEmbed ? (
         <div className="preview-embed" style={{ borderLeftColor: embed.color || "#c9a44a" }}>
           <div className="preview-embed-main">
@@ -355,12 +359,22 @@ function PubEditor({
   );
 }
 
-function PubPreview({ pub, audio }: { pub: Pub; audio?: string }) {
+function PubPreview({
+  pub,
+  audio,
+  labelFor,
+}: {
+  pub: Pub;
+  audio?: string;
+  labelFor?: (url: string) => string;
+}) {
   const hasFields = pub.games || pub.type || pub.members;
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
-      {audio && <div className="preview-content">🎵 {audio.split("/").pop()}</div>}
+      {audio && (
+        <div className="preview-content">🎵 {labelFor ? labelFor(audio) : audio.split("/").pop()}</div>
+      )}
       <div className="preview-embed" style={{ borderLeftColor: pub.color || "#c9a44a" }}>
         <div className="preview-embed-author">📣 Serveur partenaire</div>
         <div className="preview-embed-main">
@@ -463,6 +477,7 @@ export default function Messages() {
   const [channels, setChannels] = useState<Channel[] | null>(null);
   const [tab, setTab] = useState<"unique" | "recurrents" | "pub">("unique");
   const [error, setError] = useState<string | null>(null);
+  const [mediaLabels, setMediaLabels] = useState<Record<string, string>>({});
 
   // Envoi unique
   const [oneChannel, setOneChannel] = useState<string | null>(null);
@@ -497,18 +512,30 @@ export default function Messages() {
     [channels]
   );
 
+  const audioLabel = useCallback(
+    (url: string) => mediaLabels[url] || url.split("/").pop() || url,
+    [mediaLabels]
+  );
+
   useEffect(() => {
     (async () => {
       try {
-        const [chRes, cRes] = await Promise.all([
+        const [chRes, cRes, mRes] = await Promise.all([
           fetch("/api/fripouille/channels", { cache: "no-store" }),
           fetch("/api/fripouille/config/messages", { cache: "no-store" }),
+          fetch("/api/fripouille/media", { cache: "no-store" }),
         ]);
         if (!chRes.ok || !cRes.ok) throw new Error();
         const chData = await chRes.json();
         const cData = await cRes.json();
         setChannels(chData.channels || []);
         setHistory(cData.sent || []);
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          const map: Record<string, string> = {};
+          for (const it of mData.media || []) map[it.url] = it.label || it.name;
+          setMediaLabels(map);
+        }
         const recus = (cData.recurring || []).map((r: Partial<Recurring>) => ({
           ...newRecurring(),
           ...r,
@@ -783,7 +810,7 @@ export default function Messages() {
               onDelete={deleteSent}
             />
           </section>
-          <MessagePreview content={oneContent} embed={oneEmbed} audio={oneAudio} />
+          <MessagePreview content={oneContent} embed={oneEmbed} audio={oneAudio} labelFor={audioLabel} />
         </div>
       )}
 
@@ -839,7 +866,7 @@ export default function Messages() {
               onDelete={deleteSent}
             />
           </section>
-          <PubPreview pub={pub} audio={pubAudio} />
+          <PubPreview pub={pub} audio={pubAudio} labelFor={audioLabel} />
         </div>
       )}
 
@@ -917,7 +944,7 @@ export default function Messages() {
                   onEmbed={(p) => patchRec(r.id, { embed: { ...r.embed, ...p } })}
                   onAudio={(v) => patchRec(r.id, { audio_url: v })}
                 />
-                <MessagePreview content={r.content} embed={r.embed} audio={r.audio_url} />
+                <MessagePreview content={r.content} embed={r.embed} audio={r.audio_url} labelFor={audioLabel} />
               </div>
             ))}
 

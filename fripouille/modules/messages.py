@@ -26,7 +26,7 @@ from urllib.parse import unquote, urlparse
 
 import discord
 
-from .. import config
+from .. import config, media
 from ..registry import Module, register
 
 log = logging.getLogger("fripouille.messages")
@@ -137,7 +137,11 @@ def _audio_file(url):
     path = config.MEDIA_DIR / name
     if not name or not path.is_file():
         return None
-    return discord.File(path, filename=name)
+    label = media.label_for(name).strip() or name
+    ext = path.suffix
+    display = label if label.lower().endswith(ext.lower()) else f"{label}{ext}"
+    display = display.replace("/", "_").replace("\\", "_")
+    return discord.File(path, filename=display)
 
 
 def _render(kind, data):
