@@ -12,6 +12,8 @@ Routes génériques (le cœur du « moule répétable ») :
 """
 import logging
 import re
+import secrets
+import time
 import uuid
 from urllib.parse import unquote
 from pathlib import Path
@@ -30,6 +32,27 @@ _MAX_IMAGE = 8 * 1024 * 1024         # 8 Mo par image
 _MAX_AUDIO = 10 * 1024 * 1024        # 10 Mo par audio (limite d'upload Discord standard)
 _NAME_RE = re.compile(r"^[a-f0-9]{32}\.(png|jpg|jpeg|gif|webp|mp3|ogg|wav|m4a)$")
 
+# Tickets d'upload à usage unique : le fichier passe directement navigateur → Funnel,
+# en contournant la limite de taille de requête des fonctions serverless Vercel (~4,5 Mo)
+# qui bloquerait un upload relayé par le dashboard pour un audio de quelques Mo.
+_UPLOAD_TICKETS: dict[str, float] = {}
+_TICKET_TTL = 300  # secondes
+
+
+def _new_ticket():
+    now = time.monotonic()
+    for t, exp in list(_UPLOAD_TICKETS.items()):
+        if exp < now:
+            del _UPLOAD_TICKETS[t]
+    ticket = secrets.token_urlsafe(24)
+    _UPLOAD_TICKETS[ticket] = now + _TICKET_TTL
+    return ticket
+
+
+def _consume_ticket(ticket):
+    exp = _UPLOAD_TICKETS.pop(ticket, None)
+    return exp is not None and exp >= time.monotonic()
+
 
 def _media_url(name):
     base = config.PUBLIC_BASE_URL
@@ -43,7 +66,11 @@ async def _auth(request, handler):
     if request.path.startswith("/media/"):     # fichiers publics (chargés par Discord)
         return await handler(request)
     token = request.headers.get("X-Api-Token", "")
-    if not config.API_TOKEN or token != config.API_TOKEN:
+    authorized = bool(config.API_TOKEN) and token == config.API_TOKEN
+    if not authorized and request.method == "POST" and request.path == "/api/media/upload":
+        ticket = request.query.get("ticket", "")
+        authorized = bool(ticket) and _consume_ticket(ticket)
+    if not authorized:
         return _cors(web.json_response({"error": "unauthorized"}, status=401))
     try:
         resp = await handler(request)
@@ -222,6 +249,13 @@ async def media_list(request):
     return web.json_response({"media": items})
 
 
+async def media_upload_ticket(request):
+    """Ticket à usage unique (5 min) pour un upload direct navigateur → Funnel."""
+    ticket = _new_ticket()
+    base = config.PUBLIC_BASE_URL or ""
+    return web.json_response({"upload_url": f"{base}/api/media/upload?ticket={ticket}"})
+
+
 async def media_upload(request):
     reader = await request.multipart()
     field = await reader.next()
@@ -315,6 +349,7 @@ def build_app(bot):
         web.post("/api/config/{module}", set_config),
         web.post("/api/action/{module}/{action}", run_action),
         web.get("/api/media", media_list),
+        web.post("/api/media/upload-ticket", media_upload_ticket),
         web.post("/api/media/upload", media_upload),
         web.post("/api/media/delete", media_delete),
     ])

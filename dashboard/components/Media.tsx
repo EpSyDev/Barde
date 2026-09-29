@@ -31,9 +31,16 @@ export default function Media() {
       setUploading(true);
       setError(null);
       try {
+        // Ticket à usage unique puis upload direct navigateur → Funnel : évite la
+        // limite de taille de requête des fonctions serverless Vercel (~4,5 Mo), trop
+        // juste pour un audio de quelques Mo.
+        const ticketRes = await fetch("/api/fripouille/media/upload-ticket", { method: "POST" });
+        if (!ticketRes.ok) throw new Error();
+        const { upload_url } = await ticketRes.json();
+        if (!upload_url) throw new Error();
         const form = new FormData();
         form.append("file", file);
-        const res = await fetch("/api/fripouille/media/upload", { method: "POST", body: form });
+        const res = await fetch(upload_url, { method: "POST", body: form });
         if (!res.ok) throw new Error();
         await load();
       } catch {
