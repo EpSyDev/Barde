@@ -88,7 +88,7 @@ class ConfigStore:
         mod = registry.get(module_key)
         merged = dict(mod.defaults) if mod else {}
         merged.update(self._data.get(module_key, {}))
-        return merged
+        return mod.completer(merged) if mod and mod.completer else merged
 
     def keys(self) -> list[str]:
         """Tous les modules connus (registre ∪ valeurs déjà stockées)."""

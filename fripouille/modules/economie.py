@@ -1362,10 +1362,33 @@ async def action_ajuster(bot, payload) -> dict:
     return {"ok": True, "solde": solde}
 
 
+# Récompenses que le jeu MYRHAVEN déclenche (event_id → défaut, désactivé) : toujours listées au dashboard.
+EVENEMENTS_JEU = {
+    "borgne_victoire": {"enabled": False, "montant": 50, "label": "Taverne 3D : 1re victoire au Borgne"},
+    "menteur_victoire": {"enabled": False, "montant": 50, "label": "Taverne 3D : 1re victoire au Dé menteur"},
+    "palet_victoire": {"enabled": False, "montant": 50, "label": "Taverne 3D : 1re victoire au palet"},
+    "marelle_victoire": {"enabled": False, "montant": 50, "label": "Taverne 3D : 1re victoire à la marelle"},
+    "altus_carte": {"enabled": False, "montant": 150, "label": "Taverne 3D : carte d’Altus reconstituée (quête 1)"},
+}
+
+
+def _completer(cfg: dict) -> dict:
+    """Ajoute les sources de gain et récompenses du jeu apparues dans le code après l'enregistrement
+    de la config (un dict stocké remplace sinon celui par défaut en entier). Ne modifie rien d'existant."""
+    gains = cfg.get("gains") or {}
+    evts = cfg.get("evenements") or {}
+    g_manq = {k: dict(v) for k, v in DEFAULTS["gains"].items() if k not in gains}
+    e_manq = {k: dict(v) for k, v in EVENEMENTS_JEU.items() if k not in evts}
+    if not g_manq and not e_manq:
+        return cfg
+    return {**cfg, "gains": {**g_manq, **gains}, "evenements": {**e_manq, **evts}}
+
+
 MODULE = register(Module(
     key="economie",
     label="Économie",
     defaults=DEFAULTS,
+    completer=_completer,
     apply=None,  # config lue à la volée, rien à répercuter à chaud
     actions={
         "crediter": action_crediter,

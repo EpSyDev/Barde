@@ -29,6 +29,8 @@ class Module:
     defaults: dict                    # schéma + valeurs par défaut
     apply: Optional[ApplyFn] = None   # répercussion à chaud ; None si config lue à la volée
     actions: dict = field(default_factory=dict)  # actions ponctuelles : nom → ActionFn
+    # complète la config effective (entrées ajoutées au code après coup dans un dict déjà stocké)
+    completer: Optional[Callable[[dict], dict]] = None
 
 
 _MODULES: dict[str, Module] = {}
