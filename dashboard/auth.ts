@@ -26,8 +26,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ profile }) {
       return !!profile && allowed.includes(String(profile.id));
     },
+    // revérifiée à chaque requête : retirer un ID de la liste coupe aussi les sessions déjà ouvertes
     async jwt({ token, profile }) {
       if (profile) token.discordId = String(profile.id);
+      if (!token.discordId || !allowed.includes(String(token.discordId))) return null;
       return token;
     },
     async session({ session, token }) {
