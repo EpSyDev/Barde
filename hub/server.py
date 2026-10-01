@@ -119,10 +119,13 @@ def clean_look(look, race_forced: str | None) -> dict:
         v = look.get(k)
         if isinstance(v, int) and 0 <= v < 16:
             out[k] = v
-    for k in ("cheveux", "barbe", "marque", "accessoire"):
+    for k in ("cheveux", "barbe", "marque"):
         v = look.get(k)
         if isinstance(v, str) and _KEY.match(v):
             out[k] = v
+    acc = look.get("accessoires")
+    if isinstance(acc, list):
+        out["accessoires"] = [v for v in acc[:8] if isinstance(v, str) and _KEY.match(v)]
     out["cape"] = bool(look.get("cape"))
     return out
 
