@@ -736,7 +736,7 @@ def _clean_look(look, race_forced):
         v = look.get(k)
         if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 16:
             out[k] = v
-    for k in ("cheveux", "barbe"):
+    for k in ("cheveux", "barbe", "marque", "accessoire"):
         v = look.get(k)
         if isinstance(v, str) and _LOOK_KEY.match(v):
             out[k] = v
