@@ -127,6 +127,9 @@ def clean_look(look, race_forced: str | None) -> dict:
         liste = look.get(k)
         if isinstance(liste, list):
             out[k] = [v for v in liste[:8] if isinstance(v, str) and _KEY.match(v)]
+    cols = look.get("couleurs")      # couleurs choisies par zone de tenue / accessoire : {zone: 0xRRGGBB}
+    if isinstance(cols, dict):
+        out["couleurs"] = {k: v for k, v in list(cols.items())[:12] if isinstance(k, str) and _KEY.match(k) and isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 0xFFFFFF}
     out["cape"] = bool(look.get("cape"))
     return out
 
