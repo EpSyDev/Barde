@@ -117,7 +117,7 @@ def clean_look(look, race_forced: str | None) -> dict:
         out["genre"] = look["genre"]
     for k in ("teint", "cCheveux", "tenue", "corpulence", "taille", "age"):
         v = look.get(k)
-        if isinstance(v, int) and 0 <= v < 16:
+        if isinstance(v, int) and 0 <= v < (64 if k == "tenue" else 16):
             out[k] = v
     for k in ("cheveux", "barbe", "marque"):
         v = look.get(k)
