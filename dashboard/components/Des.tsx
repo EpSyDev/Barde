@@ -20,7 +20,6 @@ const SYNTAXE: [string, string][] = [
   ["1d20+5", "test, attaque, jet de sauvegarde"],
   ["1d8+2d6+3", "dégâts combinés (arme + attaque sournoise)"],
   ["4d6kh3", "garder les 3 meilleurs dés"],
-  ["2d20kl1", "garder le pire (désavantage écrit à la main)"],
   ["2d6r2", "relancer une fois les 1 et 2 (arme à deux mains)"],
   ["d100", "percentile, affiché dizaine + unité"],
 ];
@@ -45,8 +44,8 @@ export default function Des() {
           <div>
             <h2>Table de dés</h2>
             <p>
-              Un panneau épinglé dans le salon de jeu : un clic par dé (d4 → d100), avantage et
-              désavantage, jet libre, caractéristiques, jet contre la mort et tableau d&apos;initiative.
+              Un panneau épinglé dans le salon de jeu : un clic par dé (d4 → d100), jet libre et
+              tableau d&apos;initiative. Avantage et désavantage restent gérés à l&apos;oral par le MJ.
             </p>
           </div>
         </div>
@@ -81,10 +80,9 @@ export default function Des() {
           ))}
         </div>
         <p className="cfg-hint">
-          Options : <b>avantage</b> / <b>désavantage</b> (2d20, on garde le meilleur / le pire),{" "}
-          <b>critique</b> (dés de dégâts doublés, pas le modificateur), <b>secret</b> (jet du MJ, visible
+          Options : <b>critique</b> (dés de dégâts doublés, pas le modificateur), <b>secret</b> (jet du MJ, visible
           de lui seul, avec un bouton « Révéler »). 20 naturel = réussite critique, 1 naturel = échec
-          critique. Jet contre la mort : 10+ réussite, 1 = deux échecs, 20 = 1 PV.
+          critique. Seul le lanceur peut relancer son jet (🔁).
         </p>
       </section>
 

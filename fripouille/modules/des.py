@@ -1,30 +1,26 @@
 """Module « Dés » : lanceur de dés pour les soirées Donjons & Dragons (règles 5e).
 
-Deux entrées, même moteur :
+Le MJ gère à l'oral l'avantage, le désavantage et les cas particuliers : l'outil reste
+volontairement simple.
 
 - **Panneau** posté dans le salon de jeu (boutons persistants) :
-  ligne 1 : d4 · d6 · d8 · d10 · d12           (un clic = un dé, résultat public)
-  ligne 2 : d20 · d100 · 🎯 Avantage · 💀 Désavantage · ✍️ Jet libre
-  ligne 3 : 🧬 Caractéristiques · ⚰️ Jet contre la mort · ⚔️ Initiative
-- **Commande** ``/d jet:1d20+5 mode:avantage raison:"Attaque" secret:oui`` (partout, y
+  ligne 1 : d4 · d6 · d8 · d10 · d12          (un clic = un dé, résultat public)
+  ligne 2 : d20 · d100 · ✍️ Jet libre · ⚔️ Initiative
+- **Commandes** ``/d jet:1d8+3 raison:"Dégâts" critique:oui secret:oui`` (partout, y
   compris dans le chat d'un salon vocal) et ``/initiative``.
 
 Règles couvertes :
-- Expression libre : ``1d8+2d6+3``, ``2d20kh1`` (garder le plus haut), ``4d6kl3`` (garder
-  les plus bas), ``2d6r2`` (relancer une fois les dés ≤ 2 — Style de combat « arme à
-  deux mains »), ``d%`` = d100. Seuls les 7 dés du jeu sont admis.
-- **Avantage / désavantage** : le d20 devient 2d20, on garde le meilleur / le pire.
+- Expression libre : ``1d8+2d6+3``, ``4d6kh3`` / ``2d20kl1`` (garder les meilleurs / les
+  pires), ``2d6r2`` (relancer une fois les dés ≤ 2), ``d%`` = d100. Seuls les 7 dés du jeu.
 - **20 naturel** = réussite critique, **1 naturel** = échec critique (sur un d20 seul).
-- **Critique (dégâts)** : on lance deux fois plus de dés, le modificateur ne double pas.
+- **Critique (dégâts)** : deux fois plus de dés, le modificateur ne double pas.
 - **d100** : affiché comme les deux d10 du jeu (dizaine + unité, 00+0 = 100).
-- **Caractéristiques** : 6 × (4d6, on retire le plus faible), avec les modificateurs.
-- **Jet contre la mort** : ≥ 10 réussite, < 10 échec, 1 = deux échecs, 20 = 1 PV.
 - **Initiative** : tableau partagé ; chacun (ou le MJ pour ses monstres) lance d20+bonus,
-  ordre trié, bouton « tour suivant » avec compteur de rounds.
+  ordre trié, « tour suivant » avec compteur de rounds.
 - **Jet secret** (MJ) : visible du seul lanceur, avec un bouton « Révéler ».
 
-Chaque résultat public porte un bouton « 🔁 Relancer » (même jet, au nom de qui clique).
-Tirage via ``secrets.SystemRandom`` (aléa du système, pas un PRNG prévisible).
+Chaque résultat public porte « 🔁 Relancer », réservé à celui qui a lancé (son id est
+dans le custom_id du bouton). Tirage via ``secrets.SystemRandom``.
 """
 import logging
 import re
@@ -49,7 +45,7 @@ DEFAULTS = {
     "panel_message_id": None,
 }
 
-MODES = {"n": "", "a": "avantage", "d": "désavantage", "c": "critique"}
+MODES = {"n": "", "c": "critique"}
 
 
 # ═══════════════════════════ Moteur ═══════════════════════════
@@ -107,18 +103,8 @@ def _parser(expr: str) -> list[dict]:
 
 
 def _appliquer_mode(termes: list[dict], mode: str) -> list[dict]:
-    if mode in ("a", "d"):
-        d20 = next((t for t in termes if t.get("faces") == 20 and t["n"] == 1
-                    and t["kh"] is None and t["kl"] is None), None)
-        if d20 is None:
-            # « +5 » seul en avantage : c'est un test, donc 1d20+5.
-            if any(t.get("faces") == 20 for t in termes):
-                raise JetInvalide("l'avantage s'applique à un seul d20 (ex. 1d20+5)")
-            d20 = {"signe": 1, "n": 1, "faces": 20, "kh": None, "kl": None, "r": None}
-            termes.insert(0, d20)
-        d20["n"] = 2
-        d20["kh" if mode == "a" else "kl"] = 1
-    elif mode == "c":
+    """Critique (dégâts) : deux fois plus de dés, le modificateur ne change pas."""
+    if mode == "c":
         for t in termes:
             if "faces" in t:
                 t["n"] *= 2
@@ -210,17 +196,10 @@ def jet(expr: str, mode: str = "n") -> dict:
     return r
 
 
-def _mode_depuis_texte(txt: str) -> tuple[str, bool]:
-    """« avantage », « dés », « crit secret »… → (mode, secret)."""
+def _options_depuis_texte(txt: str) -> tuple[str, bool]:
+    """« critique », « secret », « crit secret »… → (mode, secret)."""
     t = (txt or "").lower()
-    secret = "secr" in t or "mj" in t.split()
-    if "désav" in t or "desav" in t or "dis" in t:
-        return "d", secret
-    if "av" in t:
-        return "a", secret
-    if "crit" in t:
-        return "c", secret
-    return "n", secret
+    return ("c" if "crit" in t else "n"), ("secr" in t or "mj" in t.split())
 
 
 # ═══════════════════════════ Rendu ═══════════════════════════
@@ -243,25 +222,32 @@ def _embed_jet(user, r: dict, mode: str, raison: str = "", secret: bool = False)
     return e
 
 
-class Relancer(discord.ui.DynamicItem[discord.ui.Button], template=r"des:re:(?P<m>[nadc]):(?P<e>.+)"):
-    def __init__(self, mode: str, expr: str):
+class Relancer(discord.ui.DynamicItem[discord.ui.Button],
+               template=r"des:re:(?P<u>\d+):(?P<m>[nc]):(?P<e>.+)"):
+    """« 🔁 Relancer » : refait le même jet, uniquement pour celui qui l'a lancé."""
+
+    def __init__(self, uid: int, mode: str, expr: str):
         super().__init__(discord.ui.Button(
             label="Relancer", emoji="🔁", style=discord.ButtonStyle.secondary,
-            custom_id=f"des:re:{mode}:{expr}"[:100],
+            custom_id=f"des:re:{uid}:{mode}:{expr}"[:100],
         ))
-        self.mode, self.expr = mode, expr
+        self.uid, self.mode, self.expr = uid, mode, expr
 
     @classmethod
     async def from_custom_id(cls, interaction, item, match: re.Match):
-        return cls(match["m"], match["e"])
+        return cls(int(match["u"]), match["m"], match["e"])
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.uid:
+            await interaction.response.send_message(
+                "🎲 Ce jet n'est pas le tien : seul son lanceur peut le relancer.", ephemeral=True)
+            return
         await _repondre_jet(interaction, self.expr, self.mode)
 
 
-def _vue_relancer(expr: str, mode: str) -> discord.ui.View:
+def _vue_relancer(uid: int, expr: str, mode: str) -> discord.ui.View:
     v = discord.ui.View(timeout=None)
-    v.add_item(Relancer(mode, expr))
+    v.add_item(Relancer(uid, mode, expr))
     return v
 
 
@@ -293,41 +279,7 @@ async def _repondre_jet(interaction: discord.Interaction, expr: str, mode: str =
         await interaction.response.send_message(embed=e, view=Reveler(e), ephemeral=True)
     else:
         # L'expression est relancée telle que tapée (avant le mode) : on garde la forme brute.
-        await interaction.response.send_message(embed=e, view=_vue_relancer(_normaliser(expr)[:MAX_EXPR], mode))
-
-
-# ═══════════════════════════ Jets spéciaux ═══════════════════════════
-async def _caracteristiques(interaction: discord.Interaction):
-    lignes, scores = [], []
-    for i in range(6):
-        des = sorted((_d(6) for _ in range(4)), reverse=True)
-        score = sum(des[:3])
-        scores.append(score)
-        mod = (score - 10) // 2
-        lignes.append(f"`#{i + 1}` {', '.join(f'**{d}**' for d in des[:3])}, ~~{des[3]}~~ → "
-                      f"**{score}** ({mod:+d})")
-    tri = sorted(scores, reverse=True)
-    lignes.append(f"\nÀ répartir : **{' · '.join(map(str, tri))}** — total {sum(scores)}")
-    e = discord.Embed(title="🧬 Caractéristiques (4d6, on retire le plus faible)",
-                      description="\n".join(lignes), color=OR)
-    e.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-    await interaction.response.send_message(embed=e)
-
-
-async def _jet_mort(interaction: discord.Interaction):
-    v = _d(20)
-    if v == 20:
-        txt, c = "✨ **20 naturel** : tu reprends conscience avec **1 PV** !", VERT
-    elif v == 1:
-        txt, c = "💀 **1 naturel** : compte **deux échecs**.", ROUGE
-    elif v >= 10:
-        txt, c = "✅ **Réussite** (10 ou plus).", VERT
-    else:
-        txt, c = "❌ **Échec** (moins de 10).", ROUGE
-    e = discord.Embed(title="⚰️ Jet de sauvegarde contre la mort",
-                      description=f"# {v}\n{txt}\n-# 3 réussites = stabilisé · 3 échecs = mort", color=c)
-    e.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-    await interaction.response.send_message(embed=e)
+        await interaction.response.send_message(embed=e, view=_vue_relancer(interaction.user.id, _normaliser(expr)[:MAX_EXPR], mode))
 
 
 # ═══════════════════════════ Initiative ═══════════════════════════
@@ -355,11 +307,11 @@ def _embed_initiative(s: dict) -> discord.Embed:
 
 
 class InitiativeModal(discord.ui.Modal, title="Mon initiative"):
-    bonus = discord.ui.TextInput(label="Bonus d'initiative (modificateur de DEX…)", default="0", max_length=4)
-    nom = discord.ui.TextInput(label="Nom (vide = toi ; ex. « Gobelin 1 » pour le MJ)",
-                               required=False, max_length=40)
-    mode = discord.ui.TextInput(label="Avantage ? (vide, « avantage » ou « désavantage »)",
-                                required=False, max_length=12)
+    # Discord : libellés de 45 caractères max (sinon le formulaire est refusé).
+    bonus = discord.ui.TextInput(label="Bonus d'initiative", default="0", max_length=4,
+                                 placeholder="Modificateur de DEX, ex. 2 ou -1")
+    nom = discord.ui.TextInput(label="Nom (vide = toi)", required=False, max_length=40,
+                               placeholder="Pour le MJ : « Gobelin 1 », « Dragon »…")
 
     def __init__(self, message_id: int):
         super().__init__()
@@ -375,9 +327,7 @@ class InitiativeModal(discord.ui.Modal, title="Mon initiative"):
         except ValueError:
             await interaction.response.send_message("⚠️ Le bonus doit être un nombre (ex. 2 ou -1).", ephemeral=True)
             return
-        m, _ = _mode_depuis_texte(str(self.mode))
-        des = [_d(20), _d(20)] if m in ("a", "d") else [_d(20)]
-        d20 = max(des) if m == "a" else min(des)
+        d20 = _d(20)
         nom = str(self.nom).strip() or interaction.user.display_name
         cle = f"{interaction.user.id}:{nom.lower()}"
         s["entrees"] = [en for en in s["entrees"] if en["cle"] != cle]
@@ -458,32 +408,16 @@ async def _ouvrir_initiative(interaction: discord.Interaction):
 
 
 # ═══════════════════════════ Panneau ═══════════════════════════
-class BonusModal(discord.ui.Modal):
-    bonus = discord.ui.TextInput(label="Bonus (ex. 5, -1, ou 1d4+5 avec Bénédiction)",
-                                 required=False, max_length=30, placeholder="0")
-    raison = discord.ui.TextInput(label="Pour quoi ? (facultatif)", required=False, max_length=60,
-                                  placeholder="Attaque à l'épée, Perception, JS Sagesse…")
-
-    def __init__(self, mode: str):
-        super().__init__(title="Jet avec avantage" if mode == "a" else "Jet avec désavantage")
-        self.mode = mode
-
-    async def on_submit(self, interaction: discord.Interaction):
-        b = str(self.bonus).replace(" ", "")
-        expr = "1d20" + (b if b.startswith(("+", "-")) else f"+{b}" if b else "")
-        await _repondre_jet(interaction, expr, self.mode, str(self.raison).strip())
-
-
 class LibreModal(discord.ui.Modal, title="Jet libre"):
     expr = discord.ui.TextInput(label="Jet", max_length=MAX_EXPR,
                                 placeholder="1d20+5 · 1d8+2d6+3 · 4d6kh3 · 2d6r2 · d100")
     raison = discord.ui.TextInput(label="Pour quoi ? (facultatif)", required=False, max_length=60,
                                   placeholder="Dégâts de l'arc, Boule de feu…")
     options = discord.ui.TextInput(label="Options (facultatif)", required=False, max_length=30,
-                                   placeholder="avantage · désavantage · critique · secret")
+                                   placeholder="critique (dégâts doublés) · secret (MJ)")
 
     async def on_submit(self, interaction: discord.Interaction):
-        mode, secret = _mode_depuis_texte(str(self.options))
+        mode, secret = _options_depuis_texte(str(self.options))
         await _repondre_jet(interaction, str(self.expr), mode, str(self.raison).strip(), secret)
 
 
@@ -500,12 +434,8 @@ class PanneauVue(discord.ui.View):
             b.callback = self._de(f)
             self.add_item(b)
         for label, emoji, cid, row, style, cb in (
-            ("Avantage", "🎯", "des:adv", 1, discord.ButtonStyle.success, self._modal(lambda: BonusModal("a"))),
-            ("Désavantage", "💀", "des:dis", 1, discord.ButtonStyle.danger, self._modal(lambda: BonusModal("d"))),
-            ("Jet libre", "✍️", "des:libre", 2, discord.ButtonStyle.primary, self._modal(LibreModal)),
-            ("Caractéristiques", "🧬", "des:carac", 2, discord.ButtonStyle.secondary, _caracteristiques),
-            ("Jet contre la mort", "⚰️", "des:mort", 2, discord.ButtonStyle.secondary, _jet_mort),
-            ("Initiative", "⚔️", "des:ini", 2, discord.ButtonStyle.danger, _ouvrir_initiative),
+            ("Jet libre", "✍️", "des:libre", 1, discord.ButtonStyle.success, self._modal(LibreModal)),
+            ("Initiative", "⚔️", "des:ini", 1, discord.ButtonStyle.danger, _ouvrir_initiative),
         ):
             b = _btn(label, emoji, cid, row, style)
             b.callback = cb
@@ -528,18 +458,14 @@ def _panneau_embed() -> discord.Embed:
     return discord.Embed(
         title="🎲 Table de dés — Donjons & Dragons",
         description=(
-            "**Un clic = un dé.** Pour un test avec bonus : 🎯 / 💀 (avantage, désavantage) "
-            "ou ✍️ **Jet libre**.\n\n"
+            "**Un clic = un dé.** Pour un jet avec bonus ou plusieurs dés : ✍️ **Jet libre**.\n\n"
             "**Écrire un jet**\n"
             "`1d20+5` test ou attaque · `1d8+2d6+3` dégâts combinés\n"
-            "`4d6kh3` garder les 3 meilleurs · `2d20kl1` garder le pire\n"
-            "`2d6r2` relancer une fois les 1-2 · `d100` percentile\n"
-            "Options : **avantage**, **désavantage**, **critique** (dés de dégâts doublés), "
-            "**secret** (jet du MJ, visible de lui seul).\n\n"
-            "**Raccourci** : `/d jet:1d20+5 mode:avantage raison:Attaque` — marche aussi dans le "
-            "chat du salon vocal.\n"
-            "-# 20 naturel = réussite critique · 1 naturel = échec critique · 🔁 sous chaque "
-            "résultat pour relancer le même jet"
+            "`4d6kh3` garder les 3 meilleurs · `2d6r2` relancer une fois les 1-2 · `d100`\n"
+            "Options : **critique** (dés de dégâts doublés), **secret** (jet du MJ, visible de lui seul).\n\n"
+            "**Raccourci** : `/d jet:1d8+3 raison:Dégâts` — marche aussi dans le chat du salon vocal.\n"
+            "⚔️ **Initiative** : ouvre le tableau du combat, chacun y lance son d20 + bonus.\n"
+            "-# 20 naturel = réussite critique · 1 naturel = échec critique · 🔁 pour relancer son propre jet"
         ),
         color=OR,
     )
@@ -550,20 +476,13 @@ def setup(tree: app_commands.CommandTree, guild) -> None:
     @tree.command(name="d", description="Lancer des dés (D&D) : 1d20+5, 1d8+2d6+3, 4d6kh3…", guild=guild)
     @app_commands.describe(
         jet="Le jet : 1d20+5, 2d6+3, 4d6kh3, d100… (défaut : 1d20)",
-        mode="Avantage, désavantage ou critique (dés de dégâts doublés)",
         raison="Pour quoi ? (Attaque, Perception, Boule de feu…)",
+        critique="Coup critique : les dés de dégâts sont doublés (pas le modificateur)",
         secret="Jet secret : toi seul vois le résultat (MJ)",
     )
-    @app_commands.choices(mode=[
-        app_commands.Choice(name="normal", value="n"),
-        app_commands.Choice(name="avantage", value="a"),
-        app_commands.Choice(name="désavantage", value="d"),
-        app_commands.Choice(name="critique (dégâts doublés)", value="c"),
-    ])
-    async def d_cmd(interaction: discord.Interaction, jet: str = "1d20",
-                    mode: app_commands.Choice[str] | None = None, raison: str = "",
-                    secret: bool = False):
-        await _repondre_jet(interaction, jet, mode.value if mode else "n", raison[:60], secret)
+    async def d_cmd(interaction: discord.Interaction, jet: str = "1d20", raison: str = "",
+                    critique: bool = False, secret: bool = False):
+        await _repondre_jet(interaction, jet, "c" if critique else "n", raison[:60], secret)
 
     @tree.command(name="initiative", description="Ouvrir un tableau d'initiative pour un combat.", guild=guild)
     async def init_cmd(interaction: discord.Interaction):
