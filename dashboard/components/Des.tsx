@@ -5,16 +5,17 @@ import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
 
-type Cfg = { enabled: boolean; channel_id: string | null };
+type Cfg = { enabled: boolean; channel_id: string | null; log_channel_id: string | null };
 
-const LABELS: Record<string, string> = { enabled: "Activation", channel_id: "Salon" };
+const LABELS: Record<string, string> = { enabled: "Activation", channel_id: "Salon", log_channel_id: "Journal MJ" };
 
 const normalize = (d: Record<string, unknown>): Cfg => ({
   enabled: !!d.enabled,
   channel_id: d.channel_id != null ? String(d.channel_id) : null,
+  log_channel_id: d.log_channel_id != null ? String(d.log_channel_id) : null,
 });
 // panel_message_id reste géré par le bot : on ne renvoie que les réglages.
-const serialize = (c: Cfg) => ({ enabled: c.enabled, channel_id: c.channel_id });
+const serialize = (c: Cfg) => ({ enabled: c.enabled, channel_id: c.channel_id, log_channel_id: c.log_channel_id });
 
 const SYNTAXE: [string, string][] = [
   ["1d20+5", "test, attaque, jet de sauvegarde"],
@@ -63,6 +64,23 @@ export default function Des() {
             Les commandes <code>/d</code> et <code>/initiative</code> marchent partout, y compris dans le
             chat d&apos;un salon vocal pendant la partie.
           </p>
+        </div>
+
+        <div className="cfg-field">
+          <label>Journal du MJ</label>
+          <ChannelSelect
+            channels={channels}
+            value={d.log_channel_id}
+            onChange={(v) => mod.patch({ log_channel_id: v })}
+            placeholder="— Aucun journal —"
+          />
+          <p className="cfg-hint">
+            Salon privé du MJ : chaque jet (secrets compris), relance, entrée d&apos;initiative, tour
+            passé et fin de combat y est consigné, sans ping.
+          </p>
+          {d.log_channel_id && d.log_channel_id === d.channel_id && (
+            <span className="cfg-err">Le journal doit être un autre salon que la table de jeu.</span>
+          )}
         </div>
       </section>
 

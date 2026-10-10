@@ -43,6 +43,7 @@ DEFAULTS = {
     "enabled": False,
     "channel_id": "1558518342791331941",
     "panel_message_id": None,
+    "log_channel_id": None,   # salon MJ : journal de tout ce qui se passe à la table
 }
 
 MODES = {"n": "", "c": "critique"}
@@ -202,6 +203,23 @@ def _options_depuis_texte(txt: str) -> tuple[str, bool]:
     return ("c" if "crit" in t else "n"), ("secr" in t or "mj" in t.split())
 
 
+# ═══════════════════════════ Journal MJ ═══════════════════════════
+async def _log(client, texte: str):
+    """Trace une action de la table dans le salon MJ (si configuré). Jamais de ping."""
+    cid = client.store.get("des").get("log_channel_id")
+    channel = client.get_channel(int(cid)) if cid else None
+    if channel is None:
+        return
+    try:
+        await channel.send(texte[:2000], allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException as exc:
+        log.warning("journal MJ : %s", exc)
+
+
+def _qui(user) -> str:
+    return f"**{user.display_name}**"
+
+
 # ═══════════════════════════ Rendu ═══════════════════════════
 def _embed_jet(user, r: dict, mode: str, raison: str = "", secret: bool = False) -> discord.Embed:
     couleur, ligne_crit = OR, None
@@ -242,7 +260,7 @@ class Relancer(discord.ui.DynamicItem[discord.ui.Button],
             await interaction.response.send_message(
                 "🎲 Ce jet n'est pas le tien : seul son lanceur peut le relancer.", ephemeral=True)
             return
-        await _repondre_jet(interaction, self.expr, self.mode)
+        await _repondre_jet(interaction, self.expr, self.mode, relance=True)
 
 
 def _vue_relancer(uid: int, expr: str, mode: str) -> discord.ui.View:
@@ -265,10 +283,11 @@ class Reveler(discord.ui.View):
                      icon_url=interaction.user.display_avatar.url)
         await interaction.response.edit_message(view=None)
         await interaction.followup.send(embed=e)
+        await _log(interaction.client, f"📢 {_qui(interaction.user)} révèle son jet secret à la table.")
 
 
 async def _repondre_jet(interaction: discord.Interaction, expr: str, mode: str = "n",
-                        raison: str = "", secret: bool = False):
+                        raison: str = "", secret: bool = False, relance: bool = False):
     try:
         r = jet(expr, mode)
     except JetInvalide as exc:
@@ -280,6 +299,17 @@ async def _repondre_jet(interaction: discord.Interaction, expr: str, mode: str =
     else:
         # L'expression est relancée telle que tapée (avant le mode) : on garde la forme brute.
         await interaction.response.send_message(embed=e, view=_vue_relancer(interaction.user.id, _normaliser(expr)[:MAX_EXPR], mode))
+    marques = [m for m, ok in (("🔒 secret", secret), ("🔁 relance", relance),
+                                ("💥 critique", mode == "c")) if ok]
+    nat = ""
+    if r["nat"] == 20:
+        nat = " ✨ 20 naturel"
+    elif r["nat"] == 1:
+        nat = " 💀 1 naturel"
+    await _log(interaction.client,
+               f"🎲 {_qui(interaction.user)}{f' · {raison}' if raison else ''} · `{r['expr']}` → "
+               f"**{r['total']}**{nat}{' · ' + ', '.join(marques) if marques else ''}"
+               f" · <#{interaction.channel_id}>")
 
 
 # ═══════════════════════════ Initiative ═══════════════════════════
@@ -301,8 +331,8 @@ def _embed_initiative(s: dict) -> discord.Embed:
     if s["close"]:
         titre += " (combat terminé)"
     e = discord.Embed(title=titre, description=corps, color=GRIS if s["close"] else ROUGE)
-    e.set_footer(text="Égalité : le plus gros bonus passe devant. "
-                      "Le MJ peut ajouter ses monstres en leur donnant un nom.")
+    e.set_footer(text="Égalité : le plus gros bonus passe devant. Le MJ ajoute ses créatures en "
+                      "leur donnant un nom. ⏭️ : le MJ, ou le joueur dont c'est le tour.")
     return e
 
 
@@ -331,14 +361,28 @@ class InitiativeModal(discord.ui.Modal, title="Mon initiative"):
         nom = str(self.nom).strip() or interaction.user.display_name
         cle = f"{interaction.user.id}:{nom.lower()}"
         s["entrees"] = [en for en in s["entrees"] if en["cle"] != cle]
-        s["entrees"].append({"cle": cle, "nom": nom, "total": d20 + b, "d20": d20, "bonus": b})
+        s["entrees"].append({"cle": cle, "uid": interaction.user.id, "nom": nom,
+                             "total": d20 + b, "d20": d20, "bonus": b})
         s["entrees"].sort(key=lambda en: (en["total"], en["bonus"], _rng.random()), reverse=True)
         await interaction.response.edit_message(embed=_embed_initiative(s))
+        par = "" if nom == interaction.user.display_name else f" (par {_qui(interaction.user)})"
+        await _log(interaction.client,
+                   f"⚔️ Initiative · **{nom}**{par} → **{d20 + b}** (d20 {d20} {b:+d})")
 
 
 def _peut_mener(interaction, s) -> bool:
-    perms = getattr(interaction.user, "guild_permissions", None)
-    return interaction.user.id == s["auteur"] or bool(perms and perms.manage_messages)
+    """Le MJ = celui qui a ouvert l'initiative."""
+    return interaction.user.id == s["auteur"]
+
+
+def _peut_avancer(interaction, s) -> bool:
+    """Tour suivant : le MJ toujours (ses créatures, et pour débloquer) ; un joueur
+    seulement pendant SON tour, une fois le combat commencé."""
+    if _peut_mener(interaction, s):
+        return True
+    if not s["round"] or not s["entrees"]:
+        return False
+    return s["entrees"][s["tour"]].get("uid") == interaction.user.id
 
 
 class InitiativeVue(discord.ui.View):
@@ -365,8 +409,10 @@ class InitiativeVue(discord.ui.View):
         s = await self._session(interaction)
         if s is None:
             return
-        if not _peut_mener(interaction, s):
-            await interaction.response.send_message("Seul le MJ (qui a lancé le combat) avance les tours.", ephemeral=True)
+        if not _peut_avancer(interaction, s):
+            msg = ("Seul le MJ lance le premier tour." if not s["round"]
+                   else "Ce n'est pas ton tour : tu pourras passer la main quand ce sera le tien.")
+            await interaction.response.send_message(f"⏳ {msg}", ephemeral=True)
             return
         if not s["entrees"]:
             await interaction.response.send_message("Personne n'a lancé son initiative.", ephemeral=True)
@@ -378,6 +424,9 @@ class InitiativeVue(discord.ui.View):
             if s["tour"] >= len(s["entrees"]):
                 s["tour"], s["round"] = 0, s["round"] + 1
         await interaction.response.edit_message(embed=_embed_initiative(s))
+        await _log(interaction.client,
+                   f"⏭️ Round {s['round']} — au tour de **{s['entrees'][s['tour']]['nom']}**"
+                   f" (passé par {_qui(interaction.user)})")
 
     @discord.ui.button(label="Fin du combat", emoji="🏳️", style=discord.ButtonStyle.secondary,
                        custom_id="des:ini:clore")
@@ -390,6 +439,8 @@ class InitiativeVue(discord.ui.View):
             return
         s["close"] = True
         await interaction.response.edit_message(embed=_embed_initiative(s), view=None)
+        await _log(interaction.client, f"🏳️ Combat terminé par {_qui(interaction.user)}"
+                                       f" après {s['round']} round(s).")
         _initiatives.pop(interaction.message.id, None)
 
 
@@ -402,6 +453,7 @@ async def _ouvrir_initiative(interaction: discord.Interaction):
     )
     msg = await interaction.original_response()
     _initiatives[msg.id] = s
+    await _log(interaction.client, f"⚔️ {_qui(interaction.user)} ouvre une initiative (MJ du combat) · {msg.jump_url}")
     if len(_initiatives) > 20:   # borne mémoire : on oublie les plus anciens
         for k in list(_initiatives)[:-20]:
             del _initiatives[k]
