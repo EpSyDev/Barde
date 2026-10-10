@@ -245,7 +245,8 @@ async def appliquer(op: str, d: dict, acteur: str) -> dict:
         _changer()
         bot = _bot_ref.get("bot")
         if bot is not None:
-            await des_module._log(bot, f"🗺️ **{acteur}** (plateau){f' · {entree['raison']}' if entree['raison'] else ''}"
+            raison = f" · {entree['raison']}" if entree["raison"] else ""
+            await des_module._log(bot, f"🗺️ **{acteur}** (plateau){raison}"
                                        f" · `{r['expr']}` → **{r['total']}**"
                                        + (" · 🔒 secret" if entree["cache"] else ""))
         return {"ok": True, "jet": entree}
