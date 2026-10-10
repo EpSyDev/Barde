@@ -7,6 +7,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MediaPicker from "@/components/MediaPicker";
+import { AmbianceSonore, type Son } from "@/lib/ambiance-sonore";
+import { TUILES } from "@/lib/meteo";
+import { BESTIAIRE, CLASSES, COULEURS_HEROS, SCENES, type Classe, type Creature, type Scene } from "@/lib/scenes";
 
 const CASE = 64; // px par case dans le « monde » (avant zoom)
 const METRES_PAR_CASE = 1.5;
@@ -18,6 +21,7 @@ type TypePion = "joueur" | "monstre" | "pnj";
 type Pion = {
   id: string; nom: string; type: TypePion; couleur: string; taille: number; x: number; y: number;
   pv: number | null; pv_max: number | null; image_url: string; cache: boolean; etats: string[];
+  icone?: string;
 };
 type Jet = {
   id: string; qui: string; raison: string; expr: string; total: number; nat: number | null;
@@ -29,10 +33,25 @@ type Etat = {
   pions: Pion[];
   brouillard: { actif: boolean; reveles: number[][] };
   fil: Jet[];
+  scene?: { id: string; nom: string; lumieres: number[][] };
+  ambiance?: { lumiere: "jour" | "crepuscule" | "nuit"; meteo: string; son: Son };
 };
 type Urls = { flux_url: string; op_url: string; etat_url: string };
 type Outil = "main" | "regle" | "reveler" | "masquer" | "ping";
 type Ping = { id: number; x: number; y: number; qui: string; couleur: string };
+
+const LUMIERES = [
+  { id: "jour", label: "☀️ Jour" }, { id: "crepuscule", label: "🌇 Crépuscule" }, { id: "nuit", label: "🌙 Nuit" },
+] as const;
+const METEOS = [
+  { id: "aucune", label: "Dégagé" }, { id: "pluie", label: "🌧️ Pluie" }, { id: "neige", label: "❄️ Neige" },
+  { id: "brume", label: "🌫️ Brume" }, { id: "braises", label: "🔥 Braises" },
+] as const;
+const SONS: { id: Son; label: string }[] = [
+  { id: "taverne", label: "🍺 Taverne" }, { id: "crypte", label: "🕯️ Crypte" }, { id: "foret", label: "🌲 Forêt" },
+  { id: "camp", label: "🏕️ Feu de camp" }, { id: "pluie", label: "🌧️ Pluie" }, { id: "aucun", label: "Silence" },
+];
+const TORCHE = 5; // rayon de lumière autour d'un héros la nuit (cases)
 
 const OUTILS: { id: Outil; label: string; icone: string; aide: string }[] = [
   { id: "main", label: "Déplacer", icone: "✋", aide: "Glisser un pion · glisser le fond pour bouger la vue · molette = zoom" },
@@ -67,7 +86,11 @@ export default function Plateau() {
   const [outil, setOutil] = useState<Outil>("main");
   const [selection, setSelection] = useState<string | null>(null);
   const [vueJoueur, setVueJoueur] = useState(false);
-  const [onglet, setOnglet] = useState<"pions" | "des" | "carte">("pions");
+  const [onglet, setOnglet] = useState<"pions" | "des" | "ambiance" | "carte">("pions");
+  const [sonActif, setSonActif] = useState(false);
+  const [volume, setVolume] = useState(0.5);
+  const [quantite, setQuantite] = useState(1);
+  const moteurSon = useRef<AmbianceSonore | null>(null);
   const [vue, setVue] = useState({ x: 40, y: 40, z: 0.8 });
   const [pings, setPings] = useState<Ping[]>([]);
   const [toast, setToast] = useState<Jet | null>(null);
@@ -140,6 +163,18 @@ export default function Plateau() {
       es?.close();
     };
   }, []);
+
+  const sonScene = etat?.ambiance?.son ?? "aucun";
+  useEffect(() => {
+    if (!sonActif) {
+      moteurSon.current?.arreter();
+      return;
+    }
+    if (!moteurSon.current) moteurSon.current = new AmbianceSonore();
+    moteurSon.current.volume(volume);
+    moteurSon.current.jouer(sonScene);
+  }, [sonActif, sonScene, volume]);
+  useEffect(() => () => moteurSon.current?.fermer(), []);
 
   // Nouveau jet dans le fil → bandeau visible de toute la table quelques secondes.
   useEffect(() => {
@@ -331,17 +366,45 @@ export default function Plateau() {
     return borne(Math.floor(w.x / CASE), Math.floor(w.y / CASE));
   };
   /** Case libre la plus proche (spirale) : deux pions ajoutés ne s'empilent pas. */
-  const caseLibre = (x0: number, y0: number): [number, number] => {
-    const occupe = (x: number, y: number) =>
-      etat?.pions.some((p) => x >= p.x && y >= p.y && x < p.x + p.taille && y < p.y + p.taille);
+  const caseLibre = (x0: number, y0: number, taille = 1, pris: [number, number, number][] = []): [number, number] => {
+    const tous = [...(etat?.pions.map((p) => [p.x, p.y, p.taille] as [number, number, number]) || []), ...pris];
+    const libre = (x: number, y: number) =>
+      !tous.some(([px, py, pt]) => x < px + pt && px < x + taille && y < py + pt && py < y + taille);
     for (let r = 0; r < 40; r++)
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const [x, y] = borne(x0 + dx, y0 + dy);
-          if (!occupe(x, y)) return [x, y];
+          const [x, y] = borne(x0 + dx, y0 + dy, taille);
+          if (libre(x, y)) return [x, y];
         }
     return [x0, y0];
+  };
+  const ajouterHeros = async (cl: Classe) => {
+    const n = etat?.pions.filter((p) => p.type === "joueur").length || 0;
+    const entree = SCENES.find((x) => x.id === etat?.scene?.id)?.entree;
+    const [x, y] = caseLibre(...(entree ?? centreVue()));
+    const d = await op({
+      op: "pion_ajouter", nom: cl.nom, type: "joueur", icone: cl.icone,
+      couleur: COULEURS_HEROS[n % COULEURS_HEROS.length], x, y, pv_max: null,
+    });
+    if (d?.id) setSelection(d.id);
+  };
+  const ajouterCreatures = async (cr: Creature) => {
+    const deja = etat?.pions.filter((p) => p.nom.startsWith(cr.nom)).length || 0;
+    const [cx, cy] = centreVue();
+    const pris: [number, number, number][] = [];
+    let dernier: string | null = null;
+    for (let k = 1; k <= quantite; k++) {
+      const [x, y] = caseLibre(cx, cy, cr.taille, pris);
+      pris.push([x, y, cr.taille]);
+      const nom = quantite === 1 && deja === 0 ? cr.nom : `${cr.nom} ${deja + k}`;
+      const d = await op({
+        op: "pion_ajouter", nom, type: "monstre", icone: cr.icone, couleur: cr.couleur,
+        taille: cr.taille, pv_max: cr.pv, x, y,
+      });
+      if (d?.id) dernier = d.id;
+    }
+    if (dernier) setSelection(dernier);
   };
   const ajouterPion = async (type: TypePion) => {
     const n = (etat?.pions.filter((p) => p.type === type).length || 0) + 1;
@@ -350,6 +413,15 @@ export default function Plateau() {
     const d = await op({ op: "pion_ajouter", nom, type, couleur: COULEURS[type], x, y, pv_max: type === "joueur" ? null : 10 });
     if (d?.id) setSelection(d.id);
   };
+  const chargerScene = (sc: Scene) => {
+    if (etat?.pions.length && !window.confirm(`Passer à « ${sc.nom} » ? Les pions restent, le brouillard repart de zéro.`)) return;
+    centree.current = false; // recadrer sur la nouvelle carte
+    op({
+      op: "scene", id: sc.id, nom: sc.nom, image_url: sc.image_url, cols: sc.cols, rows: sc.rows,
+      lumieres: sc.lumieres, ambiance: sc.ambiance, brouillard: !!sc.brouillard, quadrillage: true,
+    });
+  };
+  const ambiance = (champ: "lumiere" | "meteo" | "son", v: string) => op({ op: "ambiance", [champ]: v });
   const majPion = (id: string, champs: Partial<Pion>) => {
     setEtat((s) => s && { ...s, pions: s.pions.map((p) => (p.id === id ? { ...p, ...champs } : p)) });
     op({ op: "pion_maj", id, ...champs });
@@ -371,6 +443,21 @@ export default function Plateau() {
 
   const L = c.cols * CASE, H = c.rows * CASE;
   const masque = etat.brouillard.actif;
+  const amb = etat.ambiance ?? { lumiere: "jour", meteo: "aucune", son: "aucun" as Son };
+  const sceneCourante = SCENES.find((x) => x.id === etat.scene?.id);
+  const accueil = !etat.scene?.id && !c.image_url && etat.pions.length === 0;
+  // Sources de lumière la nuit : celles du décor + une torche par héros.
+  const sources = [
+    ...(etat.scene?.lumieres || []).map(([x, y, r]) => ({ x, y, r })),
+    ...etat.pions.filter((p) => p.type === "joueur").map((p) => {
+      const g = glisse?.id === p.id ? glisse : null;
+      return { x: (g ? g.px / CASE : p.x) + p.taille / 2, y: (g ? g.py / CASE : p.y) + p.taille / 2, r: TORCHE };
+    }),
+  ];
+  const bestiaire = [
+    ...BESTIAIRE.filter((b) => sceneCourante?.bestiaire.includes(b.id)),
+    ...BESTIAIRE.filter((b) => !sceneCourante?.bestiaire.includes(b.id)),
+  ];
 
   return (
     <div className="plateau">
@@ -378,6 +465,19 @@ export default function Plateau() {
         <a href="/?s=des" className="piste-retour">← Panneau</a>
         <h1>Plateau de jeu</h1>
         <a href="/table" className="piste-retour">🎲 Piste de dés</a>
+        {etat.scene?.nom && <span className="plateau-scene-nom">— {etat.scene.nom}</span>}
+        <div className="plateau-son">
+          <button
+            className={sonActif ? "on" : ""}
+            onClick={() => setSonActif((v) => !v)}
+            title={amb.son === "aucun" ? "Le MJ n'a pas choisi d'ambiance sonore" : "Ambiance sonore (chez toi seulement)"}
+          >
+            {sonActif ? "🔊" : "🔇"} Ambiance
+          </button>
+          {sonActif && (
+            <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVolume(Number(e.target.value))} aria-label="Volume" />
+          )}
+        </div>
         <span className={`plateau-direct ${connexion}`}>
           {connexion === "direct" ? "● En direct" : connexion === "perdue" ? "● Reconnexion…" : "● Connexion…"}
         </span>
@@ -457,6 +557,8 @@ export default function Plateau() {
                       {p.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={p.image_url} alt="" draggable={false} />
+                      ) : p.icone ? (
+                        <span className="pion-icone">{p.icone}</span>
                       ) : (
                         <span>{initiales(p.nom)}</span>
                       )}
@@ -471,6 +573,31 @@ export default function Plateau() {
                   </div>
                 );
               })}
+
+              {amb.lumiere !== "jour" && (
+                <svg className="plateau-nuit" width={L} height={H}>
+                  <defs>
+                    <radialGradient id="halo">
+                      <stop offset="0%" stopColor="black" />
+                      <stop offset="45%" stopColor="black" stopOpacity="0.92" />
+                      <stop offset="100%" stopColor="black" stopOpacity="0" />
+                    </radialGradient>
+                    <mask id="obscurite">
+                      <rect width={L} height={H} fill="white" />
+                      {sources.map((l, i) => (
+                        <circle key={i} cx={l.x * CASE} cy={l.y * CASE} r={l.r * CASE} fill="url(#halo)" />
+                      ))}
+                    </mask>
+                  </defs>
+                  <rect
+                    width={L}
+                    height={H}
+                    fill={amb.lumiere === "nuit" ? "#04060e" : "#2b1236"}
+                    opacity={amb.lumiere === "nuit" ? (vueJoueur ? 0.88 : 0.62) : 0.36}
+                    mask="url(#obscurite)"
+                  />
+                </svg>
+              )}
 
               {masque && (
                 <svg className="plateau-brume" width={L} height={H}>
@@ -519,6 +646,30 @@ export default function Plateau() {
               ))}
             </div>
 
+            {amb.meteo !== "aucune" && (
+              <div
+                className={`plateau-meteo meteo-${amb.meteo}`}
+                style={TUILES[amb.meteo] ? { ["--tuile" as string]: TUILES[amb.meteo] } : undefined}
+                aria-hidden
+              />
+            )}
+
+            {accueil && (
+              <div className="plateau-accueil" onPointerDown={(e) => e.stopPropagation()}>
+                <h2>Quelle aventure ce soir ?</h2>
+                <p>Choisis un décor : la carte, la lumière, la météo et l&apos;ambiance sonore sont prêtes.</p>
+                <div className="plateau-scenes">
+                  {SCENES.map((sc) => (
+                    <button key={sc.id} className="scene-carte" onClick={() => chargerScene(sc)}>
+                      <span className={`scene-vignette ${sc.image_url ? "" : "vierge"}`} style={sc.image_url ? { backgroundImage: `url(${sc.image_url})` } : undefined} />
+                      <b>{sc.nom}</b>
+                      <span>{sc.accroche}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {toast && (
               <div className={`plateau-toast ${toast.nat === 20 ? "crit" : toast.nat === 1 ? "fumble" : ""}`}>
                 <b>{toast.qui}</b>
@@ -540,20 +691,45 @@ export default function Plateau() {
 
         <aside className="plateau-panneau">
           <div className="plateau-onglets">
-            {(["pions", "des", "carte"] as const).map((o) => (
+            {(["pions", "des", "ambiance", "carte"] as const).map((o) => (
               <button key={o} className={onglet === o ? "on" : ""} onClick={() => setOnglet(o)}>
-                {o === "pions" ? "Pions" : o === "des" ? "Dés" : "Carte"}
+                {o === "pions" ? "Pions" : o === "des" ? "Dés" : o === "ambiance" ? "Ambiance" : "Scène"}
               </button>
             ))}
           </div>
 
           {onglet === "pions" && (
             <div className="plateau-section">
-              <div className="plateau-ajout">
-                <button onClick={() => ajouterPion("joueur")}>+ Joueur</button>
-                <button onClick={() => ajouterPion("monstre")}>+ Monstre</button>
-                <button onClick={() => ajouterPion("pnj")}>+ PNJ</button>
-              </div>
+              <details className="plateau-tiroir" open={etat.pions.length === 0}>
+                <summary>🛡️ Ajouter un héros</summary>
+                <div className="plateau-classes">
+                  {CLASSES.map((cl) => (
+                    <button key={cl.nom} onClick={() => ajouterHeros(cl)} title={`Ajouter un ${cl.nom.toLowerCase()}`}>
+                      <span>{cl.icone}</span>
+                      {cl.nom}
+                    </button>
+                  ))}
+                </div>
+              </details>
+              <details className="plateau-tiroir">
+                <summary>🐉 Bestiaire {sceneCourante?.bestiaire.length ? <em>· suggestions de la scène en tête</em> : null}</summary>
+                <div className="plateau-quantite">
+                  Combien ?
+                  {[1, 2, 3, 4, 6].map((n) => (
+                    <button key={n} className={quantite === n ? "on" : ""} onClick={() => setQuantite(n)}>×{n}</button>
+                  ))}
+                </div>
+                <div className="plateau-bestiaire">
+                  {bestiaire.map((cr) => (
+                    <button key={cr.id} onClick={() => ajouterCreatures(cr)} className={sceneCourante?.bestiaire.includes(cr.id) ? "suggere" : ""}>
+                      <span className="bestiaire-icone" style={{ background: cr.couleur }}>{cr.icone}</span>
+                      <span className="bestiaire-nom">{cr.nom}</span>
+                      <small>{cr.pv} PV{cr.taille > 1 ? " · Grand" : ""}</small>
+                    </button>
+                  ))}
+                </div>
+                <button className="plateau-pnj" onClick={() => ajouterPion("pnj")}>+ PNJ (tavernier, marchand, garde…)</button>
+              </details>
 
               {sel ? (
                 <div className="plateau-fiche" key={sel.id}>
@@ -687,9 +863,46 @@ export default function Plateau() {
             </div>
           )}
 
+          {onglet === "ambiance" && (
+            <div className="plateau-section">
+              <h2>Lumière</h2>
+              <div className="plateau-choix">
+                {LUMIERES.map((l) => (
+                  <button key={l.id} className={amb.lumiere === l.id ? "on" : ""} onClick={() => ambiance("lumiere", l.id)}>{l.label}</button>
+                ))}
+              </div>
+              <p className="piste-vide">La nuit, seuls les feux du décor et la torche de chaque héros ({TORCHE} cases) éclairent la carte.</p>
+              <h2>Météo</h2>
+              <div className="plateau-choix">
+                {METEOS.map((m) => (
+                  <button key={m.id} className={amb.meteo === m.id ? "on" : ""} onClick={() => ambiance("meteo", m.id)}>{m.label}</button>
+                ))}
+              </div>
+              <h2>Ambiance sonore</h2>
+              <div className="plateau-choix">
+                {SONS.map((x) => (
+                  <button key={x.id} className={amb.son === x.id ? "on" : ""} onClick={() => ambiance("son", x.id)}>{x.label}</button>
+                ))}
+              </div>
+              <p className="piste-vide">
+                Le son est créé dans le navigateur de chacun : chaque joueur l&apos;allume avec 🔇 Ambiance en haut,
+                et règle son propre volume.
+              </p>
+            </div>
+          )}
+
           {onglet === "carte" && (
             <div className="plateau-section">
-              <h2>Image de la carte</h2>
+              <h2>Scènes prêtes à jouer</h2>
+              <div className="plateau-scenes compact">
+                {SCENES.map((sc) => (
+                  <button key={sc.id} className={`scene-carte ${etat.scene?.id === sc.id ? "on" : ""}`} onClick={() => chargerScene(sc)} title={sc.accroche}>
+                    <span className={`scene-vignette ${sc.image_url ? "" : "vierge"}`} style={sc.image_url ? { backgroundImage: `url(${sc.image_url})` } : undefined} />
+                    <b>{sc.nom}</b>
+                  </button>
+                ))}
+              </div>
+              <h2>Ta propre carte</h2>
               <MediaPicker value={c.image_url} onChange={(v) => op({ op: "carte", image_url: v })} />
               <p className="piste-vide">Règle les cases pour qu&apos;elles tombent sur le quadrillage de l&apos;image.</p>
               <div className="plateau-fiche-ligne">

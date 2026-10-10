@@ -3258,7 +3258,7 @@ table.ledger .actions {
   color: var(--parchment);
   overflow: hidden;
 }
-.plateau-direct { margin-left: auto; font-size: 0.85rem; font-style: italic; }
+.plateau-direct { font-size: 0.85rem; font-style: italic; }
 .plateau-direct.direct { color: var(--green); }
 .plateau-direct.perdue { color: var(--ember); }
 .plateau-direct.attente { color: var(--parchment-dim); }
@@ -3382,7 +3382,7 @@ table.ledger .actions {
   font-family: var(--font-title), serif; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--gold-deep); margin: 6px 0 0;
 }
-.plateau-section input[type="number"], .plateau-section input:not([type]), .plateau-section select {
+.plateau-section input[type="number"], .plateau-section input[type="text"], .plateau-section input:not([type]), .plateau-section select {
   height: 34px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--panel-edge);
   background: rgba(0, 0, 0, 0.35); color: var(--parchment); font-family: var(--font-body), serif; font-size: 0.95rem; min-width: 0;
 }
@@ -3447,3 +3447,136 @@ table.ledger .actions {
 
 /* Dézoomé : les noms ne s affichent qu au survol ou sur le pion sélectionné (sinon ils se chevauchent). */
 .zoom-petit .pion:not(:hover):not(.sel) .pion-nom { display: none; }
+
+/* ═══════════════════ Plateau : décor, ambiance, scènes ═══════════════════ */
+/* La carte est posée sur une table de taverne : veinage de chêne + lueur de chandelle. */
+.plateau-vue {
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255, 170, 90, 0.10), transparent 55%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 180px),
+    repeating-linear-gradient(0deg, rgba(255, 220, 170, 0.025) 0 1px, transparent 1px 7px),
+    linear-gradient(180deg, #3a2412, #24160a);
+}
+.plateau-monde { box-shadow: 0 18px 50px rgba(0, 0, 0, 0.75), 0 0 0 3px rgba(20, 12, 4, 0.9), 0 0 0 7px rgba(110, 76, 36, 0.55); }
+
+/* Ordre des calques : pions < nuit < brouillard < sélection < règle < ping */
+.plateau-nuit { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.plateau-brume { z-index: 4; }
+.pion-icone { font-size: 1.9em; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6)); text-shadow: none; }
+
+/* En-tête : scène et son */
+.plateau-scene-nom { font-family: var(--font-title), serif; color: var(--parchment-dim); letter-spacing: 0.04em; }
+.plateau-son { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.plateau-son button {
+  height: 30px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--panel-edge); background: rgba(67, 47, 22, 0.35); color: var(--parchment-dim);
+  font-family: var(--font-body), serif;
+}
+.plateau-son button.on { border-color: var(--gold); color: var(--gold-bright); background: rgba(201, 164, 74, 0.15); }
+.plateau-son input { width: 90px; accent-color: var(--gold); }
+.plateau-son + .plateau-direct { margin-left: 12px; }
+
+/* Météo : deux couches de la même tuile, vitesses différentes (parallaxe) */
+.plateau-meteo { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+.plateau-meteo::before, .plateau-meteo::after {
+  content: ""; position: absolute; inset: -240px; background-image: var(--tuile); background-repeat: repeat;
+}
+.meteo-pluie { background: linear-gradient(rgba(30, 40, 60, 0.22), rgba(30, 40, 60, 0.22)); }
+.meteo-pluie::before { background-size: 220px 220px; animation: meteo-pluie 0.55s linear infinite; }
+.meteo-pluie::after { background-size: 330px 330px; opacity: 0.6; animation: meteo-pluie-l 0.9s linear infinite; }
+@keyframes meteo-pluie { to { background-position: -48px 220px; } }
+@keyframes meteo-pluie-l { to { background-position: -72px 330px; } }
+.meteo-neige { background: linear-gradient(rgba(200, 215, 235, 0.10), rgba(200, 215, 235, 0.10)); }
+.meteo-neige::before { background-size: 220px 220px; animation: meteo-neige 9s linear infinite; }
+.meteo-neige::after { background-size: 340px 340px; opacity: 0.7; animation: meteo-neige-l 15s linear infinite; }
+@keyframes meteo-neige { to { background-position: 60px 220px; } }
+@keyframes meteo-neige-l { to { background-position: -80px 340px; } }
+.meteo-braises::before { background-size: 220px 220px; animation: meteo-braises 7s linear infinite, meteo-flamme 1.6s ease-in-out infinite alternate; }
+.meteo-braises::after { background-size: 310px 310px; opacity: 0.6; animation: meteo-braises-l 11s linear infinite; }
+@keyframes meteo-braises { to { background-position: 50px -220px; } }
+@keyframes meteo-braises-l { to { background-position: -40px -310px; } }
+@keyframes meteo-flamme { from { opacity: 0.65; } to { opacity: 1; } }
+.meteo-brume::before, .meteo-brume::after {
+  inset: -30%;
+  background:
+    radial-gradient(ellipse 40% 25% at 30% 40%, rgba(210, 215, 225, 0.30), transparent 70%),
+    radial-gradient(ellipse 35% 22% at 70% 65%, rgba(210, 215, 225, 0.26), transparent 70%),
+    radial-gradient(ellipse 30% 20% at 55% 20%, rgba(210, 215, 225, 0.22), transparent 70%);
+  animation: meteo-brume 38s ease-in-out infinite alternate;
+}
+.meteo-brume::after { animation-duration: 55s; animation-direction: alternate-reverse; opacity: 0.8; }
+@keyframes meteo-brume { from { transform: translateX(-8%); } to { transform: translateX(8%); } }
+@media (prefers-reduced-motion: reduce) {
+  .plateau-meteo::before, .plateau-meteo::after { animation: none; }
+}
+
+/* Écran d'accueil : choisir la scène */
+.plateau-accueil {
+  position: absolute; inset: 0; z-index: 11; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; overflow-y: auto;
+  background: radial-gradient(ellipse at center, rgba(16, 10, 3, 0.55), rgba(16, 10, 3, 0.92));
+}
+.plateau-accueil h2 { font-family: var(--font-title), serif; font-size: 2rem; color: var(--gold-bright); letter-spacing: 0.06em; margin: 0; }
+.plateau-accueil > p { color: var(--parchment-dim); font-style: italic; margin: 6px 0 20px; }
+.plateau-scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; width: min(1000px, 100%); }
+.scene-carte {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 12px; border-radius: 14px; cursor: pointer; text-align: left;
+  border: 1px solid var(--panel-edge); background: rgba(43, 28, 13, 0.85); color: var(--parchment);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.scene-carte:hover { transform: translateY(-3px); border-color: var(--gold); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5); }
+.scene-carte.on { border-color: var(--gold); }
+.scene-carte b { font-family: var(--font-title), serif; color: var(--gold-bright); font-size: 0.98rem; padding: 0 4px; }
+.scene-carte > span:last-child { font-size: 0.85rem; color: var(--parchment-dim); font-style: italic; padding: 0 4px; line-height: 1.35; }
+.scene-vignette {
+  display: block; aspect-ratio: 3 / 2; border-radius: 9px; background-size: cover; background-position: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(0, 0, 0, 0.45);
+}
+.scene-vignette.vierge {
+  background-color: #3a332a;
+  background-image:
+    linear-gradient(rgba(255, 240, 210, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 240, 210, 0.16) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.plateau-scenes.compact { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.plateau-scenes.compact .scene-carte { padding: 5px 5px 8px; }
+.plateau-scenes.compact .scene-carte b { font-size: 0.8rem; }
+
+/* Panneau : tiroirs héros / bestiaire */
+.plateau-tiroir { border: 1px solid var(--panel-edge); border-radius: 12px; background: rgba(67, 47, 22, 0.18); }
+.plateau-tiroir > summary {
+  cursor: pointer; padding: 9px 12px; font-family: var(--font-title), serif; color: var(--gold-bright); letter-spacing: 0.04em;
+  list-style: none;
+}
+.plateau-tiroir > summary::-webkit-details-marker { display: none; }
+.plateau-tiroir > summary::after { content: "▸"; float: right; color: var(--parchment-dim); }
+.plateau-tiroir[open] > summary::after { content: "▾"; }
+.plateau-tiroir > summary em { font-family: var(--font-body), serif; font-size: 0.78rem; color: var(--parchment-dim); letter-spacing: 0; }
+.plateau-classes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 0 10px 10px; }
+.plateau-classes button, .plateau-bestiaire button, .plateau-choix button, .plateau-quantite button, .plateau-pnj {
+  border: 1px solid var(--panel-edge); background: rgba(0, 0, 0, 0.25); color: var(--parchment); cursor: pointer;
+  border-radius: 9px; font-family: var(--font-body), serif;
+}
+.plateau-classes button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px; font-size: 0.78rem; }
+.plateau-classes button span { font-size: 1.35rem; }
+.plateau-classes button:hover, .plateau-bestiaire button:hover, .plateau-choix button:hover { border-color: var(--gold); }
+.plateau-quantite { display: flex; align-items: center; gap: 5px; padding: 0 10px 8px; font-size: 0.85rem; color: var(--parchment-dim); }
+.plateau-quantite button { padding: 3px 9px; font-size: 0.85rem; }
+.plateau-quantite button.on, .plateau-choix button.on { border-color: var(--gold); background: rgba(201, 164, 74, 0.2); color: var(--gold-bright); }
+.plateau-bestiaire { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 10px; max-height: 280px; overflow-y: auto; }
+.plateau-bestiaire button { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; text-align: left; }
+.plateau-bestiaire button.suggere { border-color: rgba(201, 164, 74, 0.55); }
+.bestiaire-icone { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 1.05rem; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.35); }
+.bestiaire-nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plateau-bestiaire small { color: var(--parchment-dim); font-variant-numeric: tabular-nums; }
+.plateau-pnj { margin: 0 10px 10px; width: calc(100% - 20px); padding: 7px; font-size: 0.88rem; }
+.plateau-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.plateau-choix button { padding: 7px 11px; font-size: 0.9rem; }
+
+@media (max-width: 900px) {
+  .plateau-son { margin-left: 0; }
+  .plateau-scene-nom { display: none; }
+  .plateau-accueil h2 { font-size: 1.4rem; }
+  .plateau-scenes { grid-template-columns: repeat(2, 1fr); }
+}
