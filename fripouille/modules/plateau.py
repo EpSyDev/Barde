@@ -34,6 +34,9 @@ MAX_PIONS = 80
 MAX_FIL = 40
 COULEUR = re.compile(r"^#[0-9a-fA-F]{6}$")
 TYPES = ("joueur", "monstre", "pnj")
+LUMIERES = ("jour", "crepuscule", "nuit")
+METEOS = ("aucune", "pluie", "neige", "brume", "braises")
+SONS = ("aucun", "taverne", "crypte", "foret", "camp", "pluie")
 
 
 def _defaut():
@@ -43,6 +46,8 @@ def _defaut():
         "pions": [],
         "brouillard": {"actif": False, "reveles": []},   # reveles : [[x, y, l, h], …]
         "fil": [],                                         # derniers jets partagés
+        "scene": {"id": "", "nom": "", "lumieres": []},    # lumieres : [[x, y, rayon], …] du décor
+        "ambiance": {"lumiere": "jour", "meteo": "aucune", "son": "aucun"},
     }
 
 
@@ -60,6 +65,8 @@ def etat() -> dict:
         try:
             if FICHIER.exists():
                 _etat.update(json.loads(FICHIER.read_text(encoding="utf-8")))
+            for k, v in _defaut().items():          # clés ajoutées depuis la sauvegarde
+                _etat.setdefault(k, v)
         except (OSError, ValueError) as exc:
             log.error("plateau.json illisible : %s", exc)
     return _etat
@@ -123,14 +130,18 @@ def _num(v, defaut, mini, maxi, entier=False):
 
 
 def _url(v):
+    """Image : URL https (médiathèque) ou carte livrée avec le dashboard (/cartes/…)."""
     v = str(v or "").strip()
+    if re.fullmatch(r"/cartes/[a-z0-9_-]+\.(webp|png|jpg)", v):
+        return v
     return v if v.startswith("https://") and len(v) < 500 else ""
 
 
 def _pion(src: dict, base: dict | None = None) -> dict:
     p = dict(base or {"id": uuid.uuid4().hex[:8], "x": 0, "y": 0, "nom": "Pion",
                       "type": "monstre", "couleur": "#c25340", "taille": 1,
-                      "pv": None, "pv_max": None, "image_url": "", "cache": False, "etats": []})
+                      "pv": None, "pv_max": None, "image_url": "", "cache": False, "etats": [],
+                      "icone": ""})
     c = etat()["carte"]
     if "nom" in src:
         p["nom"] = str(src["nom"] or "Pion").strip()[:30] or "Pion"
@@ -154,6 +165,8 @@ def _pion(src: dict, base: dict | None = None) -> dict:
         p["image_url"] = _url(src["image_url"])
     if "cache" in src:
         p["cache"] = bool(src["cache"])
+    if "icone" in src:
+        p["icone"] = str(src["icone"] or "")[:4]
     if "etats" in src and isinstance(src["etats"], list):
         p["etats"] = [str(x)[:20] for x in src["etats"][:6]]
     return p
@@ -223,6 +236,38 @@ async def appliquer(op: str, d: dict, acteur: str) -> dict:
             x, y, l, h = r
             b["reveles"] = [z for z in b["reveles"]
                             if not (z[0] >= x and z[1] >= y and z[0] + z[2] <= x + l and z[1] + z[3] <= y + h)]
+        _changer()
+        return {"ok": True}
+    if op == "ambiance":
+        a = e.setdefault("ambiance", _defaut()["ambiance"])
+        for k, choix in (("lumiere", LUMIERES), ("meteo", METEOS), ("son", SONS)):
+            if d.get(k) in choix:
+                a[k] = d[k]
+        _changer()
+        return {"ok": True}
+    if op == "scene":
+        # Charge une scène prête à jouer : carte, quadrillage, lumières du décor, ambiance.
+        c = e["carte"]
+        c["image_url"] = _url(d.get("image_url"))
+        c["cols"] = _num(d.get("cols"), 24, 4, 80, entier=True)
+        c["rows"] = _num(d.get("rows"), 16, 4, 80, entier=True)
+        c["quadrillage"] = bool(d.get("quadrillage", True))
+        lum = []
+        for l in (d.get("lumieres") or [])[:30]:
+            try:
+                lum.append([float(l[0]), float(l[1]), float(l[2])])
+            except (TypeError, ValueError, IndexError):
+                pass
+        e["scene"] = {"id": str(d.get("id") or "")[:30], "nom": str(d.get("nom") or "")[:60], "lumieres": lum}
+        amb = d.get("ambiance") or {}
+        e["ambiance"] = {
+            "lumiere": amb.get("lumiere") if amb.get("lumiere") in LUMIERES else "jour",
+            "meteo": amb.get("meteo") if amb.get("meteo") in METEOS else "aucune",
+            "son": amb.get("son") if amb.get("son") in SONS else "aucun",
+        }
+        e["brouillard"] = {"actif": bool(d.get("brouillard")), "reveles": []}
+        for p in e["pions"]:
+            p["x"], p["y"] = min(p["x"], c["cols"] - 1), min(p["y"], c["rows"] - 1)
         _changer()
         return {"ok": True}
     if op == "reinitialiser":
