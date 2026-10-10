@@ -26,6 +26,7 @@ import logging
 
 import discord
 
+from .. import config
 from ..registry import Module, register
 from . import economie
 
@@ -63,8 +64,17 @@ DEFAULTS = {
 
 # --- Helpers config ---
 def _cat_games(cat):
-    """Jeux d'une catégorie ayant un rôle, plafonnés à 25 (limite d'une View)."""
-    return [g for g in cat.get("games", []) if g.get("role_id")][:MAX_BUTTONS]
+    """Jeux d'une catégorie ayant un rôle, plafonnés à 25 (limite d'une View).
+
+    Un même rôle deux fois dans une catégorie donnerait deux boutons au même
+    custom_id — Discord refuserait alors tout le bloc : le doublon est écarté."""
+    vus, out = set(), []
+    for g in cat.get("games", []):
+        rid = str(g.get("role_id") or "")
+        if rid and rid not in vus:
+            vus.add(rid)
+            out.append(g)
+    return out[:MAX_BUTTONS]
 
 
 # --- Vues ---
@@ -237,9 +247,34 @@ async def setup_persistent(bot):
             bot.add_view(CategoryButtonsView(cat))
 
 
+async def action_create_role(bot, payload):
+    """Crée (ou retrouve, même nom) le rôle d'un jeu depuis le dashboard.
+
+    Rôle sans permission, **mentionnable** (pour qu'on puisse le pinger depuis les
+    messages et les annonces « En ligne »), créé tout en bas de la hiérarchie — donc
+    sous le rôle de La Fripouille, qui peut l'attribuer."""
+    name = (payload.get("name") or "").strip()[:100]
+    if not name:
+        raise ValueError("nom du rôle manquant")
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    role = discord.utils.find(lambda r: r.name.casefold() == name.casefold(), guild.roles)
+    if role is None:
+        try:
+            role = await guild.create_role(
+                name=name, mentionable=True,
+                reason=f"Rôles-jeux — créé depuis le dashboard ({payload.get('_acteur') or '?'})",
+            )
+        except discord.Forbidden:
+            raise ValueError("permission « Gérer les rôles » manquante pour La Fripouille")
+    return {"ok": True, "role": {"id": str(role.id), "name": role.name, "color": role.color.value}}
+
+
 MODULE = register(Module(
     key="jeux",
     label="Rôles-jeux",
     defaults=DEFAULTS,
     apply=apply,
+    actions={"create_role": action_create_role},
 ))

@@ -6,6 +6,7 @@ import { useToasts } from "@/components/Toasts";
 import { useUnsavedGuard } from "@/lib/useModuleConfig";
 import { DirtyBar } from "@/components/ui";
 import MediaPicker from "@/components/MediaPicker";
+import { ChannelSelect, DiscordText, MentionField } from "@/components/Mentions";
 
 // Vignette fixe des embeds « classiques » (imposée aussi côté bot).
 const LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp";
@@ -94,34 +95,6 @@ const UNITS: { value: Unit; label: string }[] = [
   { value: "weeks", label: "semaine(s)" },
 ];
 
-function ChannelSelect({
-  channels,
-  value,
-  onChange,
-  disabled,
-}: {
-  channels: Channel[];
-  value: string | null;
-  onChange: (v: string | null) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <select
-      value={value ?? ""}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value || null)}
-    >
-      <option value="">— Salon —</option>
-      {channels.map((c) => (
-        <option key={c.id} value={c.id}>
-          #{c.name}
-          {c.category ? ` (${c.category})` : ""}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 function MessageEditor({
   content,
   embed,
@@ -141,12 +114,18 @@ function MessageEditor({
     <div className="msg-editor">
       <div className="cfg-field">
         <label>Texte (hors embed)</label>
-        <textarea
+        <MentionField
+          multiline
           rows={2}
+          max={2000}
           value={content}
-          onChange={(e) => onContent(e.target.value)}
-          placeholder="Message simple, ou laisse vide pour n'envoyer que l'embed…"
+          onChange={onContent}
+          placeholder="Message simple — tape @ ou # pour mentionner un rôle ou un salon…"
         />
+        <p className="cfg-hint">
+          Seules les mentions de ce champ pingent. Un rôle non « mentionnable » ne sonne que si
+          La Fripouille a la permission « Mentionner @everyone, @here et tous les rôles ».
+        </p>
       </div>
 
       <div className="cfg-field">
@@ -174,6 +153,7 @@ function MessageEditor({
           <label>Titre</label>
           <input
             type="text"
+            maxLength={256}
             value={embed.title}
             onChange={(e) => onEmbed({ title: e.target.value })}
             placeholder="Titre de l'embed"
@@ -181,11 +161,14 @@ function MessageEditor({
         </div>
         <div className="cfg-field">
           <label>Description</label>
-          <textarea
-            rows={3}
+          <MentionField
+            multiline
+            embed
+            rows={4}
+            max={4096}
             value={embed.description}
-            onChange={(e) => onEmbed({ description: e.target.value })}
-            placeholder="Corps de l'embed (les retours à la ligne sont conservés)"
+            onChange={(v) => onEmbed({ description: v })}
+            placeholder="Corps de l'embed (**gras**, *italique*, retours à la ligne conservés)"
           />
         </div>
         <div className="cfg-field">
@@ -222,7 +205,11 @@ function MessagePreview({
   return (
     <div className="msg-preview">
       <div className="preview-label">Aperçu</div>
-      {content && <div className="preview-content">{content}</div>}
+      {content && (
+        <div className="preview-content">
+          <DiscordText text={content} />
+        </div>
+      )}
       {audio && (
         <div className="preview-content">🎵 {labelFor ? labelFor(audio) : audio.split("/").pop()}</div>
       )}
@@ -232,7 +219,9 @@ function MessagePreview({
             <div>
               {embed.title && <div className="preview-embed-title">{embed.title}</div>}
               {embed.description && (
-                <div className="preview-embed-desc">{embed.description}</div>
+                <div className="preview-embed-desc">
+                  <DiscordText text={embed.description} />
+                </div>
               )}
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -311,10 +300,13 @@ function PubEditor({
 
       <div className="cfg-field">
         <label>Présentation</label>
-        <textarea
+        <MentionField
+          multiline
+          embed
           rows={4}
+          max={4096}
           value={pub.description}
-          onChange={(e) => onPub({ description: e.target.value })}
+          onChange={(v) => onPub({ description: v })}
           placeholder="Pitch du serveur (les retours à la ligne sont conservés)…"
         />
       </div>
@@ -380,7 +372,11 @@ function PubPreview({
         <div className="preview-embed-main">
           <div>
             <div className="preview-embed-title">{pub.server_name || "Nom du serveur"}</div>
-            {pub.description && <div className="preview-embed-desc">{pub.description}</div>}
+            {pub.description && (
+              <div className="preview-embed-desc">
+                <DiscordText text={pub.description} />
+              </div>
+            )}
             {hasFields && (
               <div className="preview-embed-fields">
                 {pub.games && (
@@ -426,12 +422,14 @@ function SentHistory({
   channelName,
   editingId,
   onEdit,
+  onCopy,
   onDelete,
 }: {
   items: SentItem[];
   channelName: (id: string) => string;
   editingId: string | null;
   onEdit: (item: SentItem) => void;
+  onCopy: (item: SentItem) => void;
   onDelete: (item: SentItem) => void;
 }) {
   if (items.length === 0) {
@@ -462,6 +460,9 @@ function SentHistory({
           <div className="sent-actions">
             <button className="btn small" onClick={() => onEdit(it)}>
               ✎ Éditer
+            </button>
+            <button className="btn small" onClick={() => onCopy(it)} title="Repartir de ce message pour un nouvel envoi">
+              ⧉ Reprendre
             </button>
             <button className="btn small danger" onClick={() => onDelete(it)}>
               🗑
@@ -645,22 +646,27 @@ export default function Messages() {
     }
   }, [editingPub, pubChannel, pub, pubAudio, reloadHistory]);
 
-  const editSent = useCallback((it: SentItem) => {
+  // copie = on recharge le contenu comme brouillon d'un NOUVEL envoi (salon modifiable).
+  const loadSent = useCallback((it: SentItem, copie: boolean) => {
+    const cible = copie ? null : { message_id: it.message_id, channel_id: it.channel_id };
     if (it.kind === "pub") {
       setPub({ ...emptyPub(), ...(it.payload.pub || {}) });
       setPubAudio(it.payload.audio_url || "");
       setPubChannel(it.channel_id);
-      setEditingPub({ message_id: it.message_id, channel_id: it.channel_id });
+      setEditingPub(cible);
       setTab("pub");
     } else {
       setOneContent(it.payload.content || "");
       setOneEmbed({ ...emptyEmbed(), ...(it.payload.embed || {}) });
       setOneAudio(it.payload.audio_url || "");
       setOneChannel(it.channel_id);
-      setEditingOne({ message_id: it.message_id, channel_id: it.channel_id });
+      setEditingOne(cible);
       setTab("unique");
     }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+  const editSent = useCallback((it: SentItem) => loadSent(it, false), [loadSent]);
+  const copySent = useCallback((it: SentItem) => loadSent(it, true), [loadSent]);
 
   const deleteSent = useCallback(
     async (it: SentItem) => {
@@ -791,6 +797,8 @@ export default function Messages() {
                 disabled={
                   sending ||
                   (!editingOne && !oneChannel) ||
+                  oneContent.length > 2000 ||
+                  oneEmbed.description.length > 4096 ||
                   !(oneContent.trim() || oneEmbed.title || oneEmbed.description || oneAudio)
                 }
               >
@@ -807,6 +815,7 @@ export default function Messages() {
               channelName={channelName}
               editingId={editingOne?.message_id ?? null}
               onEdit={editSent}
+              onCopy={copySent}
               onDelete={deleteSent}
             />
           </section>
@@ -863,6 +872,7 @@ export default function Messages() {
               channelName={channelName}
               editingId={editingPub?.message_id ?? null}
               onEdit={editSent}
+              onCopy={copySent}
               onDelete={deleteSent}
             />
           </section>

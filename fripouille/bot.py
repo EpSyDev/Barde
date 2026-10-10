@@ -12,7 +12,7 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, economie, farewell, help as help_module, jeux, journal,
+    anonyme, autorole, bapteme, economie, enligne, farewell, help as help_module, jeux, journal,
     membres, messages, moderation, tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
@@ -42,13 +42,17 @@ intents.guild_messages = True
 # « réaction » et le bonus « message très réagi » de l'économie. Intent non privilégié
 # (pas de toggle à activer sur le portail Discord).
 intents.guild_reactions = True
+# Présences (privilégié, opt-in via FRIPOUILLE_PRESENCES) : module « En ligne ». Le cache
+# membres doit alors être complet — discord.py ignore les PRESENCE_UPDATE d'un membre
+# absent du cache —, d'où le chunk du serveur au démarrage dans ce cas seulement.
+intents.presences = config.PRESENCES
 
 
 class FripouilleBot(discord.Client):
     def __init__(self):
         super().__init__(
             intents=intents,
-            chunk_guilds_at_startup=False,
+            chunk_guilds_at_startup=config.PRESENCES,
             member_cache_flags=discord.MemberCacheFlags(joined=True, voice=True),
             max_messages=None,
         )
@@ -75,6 +79,7 @@ class FripouilleBot(discord.Client):
         await tickets.setup_persistent(self)
         await bapteme.setup_persistent(self)
         await tempvoice.cleanup(self)
+        enligne.setup_persistent(self)
 
     async def _on_arrival(self, member: discord.Member):
         # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
@@ -107,6 +112,11 @@ class FripouilleBot(discord.Client):
             return
         await farewell.on_leave(self, member)
         await journal.on_member_remove(self, member)
+
+    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+        if config.GUILD_ID and after.guild.id != config.GUILD_ID:
+            return
+        await enligne.on_presence_update(self, before, after)
 
     async def on_voice_state_update(self, member, before, after):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:

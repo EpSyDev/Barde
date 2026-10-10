@@ -22,6 +22,7 @@ export const SECTIONS: Section[] = [
   { id: "membres", label: "Membres", icon: "personnes", hint: "Fiche d'un habitant", group: "Les habitants", ready: true },
   { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", group: "Les habitants", ready: true },
   { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", group: "Les habitants", ready: true },
+  { id: "enligne", label: "En ligne", icon: "eclair", hint: "Jeux lancés en direct", group: "Les habitants", ready: true, titre: "Qui est en ligne" },
   { id: "vocaux", label: "Salons vocaux", icon: "cor", hint: "Vocaux temporaires", group: "Les habitants", ready: true },
 
   { id: "economie", label: "Économie", icon: "bourse", hint: "Monnaie & boutique", group: "Écus & rites", ready: true },

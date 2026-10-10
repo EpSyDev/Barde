@@ -5,6 +5,7 @@ import Dashboard from "@/components/Dashboard";
 import Community from "@/components/Community";
 import Games from "@/components/Games";
 import Messages from "@/components/Messages";
+import EnLigne from "@/components/EnLigne";
 import Tickets from "@/components/Tickets";
 import Voice from "@/components/Voice";
 import Bapteme from "@/components/Bapteme";
@@ -227,6 +228,8 @@ function Shell({ userName }: { userName: string }) {
             <Games />
           ) : active === "messages" ? (
             <Messages />
+          ) : active === "enligne" ? (
+            <EnLigne />
           ) : active === "vocaux" ? (
             <Voice />
           ) : active === "economie" ? (

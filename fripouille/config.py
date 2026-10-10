@@ -15,6 +15,10 @@ load_dotenv()
 # --- Discord ---
 GUILD_ID = int(os.getenv("GUILD_ID") or 0) or None
 TOKEN = os.getenv("FRIPOUILLE_TOKEN", "").strip()   # token du bot dédié « La Fripouille »
+# Intent « Presence » (privilégié) : requis par le module « En ligne » (annonces de jeux
+# lancés). À n'activer qu'APRÈS avoir coché « Presence Intent » sur le portail développeur
+# Discord de l'app Fripouille — sinon le bot refuse de se connecter.
+PRESENCES = os.getenv("FRIPOUILLE_PRESENCES", "0").strip() == "1"
 
 # --- API du dashboard web ---
 # Même pont que le bot musique (Tailscale Funnel) mais PORT DISTINCT : le bot
