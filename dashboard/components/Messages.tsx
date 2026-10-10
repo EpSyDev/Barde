@@ -42,14 +42,27 @@ type Pub = {
   invite_url: string;
   color: string;
 };
-type Kind = "unique" | "pub";
+type Jeu = {
+  name: string;
+  style: string;
+  description: string;
+  price: string;
+  link1_label: string;
+  link1_url: string;
+  link2_label: string;
+  link2_url: string;
+  avis: string;
+  image_url: string;
+  color: string;
+};
+type Kind = "unique" | "pub" | "jeu";
 type SentItem = {
   id: string;
   kind: Kind;
   channel_id: string;
   message_id: string;
   label: string;
-  payload: { content?: string; embed?: Partial<Embed>; pub?: Partial<Pub>; audio_url?: string };
+  payload: { content?: string; embed?: Partial<Embed>; pub?: Partial<Pub>; jeu?: Partial<Jeu>; audio_url?: string };
   sent_at: string;
   edited_at: string | null;
 };
@@ -74,6 +87,20 @@ const emptyPub = (): Pub => ({
   banner_url: "",
   logo_url: "",
   invite_url: "",
+  color: "#c9a44a",
+});
+
+const emptyJeu = (): Jeu => ({
+  name: "",
+  style: "",
+  description: "",
+  price: "",
+  link1_label: "Steam",
+  link1_url: "",
+  link2_label: "Instant Gaming",
+  link2_url: "",
+  avis: "",
+  image_url: "",
   color: "#c9a44a",
 });
 
@@ -417,6 +444,133 @@ function PubPreview({
   );
 }
 
+function JeuEditor({ jeu, onJeu }: { jeu: Jeu; onJeu: (patch: Partial<Jeu>) => void }) {
+  const champ = (k: keyof Jeu, label: string, placeholder: string) => (
+    <div className="cfg-field">
+      <label>{label}</label>
+      <input type="text" value={jeu[k]} onChange={(e) => onJeu({ [k]: e.target.value })} placeholder={placeholder} />
+    </div>
+  );
+  return (
+    <div className="msg-editor">
+      <div className="pub-fields">
+        {champ("name", "Nom du jeu", "Ex. Red Dead Redemption 2")}
+        {champ("style", "Style", "Ex. Action-aventure, open world")}
+      </div>
+      <div className="cfg-field">
+        <label>Présentation</label>
+        <MentionField
+          multiline
+          embed
+          rows={4}
+          max={4096}
+          value={jeu.description}
+          onChange={(v) => onJeu({ description: v })}
+          placeholder="Pitch du jeu (les retours à la ligne sont conservés)…"
+        />
+      </div>
+      <div className="pub-fields">
+        {champ("price", "Tarif", "Ex. 59,99 € (−70 % en ce moment)")}
+        <div className="cfg-field">
+          <label className="color-pick">
+            Couleur d&apos;accent
+            <input type="color" value={jeu.color || "#c9a44a"} onChange={(e) => onJeu({ color: e.target.value })} />
+          </label>
+        </div>
+      </div>
+      <div className="pub-fields">
+        {champ("link1_label", "Bouton 1 — libellé", "Steam")}
+        {champ("link1_url", "Bouton 1 — lien d'achat", "https://store.steampowered.com/…")}
+      </div>
+      <div className="pub-fields">
+        {champ("link2_label", "Bouton 2 — libellé", "Instant Gaming")}
+        {champ("link2_url", "Bouton 2 — lien d'achat", "https://www.instant-gaming.com/…")}
+      </div>
+      <div className="cfg-field">
+        <label>Avis de la commu</label>
+        <MentionField
+          multiline
+          embed
+          rows={3}
+          max={1024}
+          value={jeu.avis}
+          onChange={(v) => onJeu({ avis: v })}
+          placeholder="« Une pépite, 200 h au compteur » — Pseudo"
+        />
+      </div>
+      <div className="cfg-field">
+        <label>Image</label>
+        <MediaPicker value={jeu.image_url} onChange={(v) => onJeu({ image_url: v })} />
+      </div>
+      <p className="cfg-hint">
+        Un bouton sans lien n&apos;est pas affiché. La vignette de la Taverne est ajoutée automatiquement.
+      </p>
+    </div>
+  );
+}
+
+function JeuPreview({ jeu }: { jeu: Jeu }) {
+  const liens = [
+    { label: jeu.link1_label || "Steam", url: jeu.link1_url },
+    { label: jeu.link2_label || "Instant Gaming", url: jeu.link2_url },
+  ].filter((l) => /^https?:\/\//.test(l.url.trim()));
+  return (
+    <div className="msg-preview">
+      <div className="preview-label">Aperçu</div>
+      <div className="preview-embed" style={{ borderLeftColor: jeu.color || "#c9a44a" }}>
+        <div className="preview-embed-author">🎮 Le jeu à découvrir</div>
+        <div className="preview-embed-main">
+          <div>
+            <div className="preview-embed-title">{jeu.name || "Nom du jeu"}</div>
+            {jeu.description && (
+              <div className="preview-embed-desc">
+                <DiscordText text={jeu.description} />
+              </div>
+            )}
+            {(jeu.style || jeu.price) && (
+              <div className="preview-embed-fields">
+                {jeu.style && (
+                  <div>
+                    <b>🏷️ Style</b>
+                    <br />
+                    {jeu.style}
+                  </div>
+                )}
+                {jeu.price && (
+                  <div>
+                    <b>💰 Tarif</b>
+                    <br />
+                    {jeu.price}
+                  </div>
+                )}
+              </div>
+            )}
+            {jeu.avis && (
+              <div className="preview-embed-desc" style={{ marginTop: 8 }}>
+                <b>💬 Avis de la commu</b>
+                <br />
+                <DiscordText text={jeu.avis} />
+              </div>
+            )}
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="preview-embed-thumb" src={LOGO_URL} alt="" />
+        </div>
+        {jeu.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="preview-embed-image" src={jeu.image_url} alt="" />
+        )}
+        <div className="preview-embed-footer">Proposé via La Fripouille</div>
+      </div>
+      {liens.map((l, i) => (
+        <div key={i} className="preview-embed-btn">
+          🛒 {l.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SentHistory({
   items,
   channelName,
@@ -476,7 +630,7 @@ function SentHistory({
 
 export default function Messages() {
   const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [tab, setTab] = useState<"unique" | "recurrents" | "pub">("unique");
+  const [tab, setTab] = useState<"unique" | "recurrents" | "pub" | "jeu">("unique");
   const [error, setError] = useState<string | null>(null);
   const [mediaLabels, setMediaLabels] = useState<Record<string, string>>({});
 
@@ -495,6 +649,12 @@ export default function Messages() {
   const [pubAudio, setPubAudio] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [editingPub, setEditingPub] = useState<Editing>(null);
+
+  // Promo jeu
+  const [jeuChannel, setJeuChannel] = useState<string | null>(null);
+  const [jeu, setJeu] = useState<Jeu>(emptyJeu());
+  const [publishingJeu, setPublishingJeu] = useState(false);
+  const [editingJeu, setEditingJeu] = useState<Editing>(null);
 
   // Historique des envois ponctuels (unique + pub)
   const [history, setHistory] = useState<SentItem[] | null>(null);
@@ -646,10 +806,45 @@ export default function Messages() {
     }
   }, [editingPub, pubChannel, pub, pubAudio, reloadHistory]);
 
+  const resetJeu = () => {
+    setJeu(emptyJeu());
+    setJeuChannel(null);
+    setEditingJeu(null);
+  };
+
+  const publishJeu = useCallback(async () => {
+    setPublishingJeu(true);
+    setError(null);
+    try {
+      const url = editingJeu ? "/api/fripouille/action/messages/edit" : "/api/fripouille/action/messages/jeu";
+      const body = editingJeu
+        ? { message_id: editingJeu.message_id, channel_id: editingJeu.channel_id, kind: "jeu", payload: { jeu } }
+        : { channel_id: jeuChannel, jeu };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error();
+      toasts.ok(editingJeu ? "Promo mise à jour" : "Promo publiée");
+      resetJeu();
+      await reloadHistory();
+    } catch {
+      setError(editingJeu ? "Échec de la mise à jour." : "Échec de la publication (salon et nom du jeu requis).");
+    } finally {
+      setPublishingJeu(false);
+    }
+  }, [editingJeu, jeuChannel, jeu, reloadHistory]);
+
   // copie = on recharge le contenu comme brouillon d'un NOUVEL envoi (salon modifiable).
   const loadSent = useCallback((it: SentItem, copie: boolean) => {
     const cible = copie ? null : { message_id: it.message_id, channel_id: it.channel_id };
-    if (it.kind === "pub") {
+    if (it.kind === "jeu") {
+      setJeu({ ...emptyJeu(), ...(it.payload.jeu || {}) });
+      setJeuChannel(it.channel_id);
+      setEditingJeu(cible);
+      setTab("jeu");
+    } else if (it.kind === "pub") {
       setPub({ ...emptyPub(), ...(it.payload.pub || {}) });
       setPubAudio(it.payload.audio_url || "");
       setPubChannel(it.channel_id);
@@ -680,12 +875,13 @@ export default function Messages() {
         if (!res.ok) throw new Error();
         if (editingOne?.message_id === it.message_id) resetOne();
         if (editingPub?.message_id === it.message_id) resetPub();
+        if (editingJeu?.message_id === it.message_id) resetJeu();
         await reloadHistory();
       } catch {
         setError("Échec de la suppression.");
       }
     },
-    [editingOne, editingPub, reloadHistory]
+    [editingOne, editingPub, editingJeu, reloadHistory]
   );
 
   const patchRec = (id: string, patch: Partial<Recurring>) =>
@@ -738,6 +934,7 @@ export default function Messages() {
 
   const uniqueHistory = history.filter((h) => h.kind === "unique");
   const pubHistory = history.filter((h) => h.kind === "pub");
+  const jeuHistory = history.filter((h) => h.kind === "jeu");
 
   return (
     <div>
@@ -753,6 +950,12 @@ export default function Messages() {
           onClick={() => setTab("pub")}
         >
           📣 PUB
+        </button>
+        <button
+          className={`tab ${tab === "jeu" ? "active" : ""}`}
+          onClick={() => setTab("jeu")}
+        >
+          🎮 Promo jeu
         </button>
         <button
           className={`tab ${tab === "recurrents" ? "active" : ""}`}
@@ -877,6 +1080,58 @@ export default function Messages() {
             />
           </section>
           <PubPreview pub={pub} audio={pubAudio} labelFor={audioLabel} />
+        </div>
+      )}
+
+      {tab === "jeu" && (
+        <div className="msg-2col">
+          <section className="cfg-card">
+            <div className="cfg-card-head">
+              <h2>🎮 Promo jeu</h2>
+              <p>Fiche d&apos;un jeu à faire découvrir, avec ses boutons d&apos;achat.</p>
+            </div>
+            {editingJeu && (
+              <div className="edit-banner">
+                ✎ Édition d&apos;une promo déjà publiée
+                <button className="btn small" onClick={resetJeu}>
+                  Annuler
+                </button>
+              </div>
+            )}
+            <div className="cfg-field">
+              <label>Salon de publication</label>
+              <ChannelSelect
+                channels={channels}
+                value={editingJeu ? editingJeu.channel_id : jeuChannel}
+                onChange={setJeuChannel}
+                disabled={!!editingJeu}
+              />
+            </div>
+            <JeuEditor jeu={jeu} onJeu={(p) => setJeu((v) => ({ ...v, ...p }))} />
+            <div className="cfg-actions">
+              <button
+                className="btn primary"
+                onClick={publishJeu}
+                disabled={publishingJeu || (!editingJeu && !jeuChannel) || !jeu.name.trim()}
+              >
+                {publishingJeu ? "…" : editingJeu ? "Mettre à jour" : "Publier"}
+              </button>
+            </div>
+
+            <div className="cfg-card-head" style={{ marginTop: 18 }}>
+              <h2>🗂️ Promos publiées</h2>
+              <p>Réédite ou retire une promo déjà en ligne.</p>
+            </div>
+            <SentHistory
+              items={jeuHistory}
+              channelName={channelName}
+              editingId={editingJeu?.message_id ?? null}
+              onEdit={editSent}
+              onCopy={copySent}
+              onDelete={deleteSent}
+            />
+          </section>
+          <JeuPreview jeu={jeu} />
         </div>
       )}
 

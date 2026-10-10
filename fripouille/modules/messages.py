@@ -5,6 +5,8 @@ Usages :
   dans un salon, après configuration visuelle côté dashboard.
 - **Publicité (PUB)** : action ``pub`` — poste une annonce de serveur partenaire à partir
   d'un gabarit structuré (nom, jeu, présentation, bannière, logo, bouton d'invitation).
+- **Promo jeu** : action ``jeu`` — fiche d'un jeu (style, présentation, tarif, avis de
+  la commu, image) avec jusqu'à 2 boutons d'achat (Steam, Instant Gaming…).
 - **Messages récurrents** : config ``recurring`` — liste de messages repostés à une
   fréquence choisie (minutes / heures / jours / semaines). Un planificateur de fond
   tourne toutes les 60 s et envoie ceux qui sont dus.
@@ -128,6 +130,43 @@ def _build_pub(data):
     return None, embed, _invite_view(f("invite_url"))
 
 
+def _build_jeu(data):
+    """Construit (content, embed, view) d'une promo de jeu (jusqu'à 2 boutons d'achat)."""
+    j = data.get("jeu") or {}
+
+    def f(k):
+        return (j.get(k) or "").strip()
+
+    embed = discord.Embed(
+        title=(f("name") or "Jeu")[:256],
+        description=f("description") or None,
+        color=_color(j.get("color")),
+    )
+    embed.set_author(name="🎮 Le jeu à découvrir")
+    embed.set_thumbnail(url=LOGO_URL)
+    image = _valid_url(f("image_url"))
+    if image:
+        embed.set_image(url=image)
+    if f("style"):
+        embed.add_field(name="🏷️ Style", value=f("style")[:1024], inline=True)
+    if f("price"):
+        embed.add_field(name="💰 Tarif", value=f("price")[:1024], inline=True)
+    if f("avis"):
+        embed.add_field(name="💬 Avis de la commu", value=f("avis")[:1024], inline=False)
+    embed.set_footer(text="Proposé via La Fripouille")
+
+    view = None
+    for n, defaut in ((1, "Steam"), (2, "Instant Gaming")):
+        url = _valid_url(f(f"link{n}_url"))
+        if not url:
+            continue
+        view = view or discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.link, label=f"🛒 {f(f'link{n}_label') or defaut}"[:80], url=url
+        ))
+    return None, embed, view
+
+
 def _audio_file(url):
     """Résout un audio de la bibliothèque média (par son URL) en pièce jointe Discord."""
     url = (url or "").strip()
@@ -148,6 +187,8 @@ def _render(kind, data):
     """(content, embed, view, file) selon le type de message."""
     if kind == "pub":
         content, embed, view = _build_pub(data)
+    elif kind == "jeu":
+        content, embed, view = _build_jeu(data)
     else:
         content, embed = _build_message(data)
         view = None
@@ -176,6 +217,8 @@ def _payload_for(kind, data):
     audio_url = (data.get("audio_url") or "").strip()
     if kind == "pub":
         return {"pub": data.get("pub") or {}, "audio_url": audio_url}
+    if kind == "jeu":
+        return {"jeu": data.get("jeu") or {}, "audio_url": audio_url}
     return {
         "content": data.get("content") or "",
         "embed": data.get("embed") or {},
@@ -186,6 +229,8 @@ def _payload_for(kind, data):
 def _label_for(kind, data):
     if kind == "pub":
         return ((data.get("pub") or {}).get("server_name") or "Publicité").strip()[:80] or "Publicité"
+    if kind == "jeu":
+        return ((data.get("jeu") or {}).get("name") or "Promo jeu").strip()[:80] or "Promo jeu"
     e = data.get("embed") or {}
     return ((e.get("title") or data.get("content") or "Message").strip())[:80] or "Message"
 
@@ -237,6 +282,12 @@ async def action_send(bot, payload):
 
 async def action_pub(bot, payload):
     return await _send_and_record(bot, payload.get("channel_id"), "pub", payload)
+
+
+async def action_jeu(bot, payload):
+    if not ((payload.get("jeu") or {}).get("name") or "").strip():
+        raise ValueError("nom du jeu manquant")
+    return await _send_and_record(bot, payload.get("channel_id"), "jeu", payload)
 
 
 async def action_edit(bot, payload):
@@ -361,6 +412,7 @@ MODULE = register(Module(
     actions={
         "send": action_send,
         "pub": action_pub,
+        "jeu": action_jeu,
         "edit": action_edit,
         "delete": action_delete,
     },
