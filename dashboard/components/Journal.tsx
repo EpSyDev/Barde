@@ -10,6 +10,7 @@ import Icon from "@/components/Icon";
 import { useToasts } from "@/components/Toasts";
 import { runAction, useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { DirtyBar, Loading, Vide, depuis, dateCourte } from "@/components/ui";
+import { channelOptions } from "@/components/Mentions";
 
 type Channel = { id: string; name: string; category: string | null };
 
@@ -271,11 +272,7 @@ function ReglagesJournal({
             onChange={(e) => cfg.patch({ channel_id: e.target.value || null })}
           >
             <option value="">— aucun —</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.category ? `${c.category} / ` : ""}#{c.name}
-              </option>
-            ))}
+            {channelOptions(channels)}
           </select>
           <span className="hint">
             Les familles cochées « publier » y sont postées en embed, en plus d&apos;être

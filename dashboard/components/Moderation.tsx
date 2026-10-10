@@ -9,6 +9,7 @@ import Icon from "@/components/Icon";
 import { useToasts } from "@/components/Toasts";
 import { runAction, useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { DirtyBar, Loading, Vide, Stat, depuis, dateCourte, duree, formatNombre } from "@/components/ui";
+import { channelOptions } from "@/components/Mentions";
 
 type Channel = { id: string; name: string; category: string | null };
 type Palier = { warns: number; action: string; minutes?: number };
@@ -183,11 +184,7 @@ export default function Moderation({ aller }: { aller: (id: string, membre?: str
               onChange={(e) => cfg.patch({ log_channel_id: e.target.value || null })}
             >
               <option value="">— aucun (rien n&apos;est publié) —</option>
-              {channels.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.category ? `${c.category} / ` : ""}#{c.name}
-                </option>
-              ))}
+              {channelOptions(channels)}
             </select>
             <span className="hint">
               Chaque sanction y est publiée avec son motif, son auteur et son numéro.
@@ -253,7 +250,7 @@ export default function Moderation({ aller }: { aller: (id: string, membre?: str
                   </span>
                   <select
                     value={p.action}
-                    style={{ width: "auto" }}
+                    style={{ width: "auto", minWidth: 120, flexShrink: 0 }}
                     onChange={(e) => majPalier(i, { action: e.target.value })}
                   >
                     <option value="timeout">exclure</option>

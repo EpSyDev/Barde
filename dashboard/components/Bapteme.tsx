@@ -6,6 +6,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import MediaPicker from "@/components/MediaPicker";
+import { channelOptions } from "@/components/Mentions";
 
 type Channel = { id: string; name: string; category: string | null };
 type BaptemeCfg = {
@@ -66,12 +67,7 @@ export default function Bapteme() {
   const chanOpts = (
     <>
       <option value="">— Choisir un salon —</option>
-      {channels.map((c) => (
-        <option key={c.id} value={c.id}>
-          #{c.name}
-          {c.category ? ` (${c.category})` : ""}
-        </option>
-      ))}
+      {channelOptions(channels)}
     </>
   );
 

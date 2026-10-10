@@ -605,7 +605,9 @@ function SentHistory({
       {items.map((it) => (
         <div className={`sent-item ${editingId === it.message_id ? "editing" : ""}`} key={it.message_id}>
           <div className="sent-meta">
-            <span className="sent-label">{it.label || "Message"}</span>
+            <span className="sent-label" title={it.label}>
+              {(it.label || "Message").replace(/\*\*|__|~~/g, "")}
+            </span>
             <span className="sent-sub">
               {channelName(it.channel_id)} · {fmt(it.sent_at)}
               {it.edited_at ? " · édité" : ""}

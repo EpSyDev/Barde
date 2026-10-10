@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { useModuleConfig } from "@/lib/useModuleConfig";
+import { channelOptions } from "@/components/Mentions";
 
 type Channel = { id: string; name: string; category: string | null };
 type Cfg = { enabled: boolean; channel_id: string | null; lien: string; signalement_channel_id: string | null };
@@ -50,9 +51,7 @@ export default function TaverneAnnonces() {
           <label>Salon</label>
           <select value={d.channel_id ?? ""} onChange={(e) => mod.patch({ channel_id: e.target.value || null })}>
             <option value="">— choisir —</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>{c.category ? `${c.category} › ` : ""}#{c.name}</option>
-            ))}
+            {channelOptions(channels)}
           </select>
         </div>
         <div className="cfg-field">
@@ -64,9 +63,7 @@ export default function TaverneAnnonces() {
         <label>Salon des signalements (vocal de proximité)</label>
         <select value={d.signalement_channel_id ?? ""} onChange={(e) => mod.patch({ signalement_channel_id: e.target.value || null })}>
           <option value="">— aucun (journal du hub seulement) —</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>{c.category ? `${c.category} › ` : ""}#{c.name}</option>
-          ))}
+          {channelOptions(channels)}
         </select>
         <p className="cfg-hint">Un salon privé à la modération : chaque signalement y arrive avec les deux comptes Discord.</p>
       </div>

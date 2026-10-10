@@ -51,6 +51,12 @@ function parseLigne(ligne: string): { emoji: string; label: string } {
   return m ? { emoji: m[1], label: m[2].trim() } : { emoji: "", label: t };
 }
 
+/** URL de l'image d'un emoji perso Discord (<:nom:id> / <a:nom:id>), sinon null. */
+function emojiUrl(e: string): string | null {
+  const m = /^<(a?):\w+:(\d+)>$/.exec(e.trim());
+  return m ? `https://cdn.discordapp.com/emojis/${m[2]}.${m[1] ? "gif" : "webp"}?size=48` : null;
+}
+
 function deplacer<T>(list: T[], i: number, d: number): T[] {
   const j = i + d;
   if (j < 0 || j >= list.length) return list;
@@ -247,7 +253,7 @@ export default function Games() {
 
   return (
     <div className="cfg-grid wide">
-      <section className="cfg-card">
+      <section className="cfg-card span-all">
         <div className="cfg-card-head">
           <h2>🎮 Rôles-jeux</h2>
           <p>
@@ -377,6 +383,10 @@ export default function Games() {
                           const memes = g.role_id ? usages.get(g.role_id) || [] : [];
                           return (
                             <div className={`game-row ${memes.length > 1 ? "doublon" : ""}`} key={g.id}>
+                              {emojiUrl(g.emoji) && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img className="emoji-perso" src={emojiUrl(g.emoji)!} alt="" title={g.emoji} />
+                              )}
                               <input
                                 className="game-emoji"
                                 type="text"
@@ -574,7 +584,10 @@ function JeuxApercu({ cfg }: { cfg: JeuxCfg }) {
             <div className="jeux-apercu-btns">
               {k.games.map((g) => (
                 <span key={g.id} className="dc-btn">
-                  {g.emoji && !g.emoji.startsWith("<") ? `${g.emoji} ` : ""}
+                  {emojiUrl(g.emoji) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="emoji-perso" src={emojiUrl(g.emoji)!} alt="" />
+                  ) : g.emoji ? `${g.emoji} ` : ""}
                   {g.label}
                 </span>
               ))}

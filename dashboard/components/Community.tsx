@@ -8,6 +8,7 @@ import MediaPicker from "@/components/MediaPicker";
 import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
+import { channelOptions } from "@/components/Mentions";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
@@ -240,11 +241,7 @@ function Annonce({
           onChange={(e) => patch({ channel_id: e.target.value || null })}
         >
           <option value="">— Choisir un salon —</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.name}{c.category ? ` (${c.category})` : ""}
-            </option>
-          ))}
+          {channelOptions(channels)}
         </select>
         {cfg.enabled && !cfg.channel_id && (
           <span className="hint danger-text">

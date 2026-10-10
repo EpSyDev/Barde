@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
+import { channelOptions } from "@/components/Mentions";
 
 type VoiceChannel = { id: string; name: string; category: string | null };
 type Category = { id: string; name: string };
@@ -86,11 +87,7 @@ export default function Voice() {
                 onChange={(e) => cfg.patch({ hub_channel_id: e.target.value || null })}
               >
                 <option value="">— Choisir un salon vocal —</option>
-                {channels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.category ? ` (${c.category})` : ""}
-                  </option>
-                ))}
+                {channelOptions(channels, false)}
               </select>
               <p className="cfg-hint">
                 Crée un salon vocal nommé p. ex. « ➕ Créer un salon » et choisis-le ici.

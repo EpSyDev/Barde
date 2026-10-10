@@ -973,9 +973,12 @@ h3 {
 .queue-list .q-title {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .queue-list .q-dur {
@@ -1022,6 +1025,9 @@ h3 {
   padding: 2px 3px;
   cursor: pointer;
   flex-shrink: 0;
+  /* Fermé, il n'affiche que « ⇄ » : sinon sa largeur suit l'option la plus longue
+     (« → Conteur de la Lande ») et écrase les titres de la file. */
+  width: 36px;
 }
 
 .queue-list .q-to:hover:not(:disabled) {
@@ -1123,7 +1129,9 @@ h3 {
 /* ═══════════════════ Cartes de configuration — matière vélin ═══════════════════ */
 .cfg-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  /* auto-fit : une carte seule prend toute la largeur au lieu de rester à 460 px
+     à côté de colonnes vides (champs et listes tronqués). */
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   gap: var(--gutter);
   align-items: start;
 }
@@ -1381,7 +1389,7 @@ h3 {
 }
 
 .cfg-grid.wide {
-  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
 }
 
 .cfg-grid.full {
@@ -1393,6 +1401,7 @@ h3 {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+
 
 @media (max-width: 480px) {
   .field-2col { grid-template-columns: 1fr; }
@@ -1726,13 +1735,13 @@ h3 {
   padding: 6px 8px 0;
   font-size: var(--step--2);
   color: var(--parchment-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .media-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px;
   align-items: center;
@@ -2824,9 +2833,12 @@ table.ledger .actions {
 .sent-label {
   color: var(--text);
   font-size: var(--step-0);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .sent-sub {
@@ -2990,3 +3002,81 @@ table.ledger .actions {
   .game-row .game-label { flex-basis: 60%; }
   .game-row .game-role { max-width: none; flex: 1; }
 }
+
+/* ═══════════════════ Tâches de l'équipe ═══════════════════ */
+.tache-list { display: flex; flex-direction: column; gap: 8px; }
+
+.tache-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge-soft);
+  border-left: 4px solid var(--ember);
+  background: var(--surface-raised);
+}
+.tache-item.attribuee { border-left-color: var(--blue); }
+.tache-item.terminee { border-left-color: var(--green); opacity: 0.75; }
+
+.tache-main { flex: 1; min-width: 0; }
+.tache-titre { font-weight: 600; overflow-wrap: anywhere; }
+.tache-statut { font-size: var(--step--2); color: var(--text-dim); margin-right: 4px; }
+.tache-desc {
+  margin-top: 3px;
+  font-size: var(--step--1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tache-meta { margin-top: 4px; font-size: var(--step--2); color: var(--text-dim); font-style: italic; }
+
+/* Les cartes sont des conteneurs : dans une carte étroite (grille à 2-3 colonnes),
+   les champs côte à côte passent l'un sous l'autre au lieu d'être tronqués. */
+.cfg-card { container-type: inline-size; }
+@container (max-width: 560px) {
+  .field-2col,
+  .pub-fields { grid-template-columns: 1fr; }
+}
+
+/* Les en-têtes « Actif / Tous les N … / ✕ » passent à la ligne plutôt que d'écraser
+   leurs listes (paliers de modération, récurrents). */
+.rec-head { flex-wrap: wrap; }
+
+/* En-tête de carte : le titre ne se coupe jamais (« RÔLES- / JEUX ») ; le texte
+   d'aide se met à côté s'il y a la place, dessous sinon. */
+.cfg-card-head { flex-wrap: wrap; }
+.cfg-card-head > h2 { flex-shrink: 0; }
+.cfg-card-head > p { flex: 1 1 260px; margin-top: 3px; }
+.cfg-card-head > div { flex: 1 1 0; min-width: 0; }
+
+/* Aperçu d'embed : en-tête, corps (+ vignette à droite), image et pied s'empilent
+   comme dans Discord (avant : tout sur une ligne dès qu'il y avait un auteur ou un pied). */
+.preview-embed { flex-direction: column; gap: 0; }
+.preview-embed-main { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.preview-embed-main > div:first-child { flex: 1; min-width: 0; }
+.preview-embed-author { margin-bottom: 6px; }
+
+/* Lignes « emoji + nom + boutons » (motifs de ticket, catégories et jeux des rôles-jeux) :
+   l'emoji a une largeur fixe et le nom prend le reste — avant, chaque champ (largeur 100 %)
+   partait sur sa propre ligne. */
+.reason-head { flex-wrap: nowrap; }
+.reason-head .game-emoji,
+.game-row .game-emoji {
+  flex: 0 0 52px;
+  width: 52px;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.reason-head .game-label { flex: 1 1 auto; min-width: 0; }
+.reason-head .btn.icon { flex-shrink: 0; }
+
+/* Carte « éditeur » qui a besoin de toute la largeur, même dans une grille à colonnes. */
+.cfg-grid > .span-all { grid-column: 1 / -1; }
+
+/* Ligne de jeu : le nom garde toujours de la place ; s'il manque de largeur, le
+   rôle et les boutons passent dessous plutôt que d'écraser le nom. */
+.game-row { flex-wrap: wrap; }
+.game-row .game-label { flex: 1 1 180px; min-width: 140px; }
+.game-row .game-role { flex: 1 1 200px; }
+.emoji-perso { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; vertical-align: -5px; margin-right: 4px; }

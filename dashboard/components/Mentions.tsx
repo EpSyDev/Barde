@@ -45,6 +45,26 @@ const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // ─────────────────────────── Sélecteur de salon groupé ───────────────────────────
+/** Options d'un <select> de salons, rangées par catégorie (<optgroup>) : le libellé
+ *  reste court (« #salon ») au lieu de « #salon (🛖 ▌ NOM DE CATÉGORIE) » tronqué. */
+export function channelOptions(channels: GuildChannel[], hash = true) {
+  const m = new Map<string, GuildChannel[]>();
+  for (const c of channels) {
+    const k = c.category || "Sans catégorie";
+    m.set(k, [...(m.get(k) || []), c]);
+  }
+  return [...m.entries()].map(([cat, list]) => (
+    <optgroup key={cat} label={cat}>
+      {list.map((c) => (
+        <option key={c.id} value={c.id}>
+          {hash ? "#" : ""}
+          {c.name}
+        </option>
+      ))}
+    </optgroup>
+  ));
+}
+
 export function ChannelSelect({
   channels,
   value,
