@@ -3080,3 +3080,171 @@ table.ledger .actions {
 .game-row .game-label { flex: 1 1 180px; min-width: 140px; }
 .game-row .game-role { flex: 1 1 200px; }
 .emoji-perso { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; vertical-align: -5px; margin-right: 4px; }
+
+/* ═══════════════════ Piste de dés 3D (/table) ═══════════════════ */
+.piste {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: radial-gradient(ellipse at 50% 30%, #2b1a0b 0%, var(--wood-deep) 70%);
+  color: var(--parchment);
+  overflow: hidden;
+}
+.piste-chargement {
+  height: 100dvh; display: grid; place-items: center;
+  font-family: var(--font-title), serif; color: var(--gold); letter-spacing: 0.08em;
+}
+
+.piste-tete {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px 10px;
+  border-bottom: 1px solid var(--panel-edge);
+}
+.piste-tete h1 {
+  font-family: var(--font-title), serif; font-size: 1.5rem; color: var(--gold-bright);
+  letter-spacing: 0.06em;
+}
+.piste-retour { color: var(--parchment-dim); text-decoration: none; font-size: 0.9rem; }
+.piste-retour:hover { color: var(--gold); }
+.piste-sous { color: var(--parchment-dim); font-style: italic; font-size: 0.85rem; margin-left: auto; }
+
+.piste-corps {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  min-height: 0;
+}
+
+.piste-scene { position: relative; min-height: 0; }
+.piste-scene canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.piste-total {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 26px 8px;
+  border-radius: 14px;
+  background: rgba(16, 10, 3, 0.72);
+  border: 1px solid var(--panel-edge);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: piste-apparait 0.35s ease-out;
+}
+.piste-total-val {
+  font-family: var(--font-title), serif; font-weight: 900; font-size: 3.4rem; line-height: 1;
+  color: var(--gold-bright); text-shadow: 0 2px 0 #000;
+}
+.piste-total-msg { font-family: var(--font-title), serif; font-size: 0.95rem; letter-spacing: 0.08em; }
+.piste-total.crit { border-color: var(--gold); box-shadow: 0 0 40px rgba(240, 212, 137, 0.45); }
+.piste-total.crit .piste-total-msg { color: var(--gold-bright); }
+.piste-total.fumble { border-color: var(--red); box-shadow: 0 0 40px rgba(194, 83, 64, 0.5); }
+.piste-total.fumble .piste-total-val, .piste-total.fumble .piste-total-msg { color: #ff8f7a; }
+@keyframes piste-apparait { from { opacity: 0; transform: translate(-50%, -8px) scale(0.92); } }
+
+.piste-panneau {
+  border-left: 1px solid var(--panel-edge);
+  background: rgba(16, 10, 3, 0.55);
+  padding: 16px;
+  overflow-y: auto;
+}
+.piste-panneau h2 {
+  font-family: var(--font-title), serif; font-size: 0.8rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--gold-deep); margin: 0 0 8px;
+}
+.piste-panneau h2 + * { margin-bottom: 18px; }
+.piste-vide { color: var(--parchment-dim); font-style: italic; }
+.piste-raison { font-family: var(--font-title), serif; color: var(--gold-bright); }
+.piste-expr { color: var(--parchment-dim); font-size: 0.85rem; margin-bottom: 6px; }
+.piste-ligne { font-size: 0.92rem; overflow-wrap: anywhere; }
+.piste-ligne code { color: var(--gold); background: none; }
+.piste-somme { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--panel-edge); }
+.piste-somme b { font-family: var(--font-title), serif; font-size: 1.3rem; color: var(--gold-bright); }
+
+.piste-histo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.piste-histo li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; font-size: 0.85rem; align-items: baseline; }
+.piste-histo li > span:first-child { color: var(--parchment-dim); font-variant-numeric: tabular-nums; }
+.piste-histo-expr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--parchment-dim); }
+.piste-histo b { font-family: var(--font-title), serif; color: var(--parchment); }
+.piste-histo b.crit { color: var(--gold-bright); }
+.piste-histo b.fumble { color: #ff8f7a; }
+
+/* Barre du bas : dés, réglages, lancer */
+.piste-barre {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--panel-edge);
+  background: linear-gradient(180deg, rgba(43, 28, 13, 0.9), rgba(16, 10, 3, 0.95));
+}
+.piste-des { display: flex; gap: 8px; flex-wrap: wrap; }
+.piste-de {
+  position: relative; width: 58px; height: 58px; border: 0; cursor: pointer;
+  display: grid; place-items: center;
+  font-family: var(--font-title), serif; font-weight: 700; font-size: 0.85rem;
+  color: #f6ead2; transition: transform 0.12s, filter 0.12s;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.6));
+  background: none;
+}
+.piste-de::before {
+  content: ""; position: absolute; inset: 0; background: var(--teinte);
+  clip-path: var(--forme);
+}
+.piste-de span { position: relative; }
+.piste-de:hover:not(:disabled) { transform: translateY(-3px); filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.6)) brightness(1.1); }
+.piste-de:active:not(:disabled) { transform: translateY(0) scale(0.95); }
+.piste-de:disabled { opacity: 0.5; cursor: default; }
+.piste-de em {
+  position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 999px; background: var(--ember); color: #fff; font-style: normal;
+  font-family: var(--font-body), serif; font-size: 0.8rem; display: grid; place-items: center;
+  box-shadow: 0 0 0 2px var(--wood-deep);
+}
+.de-4 { --teinte: #b5523b; --forme: polygon(50% 4%, 97% 92%, 3% 92%); }
+.de-4 span { margin-top: 14px; }
+.de-6 { --teinte: #e7dabb; --forme: inset(8% round 10px); color: #2d1f10; }
+.de-8 { --teinte: #5f80a6; --forme: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.de-10 { --teinte: #7f9f58; --forme: polygon(50% 0, 100% 46%, 50% 100%, 0 46%); }
+.de-12 { --teinte: #8a5fa0; --forme: polygon(50% 0, 98% 36%, 80% 95%, 20% 95%, 2% 36%); }
+.de-20 { --teinte: #c9a44a; --forme: polygon(50% 0, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%); color: #2d1f10; }
+.de-100 { --teinte: #d8cdb6; --forme: polygon(50% 0, 100% 46%, 50% 100%, 0 46%); color: #2d1f10; font-size: 0.75rem; }
+
+.piste-reglages { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.piste-mod {
+  display: flex; align-items: center; border: 1px solid var(--panel-edge); border-radius: 10px; overflow: hidden;
+}
+.piste-mod button {
+  width: 34px; height: 38px; border: 0; background: rgba(67, 47, 22, 0.5); color: var(--parchment);
+  font-size: 1.1rem; cursor: pointer;
+}
+.piste-mod button:hover:not(:disabled) { background: rgba(67, 47, 22, 0.9); }
+.piste-mod span { min-width: 44px; text-align: center; font-family: var(--font-title), serif; color: var(--gold-bright); }
+.piste-raison-champ {
+  width: 230px; height: 38px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--panel-edge); background: rgba(0, 0, 0, 0.35); color: var(--parchment);
+  font-family: var(--font-body), serif; font-size: 0.95rem;
+}
+.piste-crit { display: flex; align-items: center; gap: 6px; font-style: italic; color: var(--parchment-dim); cursor: pointer; }
+
+.piste-action { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.piste-formule { font-family: var(--font-title), serif; color: var(--parchment-dim); letter-spacing: 0.04em; }
+.piste-vider, .piste-lancer {
+  height: 44px; padding: 0 18px; border-radius: 12px; cursor: pointer;
+  font-family: var(--font-title), serif; font-weight: 700; letter-spacing: 0.06em;
+}
+.piste-vider { border: 1px solid var(--panel-edge); background: transparent; color: var(--parchment-dim); }
+.piste-lancer {
+  min-width: 150px; border: 1px solid var(--gold); color: #2d1f10; font-size: 1.05rem;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  box-shadow: 0 0 22px rgba(224, 122, 51, 0.35);
+}
+.piste-lancer:hover:not(:disabled) { filter: brightness(1.08); }
+.piste-lancer:disabled { opacity: 0.7; cursor: progress; }
+.piste-erreur { width: 100%; color: #ff8f7a; margin: 0; }
+
+@media (max-width: 900px) {
+  .piste-corps { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .piste-panneau { border-left: 0; border-top: 1px solid var(--panel-edge); max-height: 30dvh; }
+  .piste-sous { display: none; }
+  .piste-action { margin-left: 0; width: 100%; }
+  .piste-lancer { flex: 1; }
+  .piste-raison-champ { width: 100%; }
+  .piste-total { top: 8px; padding: 4px 18px 6px; }
+  .piste-total-val { font-size: 2.3rem; }
+}

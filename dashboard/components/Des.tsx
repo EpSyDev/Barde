@@ -51,6 +51,10 @@ export default function Des() {
           </div>
         </div>
 
+        <a className="btn primary" href="/table" style={{ alignSelf: "flex-start", marginBottom: 14 }}>
+          🎲 Ouvrir la piste de dés 3D
+        </a>
+
         <label className="cfg-toggle">
           <input type="checkbox" checked={d.enabled} onChange={(e) => mod.patch({ enabled: e.target.checked })} />
           <span className="switch" />
