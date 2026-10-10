@@ -22,13 +22,17 @@ Règles couvertes :
 Chaque résultat public porte « 🔁 Relancer », réservé à celui qui a lancé (son id est
 dans le custom_id du bouton). Tirage via ``secrets.SystemRandom``.
 """
+import asyncio
+import io
 import logging
 import re
 import secrets
+import time
 
 import discord
 from discord import app_commands
 
+from .. import des_rendu
 from ..registry import Module, register
 
 log = logging.getLogger("fripouille.des")
@@ -38,6 +42,7 @@ MAX_DES = 100          # dés par jet (anti-spam)
 MAX_EXPR = 60          # longueur d'expression (tient dans un custom_id de bouton)
 OR, VERT, ROUGE, GRIS = 0xC9A44A, 0x57F287, 0xED4245, 0x4F545C
 _rng = secrets.SystemRandom()
+SUSPENSE_S = 1.2       # « 🎲 roule… » avant le résultat : le temps d'un vrai lancer
 
 DEFAULTS = {
     "enabled": False,
@@ -126,7 +131,7 @@ def _d(faces: int) -> int:
 def _lancer(termes: list[dict]) -> dict:
     """Lance tout. Renvoie {total, lignes, nat} — nat = valeur du d20 si le jet n'en
     garde qu'un (pour les critiques), sinon None."""
-    total, lignes, d20_gardes = 0, [], []
+    total, lignes, d20_gardes, tous = 0, [], [], []
     for t in termes:
         if "valeur" in t:
             total += t["signe"] * t["valeur"]
@@ -148,6 +153,7 @@ def _lancer(termes: list[dict]) -> dict:
         total += t["signe"] * somme
         if t["faces"] == 20:
             d20_gardes += [d["v"] for d in des if d["garde"]]
+        tous += [{"faces": t["faces"], "v": d["v"], "garde": d["garde"]} for d in des]
 
         def fmt(d):
             s = f"**{d['v']}**" if d["garde"] else f"~~{d['v']}~~"
@@ -170,7 +176,7 @@ def _lancer(termes: list[dict]) -> dict:
     if mods:
         lignes.append(f"Modificateur : **{mods:+d}**")
     nat = d20_gardes[0] if len(d20_gardes) == 1 else None
-    return {"total": total, "lignes": lignes, "nat": nat}
+    return {"total": total, "lignes": lignes, "nat": nat, "des": tous}
 
 
 def _texte_expr(termes: list[dict]) -> str:
@@ -348,9 +354,9 @@ def _vue_relancer(uid: int, expr: str, mode: str) -> discord.ui.View:
 class Reveler(discord.ui.View):
     """Sous un jet secret : publie le même résultat dans le salon."""
 
-    def __init__(self, embed: discord.Embed):
+    def __init__(self, embed: discord.Embed, png: bytes | None):
         super().__init__(timeout=3600)
-        self.embed = embed
+        self.embed, self.png = embed, png
 
     @discord.ui.button(label="Révéler à la table", emoji="📢", style=discord.ButtonStyle.primary)
     async def reveler(self, interaction: discord.Interaction, _b):
@@ -358,7 +364,10 @@ class Reveler(discord.ui.View):
         e.set_author(name=f"{interaction.user.display_name} (jet secret révélé)",
                      icon_url=interaction.user.display_avatar.url)
         await interaction.response.edit_message(view=None)
-        await interaction.followup.send(embed=e)
+        if self.png:
+            await interaction.followup.send(embed=e, file=discord.File(io.BytesIO(self.png), "jet.png"))
+        else:
+            await interaction.followup.send(embed=e)
         await _log(interaction.client, f"📢 {_qui(interaction.user)} révèle son jet secret à la table.")
 
 
@@ -370,11 +379,24 @@ async def _repondre_jet(interaction: discord.Interaction, expr: str, mode: str =
         await interaction.response.send_message(f"⚠️ {exc}", ephemeral=True)
         return
     e = _embed_jet(interaction.user, r, mode, raison, secret)
-    if secret:
-        await interaction.response.send_message(embed=e, view=Reveler(e), ephemeral=True)
-    else:
-        # L'expression est relancée telle que tapée (avant le mode) : on garde la forme brute.
-        await interaction.response.send_message(embed=e, view=_vue_relancer(interaction.user.id, _normaliser(expr)[:MAX_EXPR], mode))
+    # 1) le dé « roule » ; 2) on dessine pendant ce temps (hors boucle asyncio) ;
+    # 3) le résultat remplace le message, image comprise.
+    debut = time.monotonic()
+    await interaction.response.send_message(
+        f"🎲 *{interaction.user.display_name} lance les dés… ça roule…*", ephemeral=secret)
+    try:
+        png = await asyncio.to_thread(des_rendu.rendre, r["des"], r["nat"] if mode != "c" else None)
+    except Exception as exc:  # noqa: BLE001 — sans image, le jet reste valable
+        log.warning("rendu des dés : %s", exc)
+        png = None
+    await asyncio.sleep(max(0.0, SUSPENSE_S - (time.monotonic() - debut)))
+    fichiers = []
+    if png:
+        e.set_image(url="attachment://jet.png")
+        fichiers = [discord.File(io.BytesIO(png), "jet.png")]
+    # L'expression est relancée telle que tapée (avant le mode) : on garde la forme brute.
+    vue = Reveler(e, png) if secret else _vue_relancer(interaction.user.id, _normaliser(expr)[:MAX_EXPR], mode)
+    await interaction.edit_original_response(content=None, embed=e, attachments=fichiers, view=vue)
     marques = [m for m, ok in (("🔒 secret", secret), ("🔁 relance", relance),
                                 ("💥 critique", mode == "c")) if ok]
     nat = ""
