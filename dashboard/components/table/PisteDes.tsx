@@ -128,6 +128,7 @@ export default function PisteDes() {
       <header className="piste-tete">
         <a href="/?s=des" className="piste-retour">← Panneau</a>
         <h1>Piste de dés</h1>
+        <a href="/table/plateau" className="piste-retour">🗺️ Plateau de jeu</a>
         <span className="piste-sous">La Taverne du Gaming · tirage garanti par La Fripouille</span>
       </header>
 
