@@ -670,9 +670,29 @@ async def apply(bot, cfg):
     bot.store.set("des", {"panel_message_id": str(msg.id)})
 
 
+# ═══════════════════════════ Piste 3D (dashboard) ═══════════════════════════
+async def action_jet(bot, payload):
+    """Jet tiré ICI (même moteur, même aléa système) pour la piste de dés 3D : le
+    navigateur ne fait qu'animer des dés qui tombent sur ce résultat — impossible à
+    truquer côté client. Consigné dans le journal du MJ."""
+    expr = str(payload.get("expr") or "1d20")[:MAX_EXPR]
+    mode = "c" if payload.get("critique") else "n"
+    raison = str(payload.get("raison") or "")[:60]
+    try:
+        r = jet(expr, mode)
+    except JetInvalide as exc:
+        raise ValueError(str(exc))
+    qui = str(payload.get("_acteur") or "?")[:40]
+    await _log(bot, f"🎲 **{qui}** (piste 3D){f' · {raison}' if raison else ''} · `{r['expr']}` → "
+                    f"**{r['total']}**{' ✨ 20 naturel' if r['nat'] == 20 else ' 💀 1 naturel' if r['nat'] == 1 else ''}")
+    return {"ok": True, "total": r["total"], "expr": r["expr"], "nat": r["nat"] if mode != "c" else None,
+            "des": r["des"], "lignes": r["lignes"]}
+
+
 MODULE = register(Module(
     key="des",
     label="Dés (D&D)",
     defaults=DEFAULTS,
     apply=apply,
+    actions={"jet": action_jet},
 ))
