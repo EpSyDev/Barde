@@ -225,6 +225,14 @@ async def appliquer(op: str, d: dict, acteur: str) -> dict:
                             if not (z[0] >= x and z[1] >= y and z[0] + z[2] <= x + l and z[1] + z[3] <= y + h)]
         _changer()
         return {"ok": True}
+    if op == "reinitialiser":
+        # Nouvelle partie : pions, brouillard et fil effacés ; la carte (image, cases) reste.
+        e["pions"], e["fil"] = [], []
+        e["brouillard"] = {"actif": False, "reveles": []}
+        if d.get("carte"):
+            e["carte"] = _defaut()["carte"]
+        _changer()
+        return {"ok": True}
     if op == "brouillard_reset":
         e["brouillard"]["reveles"] = []
         _changer()
