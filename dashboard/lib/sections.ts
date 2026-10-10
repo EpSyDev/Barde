@@ -32,6 +32,7 @@ export const SECTIONS: Section[] = [
 
   { id: "moderation", label: "Modération", icon: "balance", hint: "Sanctions & escalade", group: "L'ordre", ready: true },
   { id: "tickets", label: "Tickets", icon: "ticket", hint: "Support membres", group: "L'ordre", ready: true },
+  { id: "taches", label: "Tâches", icon: "parchemin", hint: "To-do de l'équipe", group: "L'ordre", ready: true, titre: "Tâches de l'équipe" },
   { id: "journal", label: "Journal", icon: "registre", hint: "Tout ce qui s'est passé", group: "L'ordre", ready: true },
 
   { id: "media", label: "Média", icon: "cadre", hint: "Images des embeds", group: "L'atelier", ready: true },
