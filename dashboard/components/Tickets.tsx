@@ -130,6 +130,15 @@ export default function Tickets() {
       ...cfg,
       reasons: cfg.reasons.map((r) => (r.id === id ? { ...r, ...patch } : r)),
     });
+  // L'ordre de la liste = l'ordre des options du menu déroulant côté Discord.
+  const moveReason = (i: number, d: number) => {
+    if (!cfg) return;
+    const j = i + d;
+    if (j < 0 || j >= cfg.reasons.length) return;
+    const reasons = [...cfg.reasons];
+    [reasons[i], reasons[j]] = [reasons[j], reasons[i]];
+    set({ reasons });
+  };
 
   if (mod.loading) return <Loading lignes={6} />;
   if (!cfg) return <Vide>{mod.error || "La Fripouille est injoignable."}</Vide>;
@@ -313,7 +322,7 @@ export default function Tickets() {
             motifs : un menu déroulant, chaque motif ayant son message d'accueil.
           </p>
           <div className="rec-list">
-            {cfg.reasons.map((r) => (
+            {cfg.reasons.map((r, i) => (
               <div className="reason-item" key={r.id}>
                 <div className="reason-head">
                   <input
@@ -332,6 +341,22 @@ export default function Tickets() {
                     placeholder="Nom du motif (ex. Support, Bug, Partenariat)"
                     aria-label="Motif"
                   />
+                  <button
+                    className="btn icon"
+                    onClick={() => moveReason(i, -1)}
+                    disabled={i === 0}
+                    title="Monter dans le menu"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    className="btn icon"
+                    onClick={() => moveReason(i, 1)}
+                    disabled={i === cfg.reasons.length - 1}
+                    title="Descendre dans le menu"
+                  >
+                    ↓
+                  </button>
                   <button
                     className="btn icon danger"
                     onClick={() => set({ reasons: cfg.reasons.filter((x) => x.id !== r.id) })}
