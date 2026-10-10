@@ -21,6 +21,7 @@ from pathlib import Path
 from aiohttp import web
 
 from . import config, media, registry
+from .modules import plateau
 
 log = logging.getLogger("fripouille.webapi")
 
@@ -70,12 +71,20 @@ async def _auth(request, handler):
     if not authorized and request.method == "POST" and request.path == "/api/media/upload":
         ticket = request.query.get("ticket", "")
         authorized = bool(ticket) and _consume_ticket(ticket)
+    if not authorized and request.path in _PLATEAU_ROUTES:
+        # Plateau de jeu : ticket de soirée délivré par le dashboard (session vérifiée).
+        acteur = plateau.acteur_du_ticket(request.query.get("ticket", ""))
+        if acteur:
+            request["acteur_plateau"] = acteur
+            authorized = True
     if not authorized:
         return _cors(web.json_response({"error": "unauthorized"}, status=401))
     try:
         resp = await handler(request)
     except web.HTTPException as exc:
         return _cors(exc)
+    if resp.prepared:          # flux SSE déjà envoyé (en-têtes CORS posés par le handler)
+        return resp
     return _cors(resp)
 
 
@@ -239,6 +248,40 @@ async def run_action(request):
     return web.json_response(result or {"ok": True})
 
 
+# ─────────────────────────── Plateau de jeu (table virtuelle) ───────────────────────────
+_PLATEAU_ROUTES = {"/api/plateau/flux", "/api/plateau/op", "/api/plateau/etat"}
+
+
+async def plateau_ticket(request):
+    """Appelé par le dashboard (token) : ticket de soirée pour le flux et les gestes."""
+    t = plateau.nouveau_ticket(_actor(request))
+    base = config.PUBLIC_BASE_URL or ""
+    return web.json_response({
+        "flux_url": f"{base}/api/plateau/flux?ticket={t}",
+        "op_url": f"{base}/api/plateau/op?ticket={t}",
+        "etat_url": f"{base}/api/plateau/etat?ticket={t}",
+    })
+
+
+async def plateau_flux(request):
+    return await plateau.flux(request, web)
+
+
+async def plateau_etat(request):
+    return web.json_response(plateau.etat())
+
+
+async def plateau_op(request):
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise web.HTTPBadRequest(reason="corps JSON attendu")
+    acteur = request.get("acteur_plateau") or _actor(request)
+    try:
+        return web.json_response(await plateau.appliquer(str(data.get("op") or ""), data, acteur))
+    except ValueError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+
+
 async def media_list(request):
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     labels = media.load_labels()
@@ -369,6 +412,7 @@ async def import_config(request):
 def build_app(bot):
     app = web.Application(middlewares=[_auth], client_max_size=_MAX_AUDIO + 1024 * 1024)
     app["bot"] = bot
+    plateau.attacher(bot)
     app.add_routes([
         web.get("/api/health", health),
         web.get("/api/audit", audit_log),
@@ -384,6 +428,10 @@ def build_app(bot):
         web.post("/api/action/{module}/{action}", run_action),
         web.get("/api/media", media_list),
         web.post("/api/media/upload-ticket", media_upload_ticket),
+        web.post("/api/plateau/ticket", plateau_ticket),
+        web.get("/api/plateau/flux", plateau_flux),
+        web.get("/api/plateau/etat", plateau_etat),
+        web.post("/api/plateau/op", plateau_op),
         web.post("/api/media/upload", media_upload),
         web.post("/api/media/rename", media_rename),
         web.post("/api/media/delete", media_delete),
