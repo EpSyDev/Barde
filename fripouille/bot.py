@@ -12,7 +12,7 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, economie, enligne, farewell, help as help_module, jeux, journal,
+    anonyme, autorole, bapteme, des, economie, enligne, farewell, help as help_module, jeux, journal,
     membres, messages, moderation, taches, tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
@@ -70,6 +70,7 @@ class FripouilleBot(discord.Client):
         economie.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
+        des.setup(self.tree, guild)
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
@@ -81,6 +82,7 @@ class FripouilleBot(discord.Client):
         await tempvoice.cleanup(self)
         enligne.setup_persistent(self)
         taches.setup_persistent(self)
+        des.setup_persistent(self)
 
     async def _on_arrival(self, member: discord.Member):
         # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
