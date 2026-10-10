@@ -44,6 +44,7 @@ DEFAULTS = {
     "channel_id": "1558518342791331941",
     "panel_message_id": None,
     "log_channel_id": None,   # salon MJ : journal de tout ce qui se passe à la table
+    "log_panel_id": None,     # message « 🧹 Vider le journal » du salon MJ (géré bot)
 }
 
 MODES = {"n": "", "c": "critique"}
@@ -214,6 +215,81 @@ async def _log(client, texte: str):
         await channel.send(texte[:2000], allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException as exc:
         log.warning("journal MJ : %s", exc)
+
+
+class ViderConfirmation(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.button(label="Oui, tout effacer", emoji="🧹", style=discord.ButtonStyle.danger)
+    async def oui(self, interaction: discord.Interaction, _b):
+        await interaction.response.edit_message(content="🧹 Nettoyage en cours…", view=None)
+        n = await _vider_journal(interaction.client, interaction.channel)
+        await interaction.edit_original_response(content=f"🧹 Journal vidé : {n} message(s) supprimé(s).")
+
+
+class JournalVue(discord.ui.View):
+    """Bouton persistant du salon MJ : efface tout le journal de la partie."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Vider le journal", emoji="🧹", style=discord.ButtonStyle.danger,
+                       custom_id="des:journal:vider")
+    async def vider(self, interaction: discord.Interaction, _b):
+        await interaction.response.send_message(
+            "Effacer **tous** les logs de la table dans ce salon ? (irréversible)",
+            view=ViderConfirmation(), ephemeral=True,
+        )
+
+
+async def _vider_journal(client, channel) -> int:
+    """Supprime tous les messages du bot dans le salon MJ, sauf le panneau du journal."""
+    garde = client.store.get("des").get("log_panel_id")
+
+    def cible(m):
+        return m.author.id == client.user.id and str(m.id) != str(garde)
+
+    try:
+        # En masse (permission « Gérer les messages ») ; discord.py bascule seul en
+        # suppression unitaire pour les messages de plus de 14 jours.
+        return len(await channel.purge(limit=None, check=cible, reason="Fin de partie : journal vidé"))
+    except discord.Forbidden:
+        n = 0
+        async for m in channel.history(limit=None):
+            if cible(m):
+                try:
+                    await m.delete()
+                    n += 1
+                except discord.HTTPException:
+                    pass
+        return n
+
+
+async def _poster_panneau_journal(bot, cfg):
+    cid = cfg.get("log_channel_id")
+    channel = bot.get_channel(int(cid)) if cid else None
+    if channel is None:
+        return
+    e = discord.Embed(
+        title="📜 Journal de la table",
+        description="Chaque jet, initiative et tour de la table de jeu est consigné ici.\n"
+                    "Partie terminée ? **🧹 Vider le journal** efface tous les logs (ce message reste).",
+        color=GRIS,
+    )
+    pid = cfg.get("log_panel_id")
+    if pid:
+        try:
+            await channel.get_partial_message(int(pid)).edit(embed=e, view=JournalVue())
+            return
+        except discord.HTTPException:
+            pass
+    msg = await channel.send(embed=e, view=JournalVue())
+    try:
+        await msg.pin(reason="Panneau du journal MJ")
+    except discord.HTTPException:
+        pass
+    bot.store.set("des", {"log_panel_id": str(msg.id)})
 
 
 def _qui(user) -> str:
@@ -544,13 +620,15 @@ def setup(tree: app_commands.CommandTree, guild) -> None:
 def setup_persistent(bot):
     bot.add_view(PanneauVue())
     bot.add_view(InitiativeVue())
+    bot.add_view(JournalVue())
     bot.add_dynamic_items(Relancer)
 
 
 async def apply(bot, cfg):
-    """Poste (ou met à jour) le panneau dans le salon de jeu."""
+    """Poste (ou met à jour) le panneau dans le salon de jeu, et celui du journal MJ."""
     if not cfg.get("enabled") or not cfg.get("channel_id"):
         return
+    await _poster_panneau_journal(bot, cfg)
     channel = bot.get_channel(int(cfg["channel_id"]))
     if channel is None:
         log.warning("des : salon %s introuvable", cfg["channel_id"])

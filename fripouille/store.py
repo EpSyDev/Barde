@@ -24,7 +24,7 @@ AUDIT_PATH = config.DATA_DIR / "audit.json"
 AUDIT_MAX = 400          # entrées conservées (fichier borné, VM 1 Go)
 # Clés écrites par le bot lui-même (compteurs, IDs de messages postés, roster) :
 # les tracer noierait le journal sous du bruit machine.
-AUDIT_SKIP = {"message_id", "counter", "roster", "panel_message_id", "taches"}
+AUDIT_SKIP = {"message_id", "counter", "roster", "panel_message_id", "taches", "log_panel_id"}
 # Valeurs volumineuses : on garde la trace du changement, pas son contenu entier.
 AUDIT_MAX_VALUE_LEN = 400
 
