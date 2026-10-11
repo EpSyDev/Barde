@@ -10,6 +10,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Discord({
       clientId: process.env.DISCORD_CLIENT_ID,
       clientSecret: process.env.DISCORD_CLIENT_SECRET,
+      // Discord renvoie désormais un paramètre « iss » (RFC 9207) au retour OAuth ; sans
+      // émetteur déclaré, Auth.js le compare à son défaut « https://authjs.dev » et refuse
+      // la connexion (CallbackRouteError, page « Server error »).
+      issuer: "https://discord.com",
       // L'URL doit être fournie explicitement : n'indiquer que `params` écrase
       // la chaîne par défaut du provider et casse `new URL` (Invalid URL).
       authorization: {
