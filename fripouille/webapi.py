@@ -76,6 +76,7 @@ async def _auth(request, handler):
         acteur = plateau.acteur_du_ticket(request.query.get("ticket", ""))
         if acteur:
             request["acteur_plateau"] = acteur
+            request["role_plateau"] = plateau.role_du_ticket(request.query.get("ticket", ""))
             authorized = True
     if not authorized:
         return _cors(web.json_response({"error": "unauthorized"}, status=401))
@@ -254,7 +255,12 @@ _PLATEAU_ROUTES = {"/api/plateau/flux", "/api/plateau/op", "/api/plateau/etat"}
 
 async def plateau_ticket(request):
     """Appelé par le dashboard (token) : ticket de soirée pour le flux et les gestes."""
-    t = plateau.nouveau_ticket(_actor(request))
+    try:
+        corps = await request.json()
+    except Exception:  # noqa: BLE001  (corps absent = ancien appel du dashboard)
+        corps = {}
+    role = str(corps.get("role") or "admin") if isinstance(corps, dict) else "admin"
+    t = plateau.nouveau_ticket(_actor(request), role)
     base = config.PUBLIC_BASE_URL or ""
     return web.json_response({
         "flux_url": f"{base}/api/plateau/flux?ticket={t}",

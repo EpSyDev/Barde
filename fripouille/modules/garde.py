@@ -294,14 +294,27 @@ async def action_etat(bot, _payload):
 
 
 async def action_verrouiller(bot, payload):
-    return await verrouiller(bot, _acteur(payload))
+    try:
+        return await verrouiller(bot, _acteur(payload))
+    except ValueError as exc:   # message lisible côté dashboard (pas un 400 muet)
+        return {"ok": False, "error": str(exc)}
 
 
 async def action_deverrouiller(bot, payload):
-    return await deverrouiller(bot, _acteur(payload))
+    try:
+        return await deverrouiller(bot, _acteur(payload))
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 async def action_neutraliser(bot, payload):
+    try:
+        return await _neutraliser(bot, payload)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+async def _neutraliser(bot, payload):
     """Exclut temporairement tous les membres arrivés dans les ``depuis_min`` dernières minutes."""
     guild = _guild(bot)
     if guild is None:

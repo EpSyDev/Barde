@@ -42,6 +42,7 @@ import discord
 
 from .. import config
 from ..registry import Module, register
+from . import stats
 
 log = logging.getLogger("fripouille.enligne")
 
@@ -293,7 +294,12 @@ async def _arret(bot, member: discord.Member, k: str):
         s = _sessions.get(k)
         if s is None or member.id not in s["joueurs"]:
             return
-        del s["joueurs"][member.id]
+        debut = s["joueurs"].pop(member.id)
+        try:
+            minutes = (_now() - datetime.fromisoformat(debut)).total_seconds() / 60
+            stats.enregistrer_jeu(bot, s["nom"], minutes, member.id)
+        except Exception as exc:  # noqa: BLE001  (les stats ne doivent jamais casser l'annonce)
+            log.warning("stats jeu : %s", exc)
         if not s["joueurs"]:
             s["fin"] = _now()
         await _maj_message(bot, s)

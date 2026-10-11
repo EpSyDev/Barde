@@ -1,12 +1,9 @@
 import NextAuth from "next-auth";
 import Discord from "next-auth/providers/discord";
+import { roleOf } from "@/lib/acces";
 
-// Liste blanche : seuls ces IDs Discord peuvent entrer (toi + le fonda).
-const allowed = (process.env.ALLOWED_DISCORD_IDS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
+// Accès = ALLOWED_DISCORD_IDS (admins de secours) ∪ liste du module « Accès » du dashboard,
+// chacun avec un rôle (admin | mj | joueur). Voir lib/acces.ts.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
@@ -22,18 +19,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    // Refuse toute connexion dont l'ID Discord n'est pas dans la liste blanche.
+    // Refuse toute connexion dont l'ID Discord n'a aucun rôle.
     async signIn({ profile }) {
-      return !!profile && allowed.includes(String(profile.id));
+      return !!profile && (await roleOf(String(profile.id))) !== null;
     },
-    // revérifiée à chaque requête : retirer un ID de la liste coupe aussi les sessions déjà ouvertes
+    // Revérifié à chaque requête : retirer un accès coupe aussi les sessions déjà ouvertes
+    // (au plus 30 s de latence, durée du cache de la liste).
     async jwt({ token, profile }) {
       if (profile) token.discordId = String(profile.id);
-      if (!token.discordId || !allowed.includes(String(token.discordId))) return null;
+      const role = await roleOf(token.discordId as string | undefined);
+      if (!role) return null;
+      token.role = role;
       return token;
     },
     async session({ session, token }) {
       if (token.discordId) (session.user as any).discordId = token.discordId;
+      if (token.role) (session.user as any).role = token.role;
       return session;
     },
   },

@@ -217,6 +217,61 @@ function MessageEditor({
   );
 }
 
+type Modele = { id: string; nom: string; content: string; embed: Embed; audio_url: string };
+
+/** Bibliothèque de modèles (règles, annonces…) : charge un modèle dans l'éditeur ou
+ *  enregistre le message en cours comme nouveau modèle. Stockée côté bot (config « modeles »). */
+function ModelesBar({
+  modeles,
+  onCharger,
+  onEnregistrer,
+  onSupprimer,
+}: {
+  modeles: Modele[];
+  onCharger: (m: Modele) => void;
+  onEnregistrer: (nom: string) => void;
+  onSupprimer: (m: Modele) => void;
+}) {
+  const [choix, setChoix] = useState("");
+  const courant = modeles.find((m) => m.id === choix) || null;
+  return (
+    <div className="cfg-field">
+      <label>📚 Modèles</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <select value={choix} onChange={(e) => setChoix(e.target.value)} style={{ minWidth: 200 }}>
+          <option value="">— Choisir un modèle —</option>
+          {modeles.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nom}
+            </option>
+          ))}
+        </select>
+        <button className="btn small" type="button" disabled={!courant} onClick={() => courant && onCharger(courant)}>
+          Charger
+        </button>
+        <button
+          className="btn small"
+          type="button"
+          onClick={() => {
+            const nom = window.prompt("Nom du modèle (remplace un modèle du même nom) :", courant?.nom || "");
+            if (nom && nom.trim()) onEnregistrer(nom.trim().slice(0, 60));
+          }}
+        >
+          Enregistrer comme modèle
+        </button>
+        <button
+          className="btn small danger"
+          type="button"
+          disabled={!courant}
+          onClick={() => courant && window.confirm(`Supprimer le modèle « ${courant.nom} » ?`) && (onSupprimer(courant), setChoix(""))}
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MessagePreview({
   content,
   embed,
@@ -661,6 +716,26 @@ export default function Messages() {
   // Historique des envois ponctuels (unique + pub)
   const [history, setHistory] = useState<SentItem[] | null>(null);
 
+  // Modèles de messages (enregistrés immédiatement, hors brouillon des récurrents)
+  const [modeles, setModeles] = useState<Modele[]>([]);
+  const sauverModeles = useCallback(
+    async (liste: Modele[], msg: string) => {
+      try {
+        const res = await fetch("/api/fripouille/config/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modeles: liste }),
+        });
+        if (!res.ok) throw new Error();
+        setModeles(liste);
+        toasts.ok(msg);
+      } catch {
+        toasts.err("Modèle non enregistré", "La Fripouille est injoignable ?");
+      }
+    },
+    [toasts]
+  );
+
   // Récurrents
   const [recurring, setRecurring] = useState<Recurring[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -693,6 +768,7 @@ export default function Messages() {
         const cData = await cRes.json();
         setChannels(chData.channels || []);
         setHistory(cData.sent || []);
+        setModeles(cData.modeles || []);
         if (mRes.ok) {
           const mData = await mRes.json();
           const map: Record<string, string> = {};
@@ -987,6 +1063,34 @@ export default function Messages() {
                 disabled={!!editingOne}
               />
             </div>
+            <ModelesBar
+              modeles={modeles}
+              onCharger={(m) => {
+                setOneContent(m.content);
+                setOneEmbed({ ...emptyEmbed(), ...m.embed });
+                setOneAudio(m.audio_url || "");
+              }}
+              onEnregistrer={(nom) => {
+                const existant = modeles.find((m) => m.nom.toLowerCase() === nom.toLowerCase());
+                const m: Modele = {
+                  id: existant?.id || (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8),
+                  nom,
+                  content: oneContent,
+                  embed: oneEmbed,
+                  audio_url: oneAudio,
+                };
+                sauverModeles(
+                  existant ? modeles.map((x) => (x.id === existant.id ? m : x)) : [...modeles, m],
+                  `Modèle « ${nom} » enregistré`
+                );
+              }}
+              onSupprimer={(m) =>
+                sauverModeles(
+                  modeles.filter((x) => x.id !== m.id),
+                  "Modèle supprimé"
+                )
+              }
+            />
             <MessageEditor
               content={oneContent}
               embed={oneEmbed}

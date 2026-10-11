@@ -7,6 +7,10 @@ import Games from "@/components/Games";
 import Messages from "@/components/Messages";
 import EnLigne from "@/components/EnLigne";
 import Garde from "@/components/Garde";
+import Soirees from "@/components/Soirees";
+import Diffusions from "@/components/Diffusions";
+import Stats from "@/components/Stats";
+import Acces from "@/components/Acces";
 import Taches from "@/components/Taches";
 import Des from "@/components/Des";
 import Tickets from "@/components/Tickets";
@@ -249,6 +253,14 @@ function Shell({ userName }: { userName: string }) {
             <Registre />
           ) : active === "moderation" ? (
             <Moderation aller={aller} />
+          ) : active === "soirees" ? (
+            <Soirees />
+          ) : active === "diffusions" ? (
+            <Diffusions />
+          ) : active === "stats" ? (
+            <Stats />
+          ) : active === "acces" ? (
+            <Acces />
           ) : active === "garde" ? (
             <Garde />
           ) : active === "tickets" ? (

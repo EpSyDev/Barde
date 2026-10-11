@@ -53,7 +53,7 @@ def _defaut():
 
 _etat: dict | None = None
 _abonnes: set[asyncio.Queue] = set()
-_tickets: dict[str, tuple[float, str]] = {}   # ticket → (expiration, acteur)
+_tickets: dict[str, tuple[float, str, str]] = {}   # ticket → (expiration, acteur, rôle : admin|mj|joueur)
 _sauvegarde: asyncio.Task | None = None
 
 
@@ -102,13 +102,13 @@ def _diffuser(msg: dict):
 
 
 # ─────────────────────────── Tickets ───────────────────────────
-def nouveau_ticket(acteur: str) -> str:
+def nouveau_ticket(acteur: str, role: str = "admin") -> str:
     now = time.monotonic()
-    for t, (exp, _) in list(_tickets.items()):
+    for t, (exp, _, _r) in list(_tickets.items()):
         if exp < now:
             del _tickets[t]
     t = secrets.token_urlsafe(24)
-    _tickets[t] = (now + TICKET_TTL, acteur[:40] or "?")
+    _tickets[t] = (now + TICKET_TTL, acteur[:40] or "?", role if role in ("admin", "mj", "joueur") else "joueur")
     return t
 
 
@@ -117,6 +117,14 @@ def acteur_du_ticket(ticket: str) -> str | None:
     if v is None or v[0] < time.monotonic():
         return None
     return v[1]
+
+
+def role_du_ticket(ticket: str) -> str | None:
+    """Rôle (admin | mj | joueur) du porteur du ticket — le MJ aura des gestes réservés."""
+    v = _tickets.get(ticket or "")
+    if v is None or v[0] < time.monotonic():
+        return None
+    return v[2]
 
 
 # ─────────────────────────── Validation ───────────────────────────

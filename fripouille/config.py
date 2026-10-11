@@ -19,6 +19,10 @@ TOKEN = os.getenv("FRIPOUILLE_TOKEN", "").strip()   # token du bot dédié « La
 # lancés). À n'activer qu'APRÈS avoir coché « Presence Intent » sur le portail développeur
 # Discord de l'app Fripouille — sinon le bot refuse de se connecter.
 PRESENCES = os.getenv("FRIPOUILLE_PRESENCES", "0").strip() == "1"
+# Module « Diffusions » : API Twitch (application sur dev.twitch.tv, flux « client credentials »).
+# Sans ces deux variables, seules les alertes YouTube (flux RSS public) fonctionnent.
+TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "").strip()
+TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "").strip()
 
 # --- API du dashboard web ---
 # Même pont que le bot musique (Tailscale Funnel) mais PORT DISTINCT : le bot

@@ -33,7 +33,7 @@ from ..registry import Module, register
 
 log = logging.getLogger("fripouille.messages")
 
-DEFAULTS = {"recurring": [], "sent": []}
+DEFAULTS = {"recurring": [], "sent": [], "modeles": []}  # modeles : bibliothèque de textes réutilisables
 
 # Vignette fixe des embeds « classiques » (logo de la Taverne).
 LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp"

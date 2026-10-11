@@ -23,6 +23,8 @@ export const SECTIONS: Section[] = [
   { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", group: "Les habitants", ready: true },
   { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", group: "Les habitants", ready: true },
   { id: "enligne", label: "En ligne", icon: "eclair", hint: "Jeux lancés en direct", group: "Les habitants", ready: true, titre: "Qui est en ligne" },
+  { id: "soirees", label: "Soirées", icon: "cor", hint: "Inscriptions & rappels", group: "Les habitants", ready: true, titre: "Soirées jeu" },
+  { id: "diffusions", label: "Diffusions", icon: "eclair", hint: "Lives Twitch & YouTube", group: "Les habitants", ready: true },
   { id: "des", label: "Dés (D&D)", icon: "bouclier", hint: "Table de dés & initiative", group: "Les habitants", ready: true, titre: "Table de dés" },
   { id: "vocaux", label: "Salons vocaux", icon: "cor", hint: "Vocaux temporaires", group: "Les habitants", ready: true },
 
@@ -37,6 +39,8 @@ export const SECTIONS: Section[] = [
   { id: "taches", label: "Tâches", icon: "parchemin", hint: "To-do de l'équipe", group: "L'ordre", ready: true, titre: "Tâches de l'équipe" },
   { id: "journal", label: "Journal", icon: "registre", hint: "Tout ce qui s'est passé", group: "L'ordre", ready: true },
 
+  { id: "stats", label: "Statistiques", icon: "registre", hint: "Arrivées, activité, jeux", group: "L'atelier", ready: true, titre: "Statistiques du serveur" },
+  { id: "acces", label: "Accès", icon: "capuche", hint: "Admins, MJ & joueurs", group: "L'atelier", ready: true, titre: "Accès & rôles" },
   { id: "media", label: "Média", icon: "cadre", hint: "Images des embeds", group: "L'atelier", ready: true },
   { id: "reglages", label: "Réglages", icon: "engrenage", hint: "Sauvegarde & audit", group: "L'atelier", ready: true },
   { id: "taverniers", label: "Taverniers", icon: "capuche", hint: "PNJ & ambiance", group: "L'atelier", ready: false },

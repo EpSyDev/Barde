@@ -12,8 +12,8 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, des, economie, enligne, farewell, garde, help as help_module, jeux, journal,
-    membres, messages, moderation, taches, tempvoice, tickets, welcome,
+    anonyme, autorole, bapteme, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
+    membres, messages, moderation, soirees, stats, taches, tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
 
@@ -70,6 +70,9 @@ class FripouilleBot(discord.Client):
         economie.start_scheduler(self)
         enligne.start_scheduler(self)
         garde.start_scheduler(self)
+        soirees.start_scheduler(self)
+        stats.start_scheduler(self)
+        diffusions.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         des.setup(self.tree, guild)
@@ -83,6 +86,7 @@ class FripouilleBot(discord.Client):
         await bapteme.setup_persistent(self)
         await tempvoice.cleanup(self)
         enligne.setup_persistent(self)
+        soirees.setup_persistent(self)
         taches.setup_persistent(self)
         des.setup_persistent(self)
 
@@ -97,6 +101,7 @@ class FripouilleBot(discord.Client):
             return
         # Écran de règles (Membership Screening) : on attend la validation, gérée
         # par on_member_update. Sans écran, member.pending est False → arrivée directe.
+        stats.on_join(self, member)
         await garde.on_member_join(self, member)
         await journal.on_member_join(self, member)
         if member.pending:
@@ -116,6 +121,7 @@ class FripouilleBot(discord.Client):
     async def on_member_remove(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
+        stats.on_leave(self, member)
         await farewell.on_leave(self, member)
         await journal.on_member_remove(self, member)
 
@@ -144,6 +150,7 @@ class FripouilleBot(discord.Client):
             return
         if config.GUILD_ID and message.guild.id != config.GUILD_ID:
             return
+        stats.on_message(self, message)
         await garde.on_message(self, message)
         await economie.on_message(self, message)
 
