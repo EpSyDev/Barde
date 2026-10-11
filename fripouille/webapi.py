@@ -73,10 +73,9 @@ async def _auth(request, handler):
         authorized = bool(ticket) and _consume_ticket(ticket)
     if not authorized and request.path in _PLATEAU_ROUTES:
         # Plateau de jeu : ticket de soirée délivré par le dashboard (session vérifiée).
-        acteur = plateau.acteur_du_ticket(request.query.get("ticket", ""))
-        if acteur:
-            request["acteur_plateau"] = acteur
-            request["role_plateau"] = plateau.role_du_ticket(request.query.get("ticket", ""))
+        qui = plateau.ticket(request.query.get("ticket", ""))
+        if qui:
+            request["qui_plateau"] = qui      # identité + rôle : filtrage et droits du plateau
             authorized = True
     if not authorized:
         return _cors(web.json_response({"error": "unauthorized"}, status=401))
@@ -259,8 +258,11 @@ async def plateau_ticket(request):
         corps = await request.json()
     except Exception:  # noqa: BLE001  (corps absent = ancien appel du dashboard)
         corps = {}
-    role = str(corps.get("role") or "admin") if isinstance(corps, dict) else "admin"
-    t = plateau.nouveau_ticket(_actor(request), role)
+    if not isinstance(corps, dict):
+        corps = {}
+    role = str(corps.get("role") or "admin")
+    nom = str(corps.get("nom") or "").strip() or _actor(request)
+    t = plateau.nouveau_ticket(nom, role, str(corps.get("uid") or ""))
     base = config.PUBLIC_BASE_URL or ""
     return web.json_response({
         "flux_url": f"{base}/api/plateau/flux?ticket={t}",
@@ -269,21 +271,25 @@ async def plateau_ticket(request):
     })
 
 
+def _qui_plateau(request) -> dict:
+    """Porteur du ticket ; sans ticket (appel serveur avec le token), c'est un admin."""
+    return request.get("qui_plateau") or {"acteur": _actor(request), "role": "admin", "uid": ""}
+
+
 async def plateau_flux(request):
-    return await plateau.flux(request, web)
+    return await plateau.flux(request, web, _qui_plateau(request))
 
 
 async def plateau_etat(request):
-    return web.json_response(plateau.etat())
+    return web.json_response(plateau.vue(_qui_plateau(request)))
 
 
 async def plateau_op(request):
     data = await request.json()
     if not isinstance(data, dict):
         raise web.HTTPBadRequest(reason="corps JSON attendu")
-    acteur = request.get("acteur_plateau") or _actor(request)
     try:
-        return web.json_response(await plateau.appliquer(str(data.get("op") or ""), data, acteur))
+        return web.json_response(await plateau.appliquer(str(data.get("op") or ""), data, _qui_plateau(request)))
     except ValueError as exc:
         return web.json_response({"error": str(exc)}, status=400)
 

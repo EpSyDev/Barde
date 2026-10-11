@@ -52,10 +52,7 @@ export default function Des() {
         </div>
 
         <a className="btn primary" href="/table" style={{ alignSelf: "flex-start", marginBottom: 14 }}>
-          🎲 Ouvrir la piste de dés 3D
-        </a>
-        <a className="btn primary" href="/table/plateau" style={{ alignSelf: "flex-start", marginBottom: 14 }}>
-          🗺️ Ouvrir le plateau de jeu
+          🗺️ Ouvrir la table de jeu (plateau + dés 3D)
         </a>
 
         <label className="cfg-toggle">

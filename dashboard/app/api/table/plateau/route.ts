@@ -10,10 +10,10 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     // Le rôle (admin | mj | joueur) voyage dans le ticket : le plateau s'en servira pour les gestes de MJ.
-    const role = (session.user as { role?: string } | undefined)?.role || "joueur";
+    const u = session.user as { role?: string; discordId?: string; name?: string } | undefined;
     const res = await fripouilleFetch("/api/plateau/ticket", {
       method: "POST",
-      body: JSON.stringify({ role }),
+      body: JSON.stringify({ role: u?.role || "joueur", uid: u?.discordId || "", nom: u?.name || "" }),
       actor: actorFrom(session),
     });
     const data = await res.json().catch(() => ({}));

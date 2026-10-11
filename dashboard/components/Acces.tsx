@@ -137,8 +137,7 @@ export default function Acces() {
         </div>
         <div className="game-list">
           {[
-            ["Piste de dés", `${origine}/table`],
-            ["Plateau de jeu", `${origine}/table/plateau`],
+            ["Table de jeu (plateau + dés)", `${origine}/table`],
           ].map(([titre, url]) => (
             <div className="game-row" key={url} style={{ gap: 8, flexWrap: "wrap" }}>
               <span className="game-label">

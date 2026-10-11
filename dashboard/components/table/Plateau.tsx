@@ -10,32 +10,25 @@ import MediaPicker from "@/components/MediaPicker";
 import { AmbianceSonore, type Son } from "@/lib/ambiance-sonore";
 import { TUILES } from "@/lib/meteo";
 import { BESTIAIRE, CLASSES, COULEURS_HEROS, SCENES, type Classe, type Creature, type Scene } from "@/lib/scenes";
+import TiroirDes, { type JetAnime } from "./TiroirDes";
+import PanneauDes from "./PanneauDes";
+import Combat from "./Combat";
+import Carnet from "./Carnet";
+import { estMJ, type Aventure, type Etat, type Jet, type Moi, type Pion, type Present, type TypePion } from "./types";
 
 const CASE = 64; // px par case dans le « monde » (avant zoom)
 const METRES_PAR_CASE = 1.5;
 const ETATS = ["À terre", "Empoisonné", "Étourdi", "Entravé", "Invisible", "Concentration", "Inconscient"];
-const DES = [4, 6, 8, 10, 12, 20, 100];
 const COULEURS: Record<TypePion, string> = { joueur: "#5f80a6", monstre: "#c25340", pnj: "#c9a44a" };
 
-type TypePion = "joueur" | "monstre" | "pnj";
-type Pion = {
-  id: string; nom: string; type: TypePion; couleur: string; taille: number; x: number; y: number;
-  pv: number | null; pv_max: number | null; image_url: string; cache: boolean; etats: string[];
-  icone?: string;
-};
-type Jet = {
-  id: string; qui: string; raison: string; expr: string; total: number; nat: number | null;
-  lignes: string[]; cache: boolean; heure: number;
-};
-type Etat = {
-  version: number;
-  carte: { image_url: string; cols: number; rows: number; quadrillage: boolean };
-  pions: Pion[];
-  brouillard: { actif: boolean; reveles: number[][] };
-  fil: Jet[];
-  scene?: { id: string; nom: string; lumieres: number[][] };
-  ambiance?: { lumiere: "jour" | "crepuscule" | "nuit"; meteo: string; son: Son };
-};
+type Onglet = "pions" | "des" | "combat" | "carnet" | "ambiance" | "carte";
+const ONGLETS_MJ: { id: Onglet; label: string }[] = [
+  { id: "carnet", label: "Carnet" }, { id: "pions", label: "Pions" }, { id: "des", label: "Dés" },
+  { id: "combat", label: "Combat" }, { id: "ambiance", label: "Ambiance" }, { id: "carte", label: "Scène" },
+];
+const ONGLETS_JOUEUR: { id: Onglet; label: string }[] = [
+  { id: "pions", label: "Mon héros" }, { id: "des", label: "Dés" }, { id: "combat", label: "Combat" },
+];
 type Urls = { flux_url: string; op_url: string; etat_url: string };
 type Outil = "main" | "regle" | "reveler" | "masquer" | "ping";
 type Ping = { id: number; x: number; y: number; qui: string; couleur: string };
@@ -60,33 +53,28 @@ const OUTILS: { id: Outil; label: string; icone: string; aide: string }[] = [
   { id: "reveler", label: "Révéler", icone: "🔦", aide: "Glisser un rectangle pour dissiper le brouillard" },
   { id: "masquer", label: "Masquer", icone: "🌫️", aide: "Glisser un rectangle pour remettre le brouillard" },
 ];
+const OUTILS_JOUEUR = OUTILS.filter((o) => o.id !== "reveler" && o.id !== "masquer");
 
 function initiales(nom: string) {
   return nom.split(/\s+/).filter(Boolean).slice(0, 2).map((m) => m[0]).join("").toUpperCase() || "?";
 }
 
-function Ligne({ texte }: { texte: string }) {
-  return (
-    <>
-      {texte.split(/(\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`)/g).map((p, i) =>
-        p.startsWith("**") ? <b key={i}>{p.slice(2, -2)}</b>
-        : p.startsWith("~~") ? <s key={i}>{p.slice(2, -2)}</s>
-        : p.startsWith("`") ? <code key={i}>{p.slice(1, -1)}</code>
-        : <span key={i}>{p}</span>
-      )}
-    </>
-  );
-}
-
 export default function Plateau() {
   const [etat, setEtat] = useState<Etat | null>(null);
+  const [moi, setMoi] = useState<Moi | null>(null);
+  const [presents, setPresents] = useState<Present[]>([]);
+  const [aventures, setAventures] = useState<Aventure[]>([]);
+  const [jetAnime, setJetAnime] = useState<JetAnime | null>(null);
+  const [epingle, setEpingle] = useState(false);
+  const [afficheFermee, setAfficheFermee] = useState<string | null>(null);
+  const [nomHeros, setNomHeros] = useState("");
   const [urls, setUrls] = useState<Urls | null>(null);
   const [connexion, setConnexion] = useState<"attente" | "direct" | "perdue">("attente");
   const [erreur, setErreur] = useState<string | null>(null);
   const [outil, setOutil] = useState<Outil>("main");
   const [selection, setSelection] = useState<string | null>(null);
   const [vueJoueur, setVueJoueur] = useState(false);
-  const [onglet, setOnglet] = useState<"pions" | "des" | "ambiance" | "carte">("pions");
+  const [onglet, setOnglet] = useState<Onglet>("pions");
   const [sonActif, setSonActif] = useState(false);
   const [volume, setVolume] = useState(0.5);
   const [quantite, setQuantite] = useState(1);
@@ -98,10 +86,10 @@ export default function Plateau() {
   const [glisse, setGlisse] = useState<{ id: string; px: number; py: number } | null>(null);
   const [regle, setRegle] = useState<{ a: [number, number]; b: [number, number] } | null>(null);
   const [zone, setZone] = useState<{ a: [number, number]; b: [number, number] } | null>(null);
-  // Dés
-  const [expr, setExpr] = useState("1d20");
-  const [raison, setRaison] = useState("");
-  const [secret, setSecret] = useState(false);
+  const mj = estMJ(moi);
+  const outils = mj ? OUTILS : OUTILS_JOUEUR;
+  // Le joueur ne reçoit déjà que ce qu'il peut voir ; le MJ peut prévisualiser cette vue.
+  const voile = !mj || vueJoueur;
 
   const cadre = useRef<HTMLDivElement>(null);
   const geste = useRef<{ type: "pan" | "pion" | "regle" | "zone"; sx: number; sy: number; ox: number; oy: number; id?: string } | null>(null);
@@ -143,6 +131,11 @@ export default function Plateau() {
         es.onmessage = (ev) => {
           const m = JSON.parse(ev.data);
           if (m.type === "etat") setEtat(m.etat);
+          else if (m.type === "moi") {
+            setMoi({ acteur: m.acteur, role: m.role, uid: m.uid });
+            if (m.role === "admin" || m.role === "mj") setOnglet((o) => (o === "pions" ? "carnet" : o));
+          } else if (m.type === "presents") setPresents(m.liste || []);
+          else if (m.type === "aventures") setAventures(m.liste || []);
           else if (m.type === "ping") {
             const p = { id: ++pingId.current, x: m.x, y: m.y, qui: m.qui, couleur: m.couleur };
             setPings((ps) => [...ps, p]);
@@ -189,6 +182,10 @@ export default function Plateau() {
     if (!dernier || dernier.id === filVu.current) return;
     filVu.current = dernier.id;
     setToast(dernier);
+    // Les dés roulent chez tout le monde (sauf jet secret : les joueurs n'en ont pas le détail).
+    if (dernier.des?.length) {
+      setJetAnime({ id: dernier.id, qui: dernier.qui, raison: dernier.raison, total: dernier.total, nat: dernier.nat, des: dernier.des });
+    }
     const t = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(t);
   }, [etat]);
@@ -267,8 +264,12 @@ export default function Plateau() {
     }
     const w = versMonde(e.clientX, e.clientY);
     const cible = (e.target as HTMLElement).closest("[data-pion]") as HTMLElement | null;
-    if (outil === "main" && cible && e.button === 0) {
-      const p = etat.pions.find((x) => x.id === cible.dataset.pion)!;
+    const pionCible = cible ? etat.pions.find((x) => x.id === cible.dataset.pion) : undefined;
+    const peutBouger = !!pionCible && (mj || (!!moi?.uid && pionCible.proprio === moi.uid));
+    if (outil === "main" && pionCible && !peutBouger) {
+      setSelection(pionCible.id);
+    } else if (outil === "main" && pionCible && e.button === 0) {
+      const p = pionCible;
       setSelection(p.id);
       geste.current = { type: "pion", sx: w.x, sy: w.y, ox: p.x * CASE, oy: p.y * CASE, id: p.id };
       setGlisse({ id: p.id, px: p.x * CASE, py: p.y * CASE });
@@ -347,16 +348,16 @@ export default function Plateau() {
       const t = (e.target as HTMLElement)?.tagName;
       if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
       const i = Number(e.key) - 1;
-      if (i >= 0 && i < OUTILS.length) setOutil(OUTILS[i].id);
+      if (i >= 0 && i < outils.length) setOutil(outils[i].id);
       else if (e.key === "Escape") { setSelection(null); setRegle(null); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+      else if ((e.key === "Delete" || e.key === "Backspace") && selection && mj) {
         op({ op: "pion_supprimer", id: selection });
         setSelection(null);
       }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [selection, op]);
+  }, [selection, op, mj, outils]);
 
   // ─────────────── Actions du panneau ───────────────
   const centreVue = (): [number, number] => {
@@ -426,12 +427,26 @@ export default function Plateau() {
     setEtat((s) => s && { ...s, pions: s.pions.map((p) => (p.id === id ? { ...p, ...champs } : p)) });
     op({ op: "pion_maj", id, ...champs });
   };
-  const lancer = async (e?: string) => {
-    const d = await op({ op: "jet", expr: (e ?? expr).replace(/\s/g, "") || "1d20", raison, secret });
-    if (d) setRaison("");
+  /** Joueur : crée SON héros (un seul), relié à son compte Discord. */
+  const creerMonHeros = async (cl: Classe) => {
+    const n = etat?.pions.filter((p) => p.type === "joueur").length || 0;
+    const entree = SCENES.find((x) => x.id === etat?.scene?.id)?.entree;
+    const [x, y] = caseLibre(...(entree ?? centreVue()));
+    const d = await op({
+      op: "pion_ajouter", nom: nomHeros.trim() || moi?.acteur || cl.nom, icone: cl.icone,
+      couleur: COULEURS_HEROS[n % COULEURS_HEROS.length], x, y,
+    });
+    if (d?.id) setSelection(String(d.id));
   };
 
   const sel = etat?.pions.find((p) => p.id === selection) || null;
+  const monHeros = etat?.pions.find((p) => !!moi?.uid && p.proprio === moi.uid) || null;
+  const joueursConnus = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of etat?.acces || []) m.set(a.id, a.nom || a.id);
+    for (const p of presents) if (p.uid && !m.has(p.uid)) m.set(p.uid, p.acteur);
+    return [...m.entries()];
+  }, [etat?.acces, presents]);
   const distance = useMemo(() => {
     if (!regle) return null;
     const cases = Math.max(Math.abs(regle.a[0] - regle.b[0]), Math.abs(regle.a[1] - regle.b[1]));
@@ -445,7 +460,11 @@ export default function Plateau() {
   const masque = etat.brouillard.actif;
   const amb = etat.ambiance ?? { lumiere: "jour", meteo: "aucune", son: "aucun" as Son };
   const sceneCourante = SCENES.find((x) => x.id === etat.scene?.id);
-  const accueil = !etat.scene?.id && !c.image_url && etat.pions.length === 0;
+  const accueil = mj && !etat.scene?.id && !c.image_url && etat.pions.length === 0;
+  const attente = !mj && !etat.scene?.id && !c.image_url;
+  const tourPion = etat.initiative?.entrees.find((x) => x.cle === etat.initiative?.courant)?.pion_id || "";
+  const affiche = etat.affiche && etat.affiche.id !== afficheFermee ? etat.affiche : null;
+  const onglets = mj ? ONGLETS_MJ : ONGLETS_JOUEUR;
   // Sources de lumière la nuit : celles du décor + une torche par héros.
   const sources = [
     ...(etat.scene?.lumieres || []).map(([x, y, r]) => ({ x, y, r })),
@@ -462,10 +481,15 @@ export default function Plateau() {
   return (
     <div className="plateau">
       <header className="piste-tete">
-        <a href="/?s=des" className="piste-retour">← Panneau</a>
-        <h1>Plateau de jeu</h1>
-        <a href="/table" className="piste-retour">🎲 Piste de dés</a>
+        {moi?.role === "admin" && <a href="/" className="piste-retour">← Panneau</a>}
+        <h1>Table de jeu</h1>
         {etat.scene?.nom && <span className="plateau-scene-nom">— {etat.scene.nom}</span>}
+        {moi && <span className="plateau-moi">{mj ? "🎩 MJ" : "🛡️ Joueur"} · {moi.acteur}</span>}
+        {presents.length > 0 && (
+          <span className="plateau-presents" title={presents.map((p) => p.acteur).join(", ")}>
+            👥 {presents.length} à la table
+          </span>
+        )}
         <div className="plateau-son">
           <button
             className={sonActif ? "on" : ""}
@@ -486,7 +510,7 @@ export default function Plateau() {
       <div className="plateau-corps">
         <div className="plateau-zone">
           <div className="plateau-outils">
-            {OUTILS.map((o, i) => (
+            {outils.map((o, i) => (
               <button
                 key={o.id}
                 className={outil === o.id ? "on" : ""}
@@ -497,10 +521,12 @@ export default function Plateau() {
                 {o.label}
               </button>
             ))}
-            <label className="plateau-vuejoueur" title="Voir la carte comme un joueur (brouillard opaque, pions cachés invisibles)">
-              <input type="checkbox" checked={vueJoueur} onChange={(e) => setVueJoueur(e.target.checked)} />
-              Vue joueur
-            </label>
+            {mj && (
+              <label className="plateau-vuejoueur" title="Voir la carte comme un joueur (brouillard opaque, pions cachés invisibles)">
+                <input type="checkbox" checked={vueJoueur} onChange={(e) => setVueJoueur(e.target.checked)} />
+                Vue joueur
+              </label>
+            )}
           </div>
 
           <div
@@ -540,7 +566,7 @@ export default function Plateau() {
               )}
 
               {etat.pions.map((p) => {
-                const cachee = (p.cache || (p.type !== "joueur" && !revele(p.x, p.y))) && vueJoueur;
+                const cachee = (p.cache || (p.type !== "joueur" && !revele(p.x, p.y))) && voile;
                 if (cachee) return null;
                 const g = glisse?.id === p.id ? glisse : null;
                 const t = p.taille * CASE;
@@ -549,7 +575,7 @@ export default function Plateau() {
                   <div
                     key={p.id}
                     data-pion={p.id}
-                    className={`pion type-${p.type} ${selection === p.id ? "sel" : ""} ${p.cache ? "cache" : ""} ${g ? "glisse" : ""} ${p.pv !== null && p.pv <= 0 ? "ko" : ""}`}
+                    className={`pion type-${p.type} ${tourPion === p.id ? "tour" : ""} ${moi?.uid && p.proprio === moi.uid ? "mien" : ""} ${selection === p.id ? "sel" : ""} ${p.cache ? "cache" : ""} ${g ? "glisse" : ""} ${p.pv !== null && p.pv <= 0 ? "ko" : ""}`}
                     style={{ width: t, height: t, transform: `translate(${g ? g.px : p.x * CASE}px, ${g ? g.py : p.y * CASE}px)`, ["--teinte" as string]: p.couleur }}
                     title={p.nom}
                   >
@@ -593,7 +619,7 @@ export default function Plateau() {
                     width={L}
                     height={H}
                     fill={amb.lumiere === "nuit" ? "#04060e" : "#2b1236"}
-                    opacity={amb.lumiere === "nuit" ? (vueJoueur ? 0.88 : 0.62) : 0.36}
+                    opacity={amb.lumiere === "nuit" ? (voile ? 0.88 : 0.62) : 0.36}
                     mask="url(#obscurite)"
                   />
                 </svg>
@@ -609,7 +635,7 @@ export default function Plateau() {
                       ))}
                     </mask>
                   </defs>
-                  <rect width={L} height={H} fill="#0b0703" opacity={vueJoueur ? 1 : 0.55} mask="url(#trous)" />
+                  <rect width={L} height={H} fill="#0b0703" opacity={voile ? 1 : 0.55} mask="url(#trous)" />
                 </svg>
               )}
 
@@ -670,11 +696,36 @@ export default function Plateau() {
               </div>
             )}
 
+            {attente && (
+              <div className="plateau-accueil">
+                <h2>Le MJ prépare la table…</h2>
+                <p>Installe-toi : la carte apparaîtra ici dès que l&apos;aventure commence. En attendant, crée ton héros dans l&apos;onglet « Mon héros ».</p>
+              </div>
+            )}
+
+            {affiche && (
+              <div className="plateau-affiche" onPointerDown={(e) => e.stopPropagation()}>
+                {affiche.titre && <h2>{affiche.titre}</h2>}
+                {affiche.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={affiche.image_url} alt={affiche.titre || ""} />
+                )}
+                {affiche.texte && <p>{affiche.texte}</p>}
+                <div className="plateau-affiche-actions">
+                  <button onClick={() => setAfficheFermee(affiche.id)}>Fermer</button>
+                  {mj && <button onClick={() => op({ op: "montrer_retirer" })}>Retirer pour tous</button>}
+                </div>
+              </div>
+            )}
+
+            <TiroirDes jet={jetAnime} epingle={epingle} onEpingle={setEpingle} />
+
             {toast && (
               <div className={`plateau-toast ${toast.nat === 20 ? "crit" : toast.nat === 1 ? "fumble" : ""}`}>
                 <b>{toast.qui}</b>
-                {toast.raison ? ` · ${toast.raison}` : ""} — <code>{toast.expr}</code> →{" "}
-                <strong>{toast.cache && vueJoueur ? "?" : toast.total}</strong>
+                {toast.raison ? ` · ${toast.raison}` : ""}
+                {toast.total === null ? " — 🔒 jet secret" : <> — <code>{toast.expr}</code> → </>}
+                <strong>{toast.total === null ? "" : toast.cache && vueJoueur ? "?" : toast.total}</strong>
                 {toast.nat === 20 && " ✨"}
                 {toast.nat === 1 && " 💀"}
               </div>
@@ -691,14 +742,68 @@ export default function Plateau() {
 
         <aside className="plateau-panneau">
           <div className="plateau-onglets">
-            {(["pions", "des", "ambiance", "carte"] as const).map((o) => (
-              <button key={o} className={onglet === o ? "on" : ""} onClick={() => setOnglet(o)}>
-                {o === "pions" ? "Pions" : o === "des" ? "Dés" : o === "ambiance" ? "Ambiance" : "Scène"}
+            {onglets.map((o) => (
+              <button key={o.id} className={onglet === o.id ? "on" : ""} onClick={() => setOnglet(o.id)}>
+                {o.label}
               </button>
             ))}
           </div>
 
-          {onglet === "pions" && (
+          {onglet === "pions" && !mj && (
+            <div className="plateau-section">
+              {!monHeros ? (
+                <>
+                  <h2>Crée ton héros</h2>
+                  <input value={nomHeros} onChange={(e) => setNomHeros(e.target.value)} placeholder={`Nom du héros (vide = ${moi?.acteur || "toi"})`} maxLength={30} />
+                  <div className="plateau-classes">
+                    {CLASSES.map((cl) => (
+                      <button key={cl.nom} onClick={() => creerMonHeros(cl)} title={`Jouer un ${cl.nom.toLowerCase()}`}>
+                        <span>{cl.icone}</span>
+                        {cl.nom}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="piste-vide">Ton pion apparaît sur la carte ; toi seul peux le déplacer.</p>
+                </>
+              ) : (
+                <div className="plateau-fiche">
+                  <h2>{monHeros.icone} {monHeros.nom}</h2>
+                  <div className="plateau-pv">
+                    <span>PV</span>
+                    {[-5, -1].map((d) => (
+                      <button key={d} onClick={() => majPion(monHeros.id, { pv: (monHeros.pv ?? 0) + d })} disabled={monHeros.pv === null}>{d}</button>
+                    ))}
+                    <input type="number" value={monHeros.pv ?? ""} placeholder="—" onChange={(e) => majPion(monHeros.id, { pv: e.target.value === "" ? null : Number(e.target.value) })} />
+                    <span>/ {monHeros.pv_max ?? "?"}</span>
+                    {[1, 5].map((d) => (
+                      <button key={d} onClick={() => majPion(monHeros.id, { pv: (monHeros.pv ?? 0) + d })} disabled={monHeros.pv === null}>+{d}</button>
+                    ))}
+                  </div>
+                  <div className="plateau-etats">
+                    {ETATS.map((s) => (
+                      <button key={s} className={monHeros.etats.includes(s) ? "on" : ""}
+                        onClick={() => majPion(monHeros.id, { etats: monHeros.etats.includes(s) ? monHeros.etats.filter((x) => x !== s) : [...monHeros.etats, s] })}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="piste-vide">Le MJ fixe tes PV max. Glisse ton pion sur la carte pour te déplacer.</p>
+                </div>
+              )}
+              <h2>Sur la carte</h2>
+              <ul className="plateau-liste">
+                {etat.pions.map((p) => (
+                  <li key={p.id} className={selection === p.id ? "on" : ""} onClick={() => setSelection(p.id)}>
+                    <i style={{ background: p.couleur }} />
+                    <span>{p.nom}</span>
+                    {p.etats.length > 0 && <em>{p.etats.join(", ")}</em>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {onglet === "pions" && mj && (
             <div className="plateau-section">
               <details className="plateau-tiroir" open={etat.pions.length === 0}>
                 <summary>🛡️ Ajouter un héros</summary>
@@ -792,6 +897,17 @@ export default function Plateau() {
                     ))}
                   </div>
 
+                  {sel.type === "joueur" && (
+                    <label className="plateau-fiche-ligne">
+                      Joué par
+                      <select value={sel.proprio || ""} onChange={(e) => majPion(sel.id, { proprio: e.target.value })}>
+                        <option value="">— personne (MJ) —</option>
+                        {joueursConnus.map(([id, nom]) => (
+                          <option key={id} value={id}>{nom}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <label className="plateau-coche">
                     <input type="checkbox" checked={sel.cache} onChange={(e) => majPion(sel.id, { cache: e.target.checked })} />
                     Caché aux joueurs (embuscade…)
@@ -808,7 +924,7 @@ export default function Plateau() {
               )}
 
               <ul className="plateau-liste">
-                {etat.pions.filter((p) => !(vueJoueur && (p.cache || (p.type !== "joueur" && !revele(p.x, p.y))))).map((p) => (
+                {etat.pions.filter((p) => !(voile && (p.cache || (p.type !== "joueur" && !revele(p.x, p.y))))).map((p) => (
                   <li key={p.id} className={selection === p.id ? "on" : ""} onClick={() => setSelection(p.id)}>
                     <i style={{ background: p.couleur }} />
                     <span>{p.nom}</span>
@@ -820,48 +936,11 @@ export default function Plateau() {
             </div>
           )}
 
-          {onglet === "des" && (
-            <div className="plateau-section">
-              <div className="plateau-desrapides">
-                {DES.map((f) => (
-                  <button key={f} className={`piste-de de-${f}`} onClick={() => lancer(`1d${f}`)} title={`Lancer 1d${f}`}>
-                    <span>d{f}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="plateau-jet">
-                <input value={expr} onChange={(e) => setExpr(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lancer()} placeholder="1d20+5, 2d6+3…" />
-                <input value={raison} onChange={(e) => setRaison(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lancer()} placeholder="Pour quoi ?" maxLength={60} />
-                <label className="plateau-coche">
-                  <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} />
-                  Jet secret (MJ)
-                </label>
-                <button className="piste-lancer" onClick={() => lancer()}>Lancer</button>
-              </div>
-              <h2>Fil de la table</h2>
-              <ol className="plateau-fil">
-                {[...etat.fil].reverse().map((j) => (
-                  <li key={j.id} className={j.nat === 20 ? "crit" : j.nat === 1 ? "fumble" : ""}>
-                    <div>
-                      <b>{j.qui}</b>
-                      {j.raison && <span> · {j.raison}</span>}
-                      {j.cache && <em> 🔒</em>}
-                      <strong>{j.cache && vueJoueur ? "?" : j.total}</strong>
-                    </div>
-                    {!(j.cache && vueJoueur) && (
-                      <small>
-                        {j.lignes.map((l, i) => (
-                          <span key={i}>
-                            <Ligne texte={l} />{" "}
-                          </span>
-                        ))}
-                      </small>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          {onglet === "des" && <PanneauDes fil={etat.fil} moi={moi} op={op} />}
+
+          {onglet === "combat" && <Combat ini={etat.initiative} pions={etat.pions} moi={moi} op={op} />}
+
+          {onglet === "carnet" && mj && <Carnet aventures={aventures} etat={etat} op={op} />}
 
           {onglet === "ambiance" && (
             <div className="plateau-section">

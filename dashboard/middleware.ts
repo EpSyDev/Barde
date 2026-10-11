@@ -9,6 +9,8 @@ export default auth((req) => {
   if (!req.auth || role === "admin") return;
   const p = req.nextUrl.pathname;
   if (p.startsWith("/table") || p.startsWith("/api/table") || p.startsWith("/api/game")) return;
+  // Le MJ illustre ses aventures (documents, cartes) : médiathèque autorisée.
+  if (role === "mj" && p.startsWith("/api/fripouille/media")) return;
   if (p.startsWith("/api/")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return NextResponse.redirect(new URL("/table", req.url));
 });

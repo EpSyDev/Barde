@@ -1,15 +1,20 @@
 import { signIn } from "@/auth";
 
-export default function LoginPage() {
+// callbackUrl : retour à la page demandée (ex. /table pour les joueurs). Chemin interne
+// uniquement — jamais une URL externe (pas de redirection ouverte).
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
+  const { callbackUrl } = await searchParams;
+  const retour = callbackUrl && /^\/(?!\/)[\w\-/?=&.]*$/.test(callbackUrl) ? callbackUrl : "/";
+  const table = retour.startsWith("/table");
   return (
     <div className="login-wrap">
       <div className="login-card">
         <h1>La Taverne de Gaming</h1>
-        <p>Seuls les maîtres des lieux peuvent commander les bardes.</p>
+        <p>{table ? "La table de jeu t'attend : connecte-toi avec ton compte Discord." : "Seuls les maîtres des lieux peuvent commander les bardes."}</p>
         <form
           action={async () => {
             "use server";
-            await signIn("discord", { redirectTo: "/" });
+            await signIn("discord", { redirectTo: retour });
           }}
         >
           <button type="submit" className="discord-btn">

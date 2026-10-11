@@ -3580,3 +3580,78 @@ table.ledger .actions {
   .plateau-accueil h2 { font-size: 1.4rem; }
   .plateau-scenes { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════ Table de jeu : rôles, dés 3D, initiative, carnet du MJ ═══════════════════ */
+.plateau-moi, .plateau-presents { font-size: 0.85rem; color: var(--parchment-dim); padding: 2px 10px; border: 1px solid var(--panel-edge); border-radius: 999px; }
+.plateau-moi { color: var(--gold-bright); }
+
+.pion.mien .pion-disque { box-shadow: 0 0 0 3px var(--gold-bright), 0 4px 10px rgba(0, 0, 0, 0.5); }
+.pion.tour .pion-disque { animation: pion-tour 1.4s ease-in-out infinite; }
+@keyframes pion-tour {
+  0%, 100% { box-shadow: 0 0 0 3px var(--ember), 0 0 14px var(--ember-glow); }
+  50% { box-shadow: 0 0 0 5px var(--ember), 0 0 30px var(--ember-glow); }
+}
+
+.tiroir-des {
+  position: absolute; left: 12px; bottom: 12px; z-index: 11; width: min(440px, calc(100% - 24px)); height: 270px;
+  display: grid; grid-template-rows: auto 1fr; border-radius: 14px; overflow: hidden;
+  background: rgba(16, 10, 3, 0.92); border: 1px solid var(--panel-edge); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+  animation: piste-apparait 0.25s ease-out;
+}
+.tiroir-des-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: 0.88rem; border-bottom: 1px solid var(--panel-edge); }
+.tiroir-des-tete button { border: 1px solid var(--panel-edge); background: rgba(67, 47, 22, 0.5); color: var(--parchment); border-radius: 8px; height: 26px; min-width: 30px; cursor: pointer; }
+.tiroir-des-tete button.on { border-color: var(--gold); }
+.tiroir-des-scene { position: relative; min-height: 0; }
+.tiroir-des-scene canvas { display: block; width: 100% !important; height: 100% !important; }
+.tiroir-des-scene .piste-total { top: 8px; }
+.tiroir-des-poignee {
+  position: absolute; left: 12px; bottom: 12px; z-index: 9; height: 32px; padding: 0 12px; border-radius: 10px; cursor: pointer;
+  background: rgba(16, 10, 3, 0.8); border: 1px solid var(--panel-edge); color: var(--parchment);
+}
+
+.plateau-affiche {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 12;
+  width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow-y: auto; padding: 22px 24px;
+  background: var(--vellum); color: var(--ink); border-radius: 6px; border: 1px solid var(--vellum-edge);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7); animation: piste-apparait 0.35s ease-out;
+}
+.plateau-affiche h2 { font-family: var(--font-title), serif; margin: 0 0 12px; color: var(--ink); text-align: center; }
+.plateau-affiche img { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto 12px; border-radius: 4px; }
+.plateau-affiche p { white-space: pre-wrap; line-height: 1.55; font-size: 1.02rem; margin: 0; }
+.plateau-affiche-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.plateau-affiche-actions button { border: 1px solid var(--vellum-edge); background: var(--vellum-warm); color: var(--ink); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+
+.plateau-composer { display: flex; flex-wrap: wrap; gap: 4px; }
+.plateau-composer button, .plateau-fil-actions button, .carnet button:not(.piste-lancer):not(.plateau-suppr) {
+  border: 1px solid var(--panel-edge); background: rgba(67, 47, 22, 0.45); color: var(--parchment);
+  border-radius: 7px; padding: 4px 8px; cursor: pointer; font-size: 0.82rem;
+}
+.carnet button:disabled { opacity: 0.45; cursor: default; }
+.plateau-fil-actions { display: flex; gap: 6px; margin-top: 4px; }
+.plateau-fil-actions:empty { display: none; }
+
+.plateau-init { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.plateau-init li { display: grid; grid-template-columns: 26px 1fr auto auto auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(67, 47, 22, 0.3); }
+.plateau-init li.on { background: rgba(224, 122, 51, 0.25); border: 1px solid var(--ember); }
+.plateau-init b { font-family: var(--font-title), serif; color: var(--gold-bright); font-size: 1.1rem; }
+.plateau-init small { color: var(--parchment-dim); font-size: 0.75rem; }
+.plateau-init button { border: 0; background: none; color: var(--parchment-dim); cursor: pointer; }
+.init-rang { color: var(--parchment-dim); }
+.plateau-jet label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--parchment-dim); }
+
+.carnet textarea, .carnet input:not([type="checkbox"]) { width: 100%; }
+.carnet textarea { background: rgba(0, 0, 0, 0.3); color: var(--parchment); border: 1px solid var(--panel-edge); border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+.carnet label { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-deep); margin-top: 6px; }
+.carnet-choix { display: flex; gap: 6px; }
+.carnet-choix select { flex: 1; }
+.carnet-etapes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.carnet-etapes > li { border: 1px solid var(--panel-edge); border-radius: 10px; background: rgba(67, 47, 22, 0.22); }
+.carnet-etapes > li.actuelle { border-color: var(--ember); box-shadow: 0 0 0 1px var(--ember) inset; }
+.carnet-etapes > li.fait .carnet-etape-titre { opacity: 0.6; }
+.carnet-etape-tete { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.carnet .carnet-etape-titre { flex: 1; text-align: left; border: 0 !important; background: none !important; font-size: 0.95rem !important; }
+.carnet-etape-titre em { color: var(--ember); font-style: normal; }
+.carnet .carnet-lancer { font-size: 1rem !important; min-width: 34px; }
+.carnet-etape { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 10px; }
+.carnet-doc { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed var(--panel-edge); border-radius: 8px; }
+.carnet-doc-actions, .carnet-barre { display: flex; gap: 6px; flex-wrap: wrap; }
