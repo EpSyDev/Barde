@@ -163,6 +163,31 @@ function Shell({ userName }: { userName: string }) {
   // blason permet de parcourir un autre quartier sans quitter la page.
   const [ouvert, setOuvert] = useState<QuartierId>(qActif.id);
   useEffect(() => setOuvert(quartierDe(active).id), [active]);
+  // Menu replié (écrans de portable) : seul le rail reste, l'étendard s'ouvre en volet
+  // flottant au clic sur un blason. Choix mémorisé par navigateur.
+  const [replie, setReplie] = useState(false);
+  const [flottant, setFlottant] = useState(false);
+  useEffect(() => {
+    let v: string | null = null;
+    try {
+      v = localStorage.getItem("menu-replie");
+    } catch {
+      /* stockage indisponible : réglage par défaut */
+    }
+    setReplie(v === null ? window.innerWidth < 1400 : v === "1");
+  }, []);
+  const basculerRepli = () => {
+    setReplie((r) => {
+      try {
+        localStorage.setItem("menu-replie", r ? "0" : "1");
+      } catch {
+        /* sans mémoire, tant pis */
+      }
+      return !r;
+    });
+    setFlottant(false);
+  };
+  useEffect(() => setFlottant(false), [active]);
   const qOuvert = QUARTIERS.find((q) => q.id === ouvert) ?? qActif;
 
   const compteur = (id: string) =>
@@ -170,7 +195,7 @@ function Shell({ userName }: { userName: string }) {
 
   return (
     <div
-      className={`app ${open ? "menu-open" : ""}`}
+      className={`app ${open ? "menu-open" : ""} ${replie ? "menu-replie" : ""}`}
       style={{ ["--q" as string]: qActif.couleur, ["--q-fonce" as string]: qActif.fonce }}
     >
       <aside className="sidebar">
@@ -183,6 +208,14 @@ function Shell({ userName }: { userName: string }) {
         <div className="quartiers">
           {/* Le rail des blasons : un écu nommé par quartier */}
           <nav className="rail" aria-label="Quartiers">
+            <button
+              className="rail-repli"
+              onClick={basculerRepli}
+              title={replie ? "Déplier l'étendard" : "Replier l'étendard (plus de place pour la page)"}
+              aria-label={replie ? "Déplier le menu" : "Replier le menu"}
+            >
+              {replie ? "»" : "«"}
+            </button>
             {QUARTIERS.map((q) => {
               const n = parQuartier.get(q.id)?.reduce((t, s) => t + compteur(s.id), 0) ?? 0;
               return (
@@ -190,7 +223,10 @@ function Shell({ userName }: { userName: string }) {
                   key={q.id}
                   className={`ecu ${q.id === ouvert ? "on" : ""} ${q.id === qActif.id ? "ici" : ""}`}
                   style={{ ["--c" as string]: q.couleur }}
-                  onClick={() => setOuvert(q.id)}
+                  onClick={() => {
+                    if (replie) setFlottant(!(flottant && q.id === ouvert));
+                    setOuvert(q.id);
+                  }}
                   aria-pressed={q.id === ouvert}
                   title={q.devise}
                 >
@@ -206,7 +242,11 @@ function Shell({ userName }: { userName: string }) {
           </nav>
 
           {/* L'étendard du quartier ouvert : vélin suspendu à sa hampe */}
-          <div className="volet" style={{ ["--q" as string]: qOuvert.couleur, ["--q-fonce" as string]: qOuvert.fonce }}>
+          {replie && flottant && <div className="volet-voile" onClick={() => setFlottant(false)} />}
+          <div
+            className={`volet ${replie ? (flottant ? "flottant" : "cache") : ""}`}
+            style={{ ["--q" as string]: qOuvert.couleur, ["--q-fonce" as string]: qOuvert.fonce }}
+          >
             <div className="hampe" />
             <div key={ouvert} className="etendard">
               <div className="etendard-titre">

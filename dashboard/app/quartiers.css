@@ -175,7 +175,106 @@
   .sidebar { left: -400px; width: min(372px, 100vw); }
   .app.menu-open .sidebar { left: 0; }
 }
+/* ═══════════════════ Menu replié (écrans de portable) ═══════════════════ */
+.rail-repli {
+  position: relative; z-index: 2; width: 34px; height: 22px; margin: 2px 0 6px; flex-shrink: 0; cursor: pointer;
+  border: 1px solid #5a4a2a; border-radius: 6px; color: var(--gold-bright); font: 700 0.95rem/1 var(--font-title), serif;
+  background: linear-gradient(180deg, #3a2a14, #1d1208); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+.rail-repli:hover { border-color: var(--gold); }
+.rail::before { top: 36px; }
+.app.menu-replie .sidebar { width: 108px; overflow: visible; backdrop-filter: none; z-index: 25; }
+.app.menu-replie .sidebar-brand { margin: 0 6px; padding-inline: 2px; }
+.app.menu-replie .brand-logo { width: 68px; }
+.app.menu-replie .crest-sub { display: none; }
+.app.menu-replie .quartiers { grid-template-columns: 108px; position: relative; }
+.app.menu-replie .sidebar-foot { flex-direction: column; gap: 4px; padding-inline: 6px; }
+.app.menu-replie .user-chip strong { max-width: 80px; font-size: 0.75rem; }
+.volet.cache { display: none; }
+.volet.flottant {
+  position: absolute; left: 108px; top: 0; bottom: 0; width: 272px; z-index: 30;
+  background: radial-gradient(500px 260px at 50% 0, color-mix(in srgb, var(--q) 16%, transparent), transparent), var(--wood-deep);
+  border-right: 1px solid var(--panel-edge); box-shadow: 18px 0 40px rgba(0, 0, 0, 0.65);
+  animation: volet-sort 0.25s ease-out;
+}
+@keyframes volet-sort { from { transform: translateX(-24px); opacity: 0; } }
+.volet-voile { position: fixed; inset: 0 0 0 108px; z-index: 29; background: rgba(8, 5, 2, 0.45); }
+
+/* ═══════════════════ Pages : finition manuscrite aux couleurs du quartier ═══════════════════
+   Les cartes de vélin reçoivent des coins de filigrane d'or, une bande d'émail en tête,
+   une initiale rubriquée ; les commandes prennent l'émail du quartier ouvert. */
+.cfg-card {
+  --accent: var(--q-fonce);
+  --accent-bright: color-mix(in srgb, var(--q-fonce) 80%, #000);
+  --ring: 0 0 0 2px var(--vellum), 0 0 0 4px var(--q);
+  border-radius: 7px;
+  border-top: 3px solid var(--q);
+  background:
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none' stroke='%23a8842f'%3E%3Cpath d='M3 28V10a7 7 0 0 1 7-7h18' stroke-width='1.4'/%3E%3Cpath d='M7 28V12a5 5 0 0 1 5-5h16' stroke-width='.7'/%3E%3Ccircle cx='10.5' cy='10.5' r='1.7' fill='%23a8842f' stroke='none'/%3E%3C/svg%3E") top 5px left 5px / 30px no-repeat,
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none' stroke='%23a8842f'%3E%3Cg transform='rotate(90 15 15)'%3E%3Cpath d='M3 28V10a7 7 0 0 1 7-7h18' stroke-width='1.4'/%3E%3Cpath d='M7 28V12a5 5 0 0 1 5-5h16' stroke-width='.7'/%3E%3Ccircle cx='10.5' cy='10.5' r='1.7' fill='%23a8842f' stroke='none'/%3E%3C/g%3E%3C/svg%3E") top 5px right 5px / 30px no-repeat,
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none' stroke='%23a8842f'%3E%3Cg transform='rotate(180 15 15)'%3E%3Cpath d='M3 28V10a7 7 0 0 1 7-7h18' stroke-width='1.4'/%3E%3Cpath d='M7 28V12a5 5 0 0 1 5-5h16' stroke-width='.7'/%3E%3Ccircle cx='10.5' cy='10.5' r='1.7' fill='%23a8842f' stroke='none'/%3E%3C/g%3E%3C/svg%3E") bottom 5px right 5px / 30px no-repeat,
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' fill='none' stroke='%23a8842f'%3E%3Cg transform='rotate(270 15 15)'%3E%3Cpath d='M3 28V10a7 7 0 0 1 7-7h18' stroke-width='1.4'/%3E%3Cpath d='M7 28V12a5 5 0 0 1 5-5h16' stroke-width='.7'/%3E%3Ccircle cx='10.5' cy='10.5' r='1.7' fill='%23a8842f' stroke='none'/%3E%3C/g%3E%3C/svg%3E") bottom 5px left 5px / 30px no-repeat,
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .22 0 0 0 0 .08 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(175deg, #efe4c8 0%, var(--vellum) 38%, var(--vellum-warm) 100%);
+  padding: 22px 24px 28px;
+}
+.cfg-card-head { border-bottom: 0; position: relative; padding-bottom: 14px; }
+/* Filet de séparation : double trait, le premier à l'émail du quartier */
+.cfg-card-head::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+  background: linear-gradient(90deg, var(--q), color-mix(in srgb, var(--q) 25%, transparent) 70%, transparent) top / 100% 1px no-repeat,
+    linear-gradient(90deg, var(--vellum-edge), transparent) bottom / 100% 1px no-repeat;
+}
+.cfg-card-head h2 { color: var(--ink); letter-spacing: 0.06em; }
+/* Initiale rubriquée, comme les manuscrits : la première lettre à l'émail du quartier */
+.cfg-card-head h2::first-letter { color: var(--q-fonce); font-size: 1.32em; }
+/* Médaillon émaillé pour l'icône de carte */
+.cfg-card-head .cfg-card-icon {
+  width: 34px; height: 34px; margin-top: -2px; display: grid; place-items: center; border-radius: 50%; color: #fffaf0;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--q) 80%, #fff), var(--q-fonce));
+  box-shadow: 0 0 0 2px var(--vellum), 0 0 0 3px #a8842f, 0 3px 6px rgba(60, 30, 0, 0.3);
+}
+.cfg-card-head .cfg-card-icon svg { width: 18px; height: 18px; }
+/* Intertitres : fleuron et petites capitales */
+.cfg-card h3 {
+  display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; font-size: 0.86rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--q-fonce);
+}
+.cfg-card h3::before { content: "❧"; font-size: 1.05rem; letter-spacing: 0; }
+.cfg-card h3::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, color-mix(in srgb, var(--q) 45%, transparent), transparent); }
+/* Champs gravés dans le vélin */
+.cfg-card select, .cfg-card textarea, .cfg-card input[type="text"], .cfg-card input[type="number"], .cfg-card input[type="url"],
+.cfg-field select, .cfg-field textarea, .cfg-field input[type="text"], .cfg-field input[type="number"], .cfg-field input[type="url"] {
+  background-color: rgba(255, 252, 240, 0.45);
+  border-color: rgba(120, 90, 40, 0.35);
+  box-shadow: inset 0 2px 3px rgba(45, 31, 16, 0.16), 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.cfg-card label { color: color-mix(in srgb, var(--q-fonce) 55%, var(--ink-dim)); }
+/* Interrupteurs : rainure émaillée, bouton en pièce d'or frappée */
+.cfg-toggle input:checked + .switch { background: color-mix(in srgb, var(--q) 55%, transparent); border-color: var(--q-fonce); }
+.cfg-toggle .switch::after { background: radial-gradient(circle at 35% 30%, #d8cfb6, #8a7448); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.45); }
+.cfg-toggle input:checked + .switch::after {
+  background: radial-gradient(circle at 35% 30%, #fff2c2, #e2bd5e 45%, #8a6c29);
+  box-shadow: inset 0 0 0 1.5px rgba(110, 80, 20, 0.6), inset 0 0 0 3px rgba(255, 240, 190, 0.5), 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+/* Boutons : plaque émaillée du quartier cerclée d'or */
+.btn.primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--q) 85%, #fff), var(--q) 45%, var(--q-fonce));
+  border: 1px solid #c9a44a; color: #fffaf0; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--q) 70%, #fff), color-mix(in srgb, var(--q) 90%, #fff) 45%, var(--q));
+  color: #fffaf0;
+}
+.btn:hover:not(:disabled) { border-color: var(--q); }
+.cfg-card .btn:not(.primary):not(.danger) { background: linear-gradient(180deg, rgba(255, 252, 240, 0.7), rgba(226, 209, 166, 0.6)); border-color: rgba(120, 90, 40, 0.4); }
+/* Onglets internes : l'onglet ouvert porte un ruban d'émail */
+.tab.active { color: #fffaf0; box-shadow: inset 0 3px 0 var(--q); }
+/* Barres de défilement de laiton */
+.content, .volet { scrollbar-color: color-mix(in srgb, var(--q) 50%, #5a4a2a) transparent; }
+
 @media (prefers-reduced-motion: reduce) {
-  .rail::after, .etendard, .etendard-liste li, .head-sceau, .ecu-pouls { animation: none !important; }
+  .rail::after, .etendard, .etendard-liste li, .head-sceau, .ecu-pouls, .volet.flottant { animation: none !important; }
   .ecu-bouclier, .blason-reflet { transition: none !important; }
 }
