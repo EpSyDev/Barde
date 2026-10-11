@@ -359,9 +359,73 @@
 .soir-ligne.alerte { color: #7a2a1c; }
 .soir-ligne.calme { font-style: italic; }
 
+/* ═══════════════════ Mobile ═══════════════════ */
 @media (max-width: 880px) {
-  .repli-onglet { display: none; }
-  .volet.range { transform: none; opacity: 1; visibility: visible; pointer-events: auto; }
+  /* Tiroir du menu : rail + étendard complet, au-dessus du voile sombre */
+  .sidebar, .app.menu-replie .sidebar { z-index: 40; width: min(372px, 100vw); backdrop-filter: none; }
+  .app.menu-replie .brand-logo { width: 96px; }
+  .app.menu-replie .crest-sub { display: block; }
+  .repli-onglet, .volet-voile { display: none; }
+  .volet, .volet.range, .volet.flottant {
+    transform: none; opacity: 1; visibility: visible; pointer-events: auto; animation: none;
+    width: calc(100% - 108px); box-shadow: none;
+    background: radial-gradient(500px 260px at 50% 0, color-mix(in srgb, var(--q) 14%, transparent), transparent), var(--wood-deep);
+  }
+}
+
+@media (max-width: 640px) {
+  .content { padding: 14px 14px 56px; }
+  /* En-tête : menu + titre sur une ligne, recherche et état des bots en dessous */
+  .content-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; align-items: start; margin-bottom: 18px; }
+  .head-aside { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-start; }
+  .head-aside .nowrap, .head-aside .palette-hint { display: none; }
+  .status-strip { gap: 6px; }
+  .status-pill { padding: 3px 9px; font-size: 0.68rem; }
+  .head-fil { font-size: 0.6rem; letter-spacing: 0.14em; margin-bottom: 4px; }
+  .head-titles h1 { font-size: 1.4rem; gap: 10px; line-height: 1.15; }
+  .head-sceau { width: 34px; height: 34px; }
+  .head-sceau svg { width: 17px; height: 17px; }
+  .head-sub { font-size: 0.8rem; }
+
+  /* Cartes et formulaires : une colonne, marges resserrées */
+  .cfg-card { padding: 18px 14px 26px; }
+  .cfg-card-head { gap: 9px; }
+  .cfg-card-head .cfg-card-icon { width: 30px; height: 30px; }
+  .field-2col { grid-template-columns: 1fr !important; }
+  .cfg-grid, .cfg-grid.wide { gap: 14px; }
+  .game-row { gap: 6px; }
+  .game-label { min-width: 0; overflow-wrap: anywhere; }
+  .game-label code, .cfg-hint code { word-break: break-all; }
+  /* Détails d'audit (valeurs avant / après) : retour à la ligne, sinon défilement interne */
+  .tl-row, .tl-detail { min-width: 0; }
+  .tl-detail { overflow-x: auto; overflow-wrap: anywhere; }
+  .tl-detail code, .tl-detail pre { white-space: pre-wrap; word-break: break-all; }
+  /* Tableaux larges : défilent dans leur propre cadre */
+  table.reg-table, table.ledger { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tabs { margin-inline: -4px; }
+  .tab { padding: 8px 12px; }
+
+  /* Accueil */
+  .soir-tete h2 { font-size: 1.25rem; }
+  .soir-grille { gap: 12px; }
+  .soir-carte { padding: 14px 12px 12px; column-gap: 12px; }
+
+  /* Table de jeu (MJ et joueurs sur téléphone) */
+  /* La page défile : grande carte d'abord, panneau (dés, combat…) en dessous */
+  .plateau { height: auto; min-height: 100dvh; overflow: visible; }
+  .plateau-corps { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .plateau-zone { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 62dvh auto; padding: 8px 8px 6px; }
+  .plateau-zone > *, .plateau-panneau { min-width: 0; }
+  .plateau-panneau { min-height: 55dvh; }
+  .plateau-aide { display: none; }
+  .plateau-outils { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .plateau-outils::-webkit-scrollbar { display: none; }
+  .plateau-outils > * { flex-shrink: 0; }
+  .plateau-outils button { height: 32px; padding: 0 9px; font-size: 0.82rem; }
+  .plateau-onglets { overflow-x: auto; scrollbar-width: none; }
+  .plateau-onglets::-webkit-scrollbar { display: none; }
+  .plateau-onglets button { flex: 0 0 auto; padding: 0 14px; font-size: 0.78rem; letter-spacing: 0.04em; }
+  .tiroir-des { height: 230px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .rail::after, .etendard, .etendard-liste li, .head-sceau, .ecu-pouls, .volet.flottant, .page-turn, .page-turn::before, .soir-carte { animation: none !important; }
