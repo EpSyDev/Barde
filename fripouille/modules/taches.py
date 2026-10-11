@@ -103,6 +103,8 @@ def _embed(t):
     e.add_field(name="✍️ Créée par", value=f"<@{t['auteur_id']}> · {_ts(t['cree'])}", inline=False)
     if t["statut"] == "terminee":
         e.add_field(name="🏁 Terminée", value=_ts(t.get("terminee")), inline=False)
+        if t.get("commentaire"):
+            e.add_field(name="💬 Commentaire", value=t["commentaire"][:1024], inline=False)
     e.set_footer(text=f"Tâche #{t['id']}")
     return e
 
@@ -229,9 +231,41 @@ async def _clic(interaction: discord.Interaction, action: str, tid: str):
                 "Seule la personne assignée (ou un responsable) peut la terminer.", ephemeral=True
             )
             return
-        t.update(statut="terminee", terminee=_now().isoformat(), termine_par=str(user.id))
+        await interaction.response.send_modal(FinirModal(tid))
+
+
+class FinirModal(discord.ui.Modal, title="Terminer la tâche"):
+    commentaire = discord.ui.TextInput(
+        label="Commentaire (facultatif)", style=discord.TextStyle.paragraph, required=False,
+        max_length=900, placeholder="Ce qui a été fait, liens, remarques…",
+    )
+
+    def __init__(self, tid):
+        super().__init__()
+        self.tid = tid
+
+    async def on_submit(self, interaction: discord.Interaction):
+        bot = interaction.client
+        t = _get(bot, self.tid)
+        if t is None or t["statut"] == "terminee":
+            await interaction.response.send_message("Tâche introuvable ou déjà terminée.", ephemeral=True)
+            return
+        user = interaction.user
+        t.update(statut="terminee", terminee=_now().isoformat(), termine_par=str(user.id),
+                 commentaire=str(self.commentaire).strip())
         _sauver(bot, t)
         await interaction.response.edit_message(embed=_embed(t), view=None)
+        # Résolution postée en tout dernier message du salon (panneau remonté juste avant).
+        lignes = [f"🏁 <@{user.id}> a terminé **{t['titre']}**"]
+        if t["commentaire"]:
+            lignes.append("\n".join(f"> {l}" for l in t["commentaire"].splitlines() if l.strip()))
+        try:
+            await _replacer_panneau(bot)
+            await interaction.channel.send(
+                "\n".join(lignes), allowed_mentions=discord.AllowedMentions.none()
+            )
+        except discord.HTTPException as exc:
+            log.warning("résolution tâche %s : %s", t["id"], exc)
 
 
 class NouvelleModal(discord.ui.Modal, title="Nouvelle tâche"):
