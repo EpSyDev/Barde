@@ -8,6 +8,8 @@ import Messages from "@/components/Messages";
 import EnLigne from "@/components/EnLigne";
 import Garde from "@/components/Garde";
 import Soirees from "@/components/Soirees";
+import VieJeux from "@/components/VieJeux";
+import Chronique from "@/components/Chronique";
 import Diffusions from "@/components/Diffusions";
 import Stats from "@/components/Stats";
 import Acces from "@/components/Acces";
@@ -253,6 +255,10 @@ function Shell({ userName }: { userName: string }) {
             <Registre />
           ) : active === "moderation" ? (
             <Moderation aller={aller} />
+          ) : active === "viejeux" ? (
+            <VieJeux />
+          ) : active === "chronique" ? (
+            <Chronique />
           ) : active === "soirees" ? (
             <Soirees />
           ) : active === "diffusions" ? (

@@ -12,8 +12,8 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
-    membres, messages, moderation, soirees, stats, taches, tempvoice, tickets, welcome,
+    anonyme, autorole, bapteme, chronique, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
+    membres, messages, moderation, soirees, stats, taches, tempvoice, tickets, viejeux, welcome,
 )
 from .store import ConfigStore
 
@@ -73,6 +73,8 @@ class FripouilleBot(discord.Client):
         soirees.start_scheduler(self)
         stats.start_scheduler(self)
         diffusions.start_scheduler(self)
+        viejeux.start_scheduler(self)
+        chronique.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         des.setup(self.tree, guild)
@@ -87,6 +89,7 @@ class FripouilleBot(discord.Client):
         await tempvoice.cleanup(self)
         enligne.setup_persistent(self)
         soirees.setup_persistent(self)
+        viejeux.setup_persistent(self)
         taches.setup_persistent(self)
         des.setup_persistent(self)
 
@@ -117,6 +120,7 @@ class FripouilleBot(discord.Client):
         if before.premium_since is None and after.premium_since is not None:
             await economie.on_boost(self, after)
         await journal.on_member_update(self, before, after)
+        await viejeux.on_member_update(self, before, after)
 
     async def on_member_remove(self, member: discord.Member):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
@@ -129,10 +133,12 @@ class FripouilleBot(discord.Client):
         if config.GUILD_ID and after.guild.id != config.GUILD_ID:
             return
         await enligne.on_presence_update(self, before, after)
+        await viejeux.on_presence_update(self, before, after)
 
     async def on_voice_state_update(self, member, before, after):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
+        stats.on_voice(self, member, before, after)
         await tempvoice.on_voice(self, member, before, after)
         await journal.on_voice(self, member, before, after)
 

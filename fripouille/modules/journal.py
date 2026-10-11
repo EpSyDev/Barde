@@ -124,6 +124,14 @@ class JournalDB:
         ).fetchall()
         return {r["kind"]: int(r["n"]) for r in rows}
 
+    def periode(self, kinds: tuple, debut: datetime, fin: datetime) -> list[sqlite3.Row]:
+        """Événements de ces familles entre deux instants, du plus ancien au plus récent."""
+        marques = ",".join("?" * len(kinds))
+        return self._conn.execute(
+            "SELECT * FROM events WHERE kind IN (%s) AND ts >= ? AND ts < ? ORDER BY ts" % marques,
+            (*kinds, debut.isoformat(), fin.isoformat()),
+        ).fetchall()
+
     def purge(self, retention_days: int) -> int:
         """Supprime les événements trop vieux. Au plus une fois par heure."""
         if retention_days <= 0:

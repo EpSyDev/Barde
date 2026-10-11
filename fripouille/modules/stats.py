@@ -42,12 +42,23 @@ CREATE TABLE IF NOT EXISTS jeux (jour TEXT NOT NULL, jeu TEXT NOT NULL, minutes 
                                  sessions INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (jour, jeu));
 CREATE TABLE IF NOT EXISTS jeu_joueurs (jour TEXT NOT NULL, jeu TEXT NOT NULL, user_id TEXT NOT NULL,
                                         PRIMARY KEY (jour, jeu, user_id));
+CREATE TABLE IF NOT EXISTS msg_cat (jour TEXT NOT NULL, cat_id TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0,
+                                    PRIMARY KEY (jour, cat_id));
+CREATE TABLE IF NOT EXISTS actifs_cat (jour TEXT NOT NULL, cat_id TEXT NOT NULL, user_id TEXT NOT NULL,
+                                       PRIMARY KEY (jour, cat_id, user_id));
+CREATE TABLE IF NOT EXISTS voix_cat (jour TEXT NOT NULL, cat_id TEXT NOT NULL, minutes REAL NOT NULL DEFAULT 0,
+                                     PRIMARY KEY (jour, cat_id));
 """
+SANS_CATEGORIE = "0"   # salons hors catégorie
+MAX_SESSION_VOCALE_MIN = 12 * 60
 
 _conn: sqlite3.Connection | None = None
 _verrou = threading.Lock()
 _tampon_msg: dict[tuple[str, int], int] = defaultdict(int)       # (jour, heure) → n
 _tampon_actifs: dict[tuple[str, str], int] = defaultdict(int)    # (jour, user) → n
+_tampon_cat: dict[tuple[str, str], int] = defaultdict(int)       # (jour, catégorie) → n
+_tampon_actifs_cat: set[tuple[str, str, str]] = set()            # (jour, catégorie, user)
+_en_vocal: dict[int, tuple[str, datetime]] = {}                  # membre → (catégorie, arrivée)
 
 
 def _db() -> sqlite3.Connection:
@@ -96,6 +107,41 @@ def on_message(bot, message: discord.Message):
     now = _maintenant()
     _tampon_msg[(_jour(now), now.hour)] += 1
     _tampon_actifs[(_jour(now), str(message.author.id))] += 1
+    cat = _categorie(message.channel)
+    _tampon_cat[(_jour(now), cat)] += 1
+    _tampon_actifs_cat.add((_jour(now), cat, str(message.author.id)))
+
+
+def _categorie(channel) -> str:
+    """Catégorie d'un salon (ou du salon parent d'un fil)."""
+    parent = getattr(channel, "parent", None) if isinstance(channel, discord.Thread) else None
+    cid = getattr(parent or channel, "category_id", None)
+    return str(cid) if cid else SANS_CATEGORIE
+
+
+def _ajouter_vocal(cat: str, debut: datetime, fin: datetime):
+    minutes = min((fin - debut).total_seconds() / 60, MAX_SESSION_VOCALE_MIN)
+    if minutes < 0.5:
+        return
+    with _verrou:
+        _db().execute("INSERT INTO voix_cat (jour, cat_id, minutes) VALUES (?, ?, ?) "
+                      "ON CONFLICT(jour, cat_id) DO UPDATE SET minutes = minutes + ?",
+                      (_jour(debut), cat, minutes, minutes))
+        _db().commit()
+
+
+def on_voice(bot, member: discord.Member, before, after):
+    """Temps passé en vocal, par catégorie (arrivée → départ ou changement de salon)."""
+    if member.bot or not _actif(bot):
+        return
+    if before.channel == after.channel:
+        return
+    now = _maintenant()
+    ancien = _en_vocal.pop(member.id, None)
+    if ancien is not None:
+        _ajouter_vocal(ancien[0], ancien[1], now)
+    if after.channel is not None:
+        _en_vocal[member.id] = (_categorie(after.channel), now)
 
 
 def enregistrer_jeu(bot, nom: str, minutes: float, user_id: int):
@@ -117,8 +163,17 @@ def _vider_tampon():
     if not _tampon_msg and not _tampon_actifs:
         return
     msgs, act = dict(_tampon_msg), dict(_tampon_actifs)
+    cats, act_cats = dict(_tampon_cat), set(_tampon_actifs_cat)
     _tampon_msg.clear()
     _tampon_actifs.clear()
+    _tampon_cat.clear()
+    _tampon_actifs_cat.clear()
+    with _verrou:
+        c = _db()
+        for (jour, cat), n in cats.items():
+            c.execute("INSERT INTO msg_cat (jour, cat_id, n) VALUES (?, ?, ?) "
+                      "ON CONFLICT(jour, cat_id) DO UPDATE SET n = n + ?", (jour, cat, n, n))
+        c.executemany("INSERT OR IGNORE INTO actifs_cat (jour, cat_id, user_id) VALUES (?, ?, ?)", list(act_cats))
     with _verrou:
         c = _db()
         for (jour, heure), n in msgs.items():
@@ -143,7 +198,7 @@ async def _boucle(bot):
                 limite = _jour(_maintenant() - timedelta(days=retention))
                 with _verrou:
                     c = _db()
-                    for t in ("flux", "msg_heure", "actifs", "jeux", "jeu_joueurs"):
+                    for t in ("flux", "msg_heure", "actifs", "jeux", "jeu_joueurs", "msg_cat", "actifs_cat", "voix_cat"):
                         c.execute("DELETE FROM %s WHERE jour < ?" % t, (limite,))
                     c.commit()
         except Exception as exc:  # noqa: BLE001
@@ -156,6 +211,37 @@ def start_scheduler(bot):
 
 
 # --- Lecture ---
+def par_categorie(bot, debut: str) -> list[dict]:
+    """Activité mesurée par catégorie depuis ``debut`` (jour Paris), y compris les
+    catégories restées muettes (pour repérer celles qui s'endorment)."""
+    _vider_tampon()
+    maintenant = _maintenant()
+    with _verrou:
+        c = _db()
+        msgs = dict(c.execute("SELECT cat_id, SUM(n) FROM msg_cat WHERE jour >= ? GROUP BY cat_id", (debut,)))
+        actifs = dict(c.execute("SELECT cat_id, COUNT(DISTINCT user_id) FROM actifs_cat WHERE jour >= ? GROUP BY cat_id", (debut,)))
+        voix = dict(c.execute("SELECT cat_id, SUM(minutes) FROM voix_cat WHERE jour >= ? GROUP BY cat_id", (debut,)))
+        dernier = dict(c.execute(
+            "SELECT cat_id, MAX(jour) FROM (SELECT cat_id, jour FROM msg_cat UNION ALL SELECT cat_id, jour FROM voix_cat) GROUP BY cat_id"))
+    # sessions vocales en cours : comptées jusqu'à maintenant
+    for cat, t in _en_vocal.values():
+        voix[cat] = voix.get(cat, 0) + min((maintenant - t).total_seconds() / 60, MAX_SESSION_VOCALE_MIN)
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else (bot.guilds[0] if bot.guilds else None)
+    cats = {str(k.id): k.name for k in guild.categories} if guild else {}
+    out = []
+    for cid in set(cats) | set(msgs) | set(voix):
+        if cid == SANS_CATEGORIE:
+            nom = "Hors catégorie"
+        elif cid in cats:
+            nom = cats[cid]
+        else:
+            continue                        # catégorie supprimée depuis
+        out.append({"id": cid, "nom": nom, "messages": int(msgs.get(cid, 0)), "actifs": int(actifs.get(cid, 0)),
+                    "minutes_vocal": round(voix.get(cid, 0)), "derniere_activite": dernier.get(cid)})
+    out.sort(key=lambda x: (x["messages"] + x["minutes_vocal"], x["actifs"]), reverse=True)
+    return out
+
+
 async def action_resume(bot, payload):
     try:
         jours = max(1, min(int(payload.get("jours") or 30), 365))
@@ -205,6 +291,7 @@ async def action_resume(bot, payload):
         "top_actifs": [{"nom": nom(u), "messages": int(t)} for u, t in top_actifs],
         "jeux": [{"nom": j, "minutes": round(m), "sessions": int(s), "joueurs": int(joueurs.get(j, 0))}
                  for j, m, s in jeux],
+        "categories": par_categorie(bot, debut),
     }
 
 

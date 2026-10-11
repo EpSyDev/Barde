@@ -22,6 +22,8 @@ export const SECTIONS: Section[] = [
   { id: "membres", label: "Membres", icon: "personnes", hint: "Fiche d'un habitant", group: "Les habitants", ready: true },
   { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", group: "Les habitants", ready: true },
   { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", group: "Les habitants", ready: true },
+  { id: "viejeux", label: "Vie des jeux", icon: "manette", hint: "Suggestion, accueil, partenaires", group: "Les habitants", ready: true, titre: "Faire vivre les jeux" },
+  { id: "chronique", label: "Chronique", icon: "parchemin", hint: "Récap de la semaine", group: "Les habitants", ready: true, titre: "La chronique" },
   { id: "enligne", label: "En ligne", icon: "eclair", hint: "Jeux lancés en direct", group: "Les habitants", ready: true, titre: "Qui est en ligne" },
   { id: "soirees", label: "Soirées", icon: "cor", hint: "Inscriptions & rappels", group: "Les habitants", ready: true, titre: "Soirées jeu" },
   { id: "diffusions", label: "Diffusions", icon: "eclair", hint: "Lives Twitch & YouTube", group: "Les habitants", ready: true },

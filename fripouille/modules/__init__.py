@@ -4,6 +4,7 @@ Ajouter un module = créer son fichier ici puis l'importer dans cette liste.
 """
 from . import acces  # noqa: F401
 from . import autorole  # noqa: F401
+from . import chronique  # noqa: F401
 from . import des  # noqa: F401
 from . import diffusions  # noqa: F401
 from . import enligne  # noqa: F401
@@ -21,4 +22,5 @@ from . import stats  # noqa: F401
 from . import taches  # noqa: F401
 from . import tempvoice  # noqa: F401
 from . import tickets  # noqa: F401
+from . import viejeux  # noqa: F401
 from . import welcome  # noqa: F401

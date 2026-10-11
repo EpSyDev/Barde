@@ -13,6 +13,7 @@ type Resume = {
   heures: number[];
   top_actifs: { nom: string; messages: number }[];
   jeux: { nom: string; minutes: number; sessions: number; joueurs: number }[];
+  categories: { id: string; nom: string; messages: number; actifs: number; minutes_vocal: number; derniere_activite: string | null }[];
 };
 
 const PERIODES = [7, 30, 90];
@@ -143,6 +144,34 @@ export default function Stats() {
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", opacity: 0.7 }}>
           <span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>23 h</span>
         </div>
+      </section>
+
+      <section className="cfg-card">
+        <div className="cfg-card-head">
+          <h2>Par catégorie</h2>
+          <p>
+            Messages, membres actifs et temps passé en vocal dans chaque catégorie sur la période (mesuré depuis le 11/10 au soir).
+            Une catégorie à zéro partout est marquée « endormie ».
+          </p>
+        </div>
+        {(d.categories || []).length === 0 ? (
+          <p className="cfg-hint">Pas encore de données.</p>
+        ) : (
+          <div className="game-list">
+            {(d.categories || []).map((c) => {
+              const endormie = c.messages === 0 && c.minutes_vocal === 0;
+              return (
+                <div className="game-row" key={c.id} style={endormie ? { opacity: 0.6 } : undefined}>
+                  <span className="game-label">
+                    <b>{c.nom}</b>
+                    {endormie ? " — 💤 endormie" : ` — ${c.messages} msg · ${c.actifs} actif(s) · ${duree(c.minutes_vocal)} de vocal`}
+                  </span>
+                  <span className="game-cat">{c.derniere_activite ? `dernière activité ${court(c.derniere_activite)}` : "jamais vue active"}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="cfg-card">
