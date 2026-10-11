@@ -68,6 +68,7 @@ class FripouilleBot(discord.Client):
         anonyme.setup(self.tree, guild)
         economie.install(self, guild)
         economie.start_scheduler(self)
+        enligne.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         des.setup(self.tree, guild)
