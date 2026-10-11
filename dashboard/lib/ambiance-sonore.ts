@@ -7,10 +7,11 @@
 //   gouttes  : « ploc » d'eau dans une crypte (sinus qui chute + écho)
 //   bourdon  : drone grave désaccordé (crypte)
 //   foule    : murmure de taverne (bruit filtré, volume qui respire) + chopes qui trinquent
+//   loup     : hurlement lointain (glissando + vibrato à travers un formant, long écho)
 // Le navigateur exige un geste de l'utilisateur avant de jouer du son : le plateau ne
 // démarre l'ambiance qu'après le clic sur 🔊.
 
-export type Son = "aucun" | "taverne" | "crypte" | "foret" | "camp" | "pluie";
+export type Son = "aucun" | "taverne" | "crypte" | "foret" | "camp" | "pluie" | "nuit";
 
 const RECETTES: Record<Exclude<Son, "aucun">, string[]> = {
   taverne: ["foule", "feu"],
@@ -18,6 +19,7 @@ const RECETTES: Record<Exclude<Son, "aucun">, string[]> = {
   foret: ["vent", "oiseaux"],
   camp: ["feu", "vent-faible", "grillons"],
   pluie: ["pluie", "vent-faible"],
+  nuit: ["vent", "loup", "grillons"],
 };
 
 export class AmbianceSonore {
@@ -154,6 +156,33 @@ export class AmbianceSonore {
           this.arrets.push(() => o.stop());
         }
         lfo(0.05, 0.05, g.gain);
+        break;
+      }
+      case "loup": {
+        const echo = ctx.createDelay(2); echo.delayTime.value = 0.55;
+        const fb = ctx.createGain(); fb.gain.value = 0.42;
+        echo.connect(fb).connect(echo);
+        echo.connect(gain(0.5));
+        this.aleatoire(14000, 32000, () => {
+          const t = ctx.currentTime, d = 2.6 + Math.random() * 1.4, base = 330 + Math.random() * 80;
+          const o = ctx.createOscillator(); o.type = "triangle";
+          o.frequency.setValueAtTime(base, t);
+          o.frequency.linearRampToValueAtTime(base * 1.55, t + d * 0.3);
+          o.frequency.linearRampToValueAtTime(base * 1.45, t + d * 0.75);
+          o.frequency.linearRampToValueAtTime(base * 1.05, t + d);
+          const vib = ctx.createOscillator(); vib.frequency.value = 5.5;
+          const vg = ctx.createGain(); vg.gain.value = 7;
+          vib.connect(vg).connect(o.frequency);
+          const formant = filtre("bandpass", 900, 2.5);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.09, t + 0.5);
+          g.gain.setValueAtTime(0.09, t + d * 0.7);
+          g.gain.linearRampToValueAtTime(0, t + d);
+          o.connect(formant).connect(g);
+          g.connect(sortie); g.connect(echo);
+          o.start(t); vib.start(t); o.stop(t + d + 0.1); vib.stop(t + d + 0.1);
+        });
         break;
       }
       case "foule": {

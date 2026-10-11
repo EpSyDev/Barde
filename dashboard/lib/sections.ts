@@ -62,6 +62,7 @@ const DEFS: Def[] = [
   { id: "enligne", label: "En ligne", icon: "signal", hint: "Jeux lancés en direct", quartier: "jeu", ready: true, titre: "Qui est en ligne" },
   { id: "soirees", label: "Soirées", icon: "calendrier", hint: "Inscriptions & rappels", quartier: "jeu", ready: true, titre: "Soirées jeu" },
   { id: "sondages", label: "Sondages", icon: "urne", hint: "Vote → soirée", quartier: "jeu", ready: true },
+  { id: "ombres", label: "Les Ombres", icon: "capuche", hint: "Loup-garou de la taverne", quartier: "jeu", ready: true, lien: "/ombres" },
   { id: "diffusions", label: "Diffusions", icon: "ecran", hint: "Lives Twitch & YouTube", quartier: "jeu", ready: true },
 
   { id: "table", label: "Table de jeu", icon: "carte", hint: "Plateau, dés 3D, carnet du MJ", quartier: "table", ready: true, lien: "/table" },

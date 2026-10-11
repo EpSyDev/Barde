@@ -3,7 +3,9 @@ import Discord from "next-auth/providers/discord";
 import { roleOf } from "@/lib/acces";
 
 // Accès = ALLOWED_DISCORD_IDS (admins de secours) ∪ liste du module « Accès » du dashboard,
-// chacun avec un rôle (admin | mj | joueur). Voir lib/acces.ts.
+// chacun avec un rôle (admin | mj | joueur). Voir lib/acces.ts. Tout autre compte Discord
+// entre en « convive » : il n'a droit qu'à la table des Ombres (/ombres, voir middleware),
+// et La Fripouille refuse ensuite ceux qui ne sont pas membres du serveur.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
@@ -23,17 +25,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    // Refuse toute connexion dont l'ID Discord n'a aucun rôle.
     async signIn({ profile }) {
-      return !!profile && (await roleOf(String(profile.id))) !== null;
+      return !!profile?.id;
     },
-    // Revérifié à chaque requête : retirer un accès coupe aussi les sessions déjà ouvertes
-    // (au plus 30 s de latence, durée du cache de la liste).
+    // Revérifié à chaque requête : retirer un accès redescend aussitôt le compte en
+    // « convive » (au plus 30 s de latence, durée du cache de la liste).
     async jwt({ token, profile }) {
       if (profile) token.discordId = String(profile.id);
-      const role = await roleOf(token.discordId as string | undefined);
-      if (!role) return null;
-      token.role = role;
+      if (!token.discordId) return null;
+      token.role = (await roleOf(token.discordId as string)) ?? "convive";
       return token;
     },
     async session({ session, token }) {

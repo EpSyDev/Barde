@@ -16,6 +16,7 @@ from . import journal  # noqa: F401
 from . import membres  # noqa: F401
 from . import messages  # noqa: F401
 from . import moderation  # noqa: F401
+from . import ombres  # noqa: F401
 from . import taverne3d  # noqa: F401
 from . import sante  # noqa: F401
 from . import sauvegarde  # noqa: F401
