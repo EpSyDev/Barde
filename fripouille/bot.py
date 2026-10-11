@@ -12,7 +12,7 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, chronique, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
+    anonyme, autorole, bapteme, chronique, sante, sauvegarde, sondages, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
     membres, messages, moderation, soirees, stats, taches, tempvoice, tickets, viejeux, welcome,
 )
 from .store import ConfigStore
@@ -75,6 +75,9 @@ class FripouilleBot(discord.Client):
         diffusions.start_scheduler(self)
         viejeux.start_scheduler(self)
         chronique.start_scheduler(self)
+        sante.start_scheduler(self)
+        sauvegarde.start_scheduler(self)
+        sondages.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         des.setup(self.tree, guild)
@@ -90,6 +93,7 @@ class FripouilleBot(discord.Client):
         enligne.setup_persistent(self)
         soirees.setup_persistent(self)
         viejeux.setup_persistent(self)
+        sondages.setup_persistent(self)
         taches.setup_persistent(self)
         des.setup_persistent(self)
 

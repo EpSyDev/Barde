@@ -24,3 +24,6 @@ Thumbs.db
 .idea/
 hub/registre.json
 hub/registre.tmp
+
+# Archives de sauvegarde locales (module Sauvegarde)
+sauvegardes/

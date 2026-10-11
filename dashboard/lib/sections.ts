@@ -23,6 +23,7 @@ export const SECTIONS: Section[] = [
   { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", group: "Les habitants", ready: true },
   { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", group: "Les habitants", ready: true },
   { id: "viejeux", label: "Vie des jeux", icon: "manette", hint: "Suggestion, accueil, partenaires", group: "Les habitants", ready: true, titre: "Faire vivre les jeux" },
+  { id: "sondages", label: "Sondages", icon: "balance", hint: "Vote → soirée", group: "Les habitants", ready: true },
   { id: "chronique", label: "Chronique", icon: "parchemin", hint: "Récap de la semaine", group: "Les habitants", ready: true, titre: "La chronique" },
   { id: "enligne", label: "En ligne", icon: "eclair", hint: "Jeux lancés en direct", group: "Les habitants", ready: true, titre: "Qui est en ligne" },
   { id: "soirees", label: "Soirées", icon: "cor", hint: "Inscriptions & rappels", group: "Les habitants", ready: true, titre: "Soirées jeu" },
@@ -41,6 +42,7 @@ export const SECTIONS: Section[] = [
   { id: "taches", label: "Tâches", icon: "parchemin", hint: "To-do de l'équipe", group: "L'ordre", ready: true, titre: "Tâches de l'équipe" },
   { id: "journal", label: "Journal", icon: "registre", hint: "Tout ce qui s'est passé", group: "L'ordre", ready: true },
 
+  { id: "sante", label: "Santé & sauvegarde", icon: "engrenage", hint: "VM, alertes, copies", group: "L'atelier", ready: true, titre: "Santé de la VM & sauvegarde" },
   { id: "stats", label: "Statistiques", icon: "registre", hint: "Arrivées, activité, jeux", group: "L'atelier", ready: true, titre: "Statistiques du serveur" },
   { id: "acces", label: "Accès", icon: "capuche", hint: "Admins, MJ & joueurs", group: "L'atelier", ready: true, titre: "Accès & rôles" },
   { id: "media", label: "Média", icon: "cadre", hint: "Images des embeds", group: "L'atelier", ready: true },

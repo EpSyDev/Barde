@@ -9,6 +9,8 @@ import EnLigne from "@/components/EnLigne";
 import Garde from "@/components/Garde";
 import Soirees from "@/components/Soirees";
 import VieJeux from "@/components/VieJeux";
+import Sondages from "@/components/Sondages";
+import Sante from "@/components/Sante";
 import Chronique from "@/components/Chronique";
 import Diffusions from "@/components/Diffusions";
 import Stats from "@/components/Stats";
@@ -255,6 +257,10 @@ function Shell({ userName }: { userName: string }) {
             <Registre />
           ) : active === "moderation" ? (
             <Moderation aller={aller} />
+          ) : active === "sondages" ? (
+            <Sondages />
+          ) : active === "sante" ? (
+            <Sante />
           ) : active === "viejeux" ? (
             <VieJeux />
           ) : active === "chronique" ? (

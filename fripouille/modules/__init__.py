@@ -17,7 +17,10 @@ from . import membres  # noqa: F401
 from . import messages  # noqa: F401
 from . import moderation  # noqa: F401
 from . import taverne3d  # noqa: F401
+from . import sante  # noqa: F401
+from . import sauvegarde  # noqa: F401
 from . import soirees  # noqa: F401
+from . import sondages  # noqa: F401
 from . import stats  # noqa: F401
 from . import taches  # noqa: F401
 from . import tempvoice  # noqa: F401
