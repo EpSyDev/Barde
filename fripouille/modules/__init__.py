@@ -7,6 +7,7 @@ from . import des  # noqa: F401
 from . import enligne  # noqa: F401
 from . import bapteme  # noqa: F401
 from . import farewell  # noqa: F401
+from . import garde  # noqa: F401
 from . import jeux  # noqa: F401
 from . import journal  # noqa: F401
 from . import membres  # noqa: F401

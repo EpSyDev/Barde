@@ -6,6 +6,7 @@ import Community from "@/components/Community";
 import Games from "@/components/Games";
 import Messages from "@/components/Messages";
 import EnLigne from "@/components/EnLigne";
+import Garde from "@/components/Garde";
 import Taches from "@/components/Taches";
 import Des from "@/components/Des";
 import Tickets from "@/components/Tickets";
@@ -248,6 +249,8 @@ function Shell({ userName }: { userName: string }) {
             <Registre />
           ) : active === "moderation" ? (
             <Moderation aller={aller} />
+          ) : active === "garde" ? (
+            <Garde />
           ) : active === "tickets" ? (
             <Tickets />
           ) : active === "journal" ? (

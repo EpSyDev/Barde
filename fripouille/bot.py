@@ -12,7 +12,7 @@ import discord
 
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
-    anonyme, autorole, bapteme, des, economie, enligne, farewell, help as help_module, jeux, journal,
+    anonyme, autorole, bapteme, des, economie, enligne, farewell, garde, help as help_module, jeux, journal,
     membres, messages, moderation, taches, tempvoice, tickets, welcome,
 )
 from .store import ConfigStore
@@ -69,6 +69,7 @@ class FripouilleBot(discord.Client):
         economie.install(self, guild)
         economie.start_scheduler(self)
         enligne.start_scheduler(self)
+        garde.start_scheduler(self)
         moderation.setup(self.tree, guild)
         help_module.setup(self.tree, guild)
         des.setup(self.tree, guild)
@@ -96,6 +97,7 @@ class FripouilleBot(discord.Client):
             return
         # Écran de règles (Membership Screening) : on attend la validation, gérée
         # par on_member_update. Sans écran, member.pending est False → arrivée directe.
+        await garde.on_member_join(self, member)
         await journal.on_member_join(self, member)
         if member.pending:
             log.info("%s en attente de validation des règles", member)
@@ -142,6 +144,7 @@ class FripouilleBot(discord.Client):
             return
         if config.GUILD_ID and message.guild.id != config.GUILD_ID:
             return
+        await garde.on_message(self, message)
         await economie.on_message(self, message)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):

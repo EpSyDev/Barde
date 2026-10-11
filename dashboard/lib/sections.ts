@@ -32,6 +32,7 @@ export const SECTIONS: Section[] = [
   { id: "registre", label: "Registre", icon: "parchemin", hint: "Baptisés", group: "Écus & rites", ready: true },
 
   { id: "moderation", label: "Modération", icon: "balance", hint: "Sanctions & escalade", group: "L'ordre", ready: true },
+  { id: "garde", label: "Garde", icon: "bouclier", hint: "Anti-raid & verrouillage", group: "L'ordre", ready: true, titre: "La Garde" },
   { id: "tickets", label: "Tickets", icon: "ticket", hint: "Support membres", group: "L'ordre", ready: true },
   { id: "taches", label: "Tâches", icon: "parchemin", hint: "To-do de l'équipe", group: "L'ordre", ready: true, titre: "Tâches de l'équipe" },
   { id: "journal", label: "Journal", icon: "registre", hint: "Tout ce qui s'est passé", group: "L'ordre", ready: true },
