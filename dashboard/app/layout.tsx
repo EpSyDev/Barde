@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cinzel, EB_Garamond } from "next/font/google";
 import "./globals.css";
+import "./quartiers.css";
 
 const cinzel = Cinzel({
   subsets: ["latin"],

@@ -1,53 +1,98 @@
 import type { IconName } from "@/components/Icon";
 
+// Le menu est rangé en QUARTIERS, par intention (« je viens faire jouer les gens »,
+// « je viens régler un conflit »), jamais par ordre d'arrivée des features. Chaque
+// quartier a son blason : émail, partition héraldique, meuble — et sa couleur suit
+// l'utilisateur jusque dans la page (fil d'Ariane, sceau, liseré).
+// Déclaré ici, hors composant, pour que la palette y accède sans import circulaire.
+
+export type QuartierId = "salle" | "jeu" | "table" | "place" | "ecus" | "ordre" | "atelier";
+/** Partitions héraldiques dessinées dans l'écu (components/Blason.tsx). */
+export type Partition = "bordure" | "parti" | "ecartele" | "chevron" | "besants" | "bande" | "fasce";
+/** Hachures de Petra Sancta : la convention de gravure qui code chaque émail. */
+export type Hachure = "or" | "gueules" | "azur" | "sinople" | "pourpre" | "sable";
+
+export type Quartier = {
+  id: QuartierId;
+  nom: string;
+  devise: string;
+  /** émail du champ, sa teinte sombre, l'émail de la pièce (partition) */
+  couleur: string;
+  fonce: string;
+  piece: string;
+  partition: Partition;
+  hachure: Hachure;
+  meuble: IconName;
+};
+
+export const QUARTIERS: Quartier[] = [
+  { id: "salle", nom: "Salle commune", devise: "Le cœur de la taverne", couleur: "#c08a2c", fonce: "#7a5214", piece: "#9b2418", partition: "bordure", hachure: "or", meuble: "flamme" },
+  { id: "jeu", nom: "Le Jeu", devise: "Faire jouer les gens ensemble", couleur: "#3f8f5c", fonce: "#1f5634", piece: "#d6b25a", partition: "parti", hachure: "sinople", meuble: "manette" },
+  { id: "table", nom: "La Table", devise: "Donjons & Dragons", couleur: "#7b4fb3", fonce: "#46276f", piece: "#ece4d2", partition: "ecartele", hachure: "pourpre", meuble: "de" },
+  { id: "place", nom: "La Place", devise: "Parler à la communauté", couleur: "#2f6fb3", fonce: "#173f6e", piece: "#ece4d2", partition: "chevron", hachure: "azur", meuble: "cor" },
+  { id: "ecus", nom: "Écus & rites", devise: "L'économie et le rôle", couleur: "#b8902f", fonce: "#6e5416", piece: "#5a3a12", partition: "besants", hachure: "or", meuble: "bourse" },
+  { id: "ordre", nom: "L'Ordre", devise: "Protéger et rendre justice", couleur: "#b3392a", fonce: "#6b1a10", piece: "#ece4d2", partition: "bande", hachure: "gueules", meuble: "epees" },
+  { id: "atelier", nom: "L'Atelier", devise: "Les coulisses de la taverne", couleur: "#5f6f7c", fonce: "#333d45", piece: "#a9b6c0", partition: "fasce", hachure: "sable", meuble: "marteau" },
+];
+
 export type Section = {
   id: string;
   label: string;
   icon: IconName;
   hint: string;
+  quartier: QuartierId;
+  /** Nom du quartier (lu par la palette ⌘K pour grouper les résultats). */
   group: string;
   ready: boolean;
   /** Titre de l'en-tête quand il diffère du libellé du menu. */
   titre?: string;
+  /** Onglet qui mène à une autre page du site (ex. la table de jeu). */
+  lien?: string;
 };
 
-// Le menu est rangé par intention, pas par ordre d'arrivée des features : on cherche
-// « où je règle les écus », pas « quel module a été codé en troisième ».
-// Déclaré ici, hors composant, pour que la palette y accède sans import circulaire.
-export const SECTIONS: Section[] = [
-  { id: "accueil", label: "La Taverne", icon: "maison", hint: "Vue d'ensemble", group: "Salle commune", ready: true, titre: "La Taverne ce soir" },
-  { id: "bardes", label: "Bardes", icon: "luth", hint: "Régie musicale", group: "Salle commune", ready: true, titre: "Régie des Bardes" },
+type Def = Omit<Section, "group">;
+const DEFS: Def[] = [
+  { id: "accueil", label: "La Taverne", icon: "maison", hint: "Vue d'ensemble", quartier: "salle", ready: true, titre: "La Taverne ce soir" },
+  { id: "bardes", label: "Bardes", icon: "luth", hint: "Régie musicale", quartier: "salle", ready: true, titre: "Régie des Bardes" },
 
-  { id: "communaute", label: "Communauté", icon: "blason", hint: "Rôles & accueil", group: "Les habitants", ready: true },
-  { id: "membres", label: "Membres", icon: "personnes", hint: "Fiche d'un habitant", group: "Les habitants", ready: true },
-  { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", group: "Les habitants", ready: true },
-  { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", group: "Les habitants", ready: true },
-  { id: "viejeux", label: "Vie des jeux", icon: "manette", hint: "Suggestion, accueil, partenaires", group: "Les habitants", ready: true, titre: "Faire vivre les jeux" },
-  { id: "sondages", label: "Sondages", icon: "balance", hint: "Vote → soirée", group: "Les habitants", ready: true },
-  { id: "chronique", label: "Chronique", icon: "parchemin", hint: "Récap de la semaine", group: "Les habitants", ready: true, titre: "La chronique" },
-  { id: "enligne", label: "En ligne", icon: "eclair", hint: "Jeux lancés en direct", group: "Les habitants", ready: true, titre: "Qui est en ligne" },
-  { id: "soirees", label: "Soirées", icon: "cor", hint: "Inscriptions & rappels", group: "Les habitants", ready: true, titre: "Soirées jeu" },
-  { id: "diffusions", label: "Diffusions", icon: "eclair", hint: "Lives Twitch & YouTube", group: "Les habitants", ready: true },
-  { id: "des", label: "Dés (D&D)", icon: "bouclier", hint: "Table de dés & initiative", group: "Les habitants", ready: true, titre: "Table de dés" },
-  { id: "vocaux", label: "Salons vocaux", icon: "cor", hint: "Vocaux temporaires", group: "Les habitants", ready: true },
+  { id: "jeux", label: "Rôles-jeux", icon: "manette", hint: "Menu des jeux", quartier: "jeu", ready: true },
+  { id: "viejeux", label: "Vie des jeux", icon: "pousse", hint: "Suggestion, accueil, partenaires", quartier: "jeu", ready: true, titre: "Faire vivre les jeux" },
+  { id: "enligne", label: "En ligne", icon: "signal", hint: "Jeux lancés en direct", quartier: "jeu", ready: true, titre: "Qui est en ligne" },
+  { id: "soirees", label: "Soirées", icon: "calendrier", hint: "Inscriptions & rappels", quartier: "jeu", ready: true, titre: "Soirées jeu" },
+  { id: "sondages", label: "Sondages", icon: "urne", hint: "Vote → soirée", quartier: "jeu", ready: true },
+  { id: "diffusions", label: "Diffusions", icon: "ecran", hint: "Lives Twitch & YouTube", quartier: "jeu", ready: true },
 
-  { id: "economie", label: "Économie", icon: "bourse", hint: "Monnaie & boutique", group: "Écus & rites", ready: true },
-  { id: "tresorerie", label: "Trésorerie", icon: "coffre", hint: "Masse, flux, écarts", group: "Écus & rites", ready: true },
-  { id: "bapteme", label: "Baptême", icon: "chandelle", hint: "Générateur de noms", group: "Écus & rites", ready: true },
-  { id: "registre", label: "Registre", icon: "parchemin", hint: "Baptisés", group: "Écus & rites", ready: true },
+  { id: "table", label: "Table de jeu", icon: "carte", hint: "Plateau, dés 3D, carnet du MJ", quartier: "table", ready: true, lien: "/table" },
+  { id: "des", label: "Dés", icon: "de", hint: "Panneau Discord & initiative", quartier: "table", ready: true, titre: "Table de dés" },
 
-  { id: "moderation", label: "Modération", icon: "balance", hint: "Sanctions & escalade", group: "L'ordre", ready: true },
-  { id: "garde", label: "Garde", icon: "bouclier", hint: "Anti-raid & verrouillage", group: "L'ordre", ready: true, titre: "La Garde" },
-  { id: "tickets", label: "Tickets", icon: "ticket", hint: "Support membres", group: "L'ordre", ready: true },
-  { id: "taches", label: "Tâches", icon: "parchemin", hint: "To-do de l'équipe", group: "L'ordre", ready: true, titre: "Tâches de l'équipe" },
-  { id: "journal", label: "Journal", icon: "registre", hint: "Tout ce qui s'est passé", group: "L'ordre", ready: true },
+  { id: "communaute", label: "Communauté", icon: "blason", hint: "Rôles & accueil", quartier: "place", ready: true },
+  { id: "membres", label: "Membres", icon: "personnes", hint: "Fiche d'un habitant", quartier: "place", ready: true },
+  { id: "messages", label: "Messages", icon: "plume", hint: "Envois & récurrents", quartier: "place", ready: true },
+  { id: "vocaux", label: "Salons vocaux", icon: "micro", hint: "Vocaux temporaires", quartier: "place", ready: true },
+  { id: "chronique", label: "Chronique", icon: "parchemin", hint: "Récap de la semaine", quartier: "place", ready: true, titre: "La chronique" },
 
-  { id: "sante", label: "Santé & sauvegarde", icon: "engrenage", hint: "VM, alertes, copies", group: "L'atelier", ready: true, titre: "Santé de la VM & sauvegarde" },
-  { id: "stats", label: "Statistiques", icon: "registre", hint: "Arrivées, activité, jeux", group: "L'atelier", ready: true, titre: "Statistiques du serveur" },
-  { id: "acces", label: "Accès", icon: "capuche", hint: "Admins, MJ & joueurs", group: "L'atelier", ready: true, titre: "Accès & rôles" },
-  { id: "media", label: "Média", icon: "cadre", hint: "Images des embeds", group: "L'atelier", ready: true },
-  { id: "reglages", label: "Réglages", icon: "engrenage", hint: "Sauvegarde & audit", group: "L'atelier", ready: true },
-  { id: "taverniers", label: "Taverniers", icon: "capuche", hint: "PNJ & ambiance", group: "L'atelier", ready: false },
+  { id: "economie", label: "Économie", icon: "bourse", hint: "Monnaie & boutique", quartier: "ecus", ready: true },
+  { id: "tresorerie", label: "Trésorerie", icon: "coffre", hint: "Masse, flux, écarts", quartier: "ecus", ready: true },
+  { id: "bapteme", label: "Baptême", icon: "chandelle", hint: "Générateur de noms", quartier: "ecus", ready: true },
+  { id: "registre", label: "Registre", icon: "registre", hint: "Baptisés", quartier: "ecus", ready: true },
+
+  { id: "moderation", label: "Modération", icon: "balance", hint: "Sanctions & escalade", quartier: "ordre", ready: true },
+  { id: "garde", label: "Garde", icon: "bouclier", hint: "Anti-raid & verrouillage", quartier: "ordre", ready: true, titre: "La Garde" },
+  { id: "tickets", label: "Tickets", icon: "ticket", hint: "Support membres", quartier: "ordre", ready: true },
+  { id: "taches", label: "Tâches", icon: "liste", hint: "To-do de l'équipe", quartier: "ordre", ready: true, titre: "Tâches de l'équipe" },
+  { id: "journal", label: "Journal", icon: "clepsydre", hint: "Tout ce qui s'est passé", quartier: "ordre", ready: true },
+
+  { id: "stats", label: "Statistiques", icon: "graphique", hint: "Arrivées, activité, jeux", quartier: "atelier", ready: true, titre: "Statistiques du serveur" },
+  { id: "sante", label: "Santé & sauvegarde", icon: "coeur", hint: "VM, alertes, copies", quartier: "atelier", ready: true, titre: "Santé de la VM & sauvegarde" },
+  { id: "acces", label: "Accès", icon: "cle", hint: "Admins, MJ & joueurs", quartier: "atelier", ready: true, titre: "Accès & rôles" },
+  { id: "media", label: "Média", icon: "cadre", hint: "Images des embeds", quartier: "atelier", ready: true },
+  { id: "reglages", label: "Réglages", icon: "engrenage", hint: "Audit & paramètres", quartier: "atelier", ready: true },
+  { id: "taverniers", label: "Taverniers", icon: "capuche", hint: "PNJ & ambiance", quartier: "atelier", ready: false },
 ];
+
+export const SECTIONS: Section[] = DEFS.map((s) => ({ ...s, group: QUARTIERS.find((q) => q.id === s.quartier)!.nom }));
+
+export const quartierDe = (sectionId: string): Quartier =>
+  QUARTIERS.find((q) => q.id === SECTIONS.find((s) => s.id === sectionId)?.quartier) ?? QUARTIERS[0];
 
 export const SECTION_DEFAUT = "accueil";

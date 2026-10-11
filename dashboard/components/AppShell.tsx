@@ -34,7 +34,8 @@ import { ToastProvider } from "@/components/Toasts";
 import Palette from "@/components/Palette";
 import { logout } from "@/app/actions";
 
-import { SECTIONS, SECTION_DEFAUT as DEFAUT, type Section } from "@/lib/sections";
+import Blason from "@/components/Blason";
+import { QUARTIERS, SECTIONS, SECTION_DEFAUT as DEFAUT, quartierDe, type QuartierId, type Section } from "@/lib/sections";
 
 type Sante = {
   fripouille: { en_ligne: boolean; latence_ms?: number | null; membres?: number | null };
@@ -42,7 +43,7 @@ type Sante = {
 };
 
 /** Compteurs affichés dans le menu : uniquement ce qui appelle une action. */
-type Alertes = { tickets: number; anomalies: number };
+type Alertes = { tickets: number; anomalies: number; enJeu: number };
 
 function sectionDepuisUrl(): string {
   if (typeof window === "undefined") return DEFAUT;
@@ -63,7 +64,7 @@ function Shell({ userName }: { userName: string }) {
   const [open, setOpen] = useState(false);
   const [paletteOuverte, setPaletteOuverte] = useState(false);
   const [sante, setSante] = useState<Sante | null>(null);
-  const [alertes, setAlertes] = useState<Alertes>({ tickets: 0, anomalies: 0 });
+  const [alertes, setAlertes] = useState<Alertes>({ tickets: 0, anomalies: 0, enJeu: 0 });
   // Fiche membre demandée depuis la palette : consommée par l'écran « Membres ».
   const [membreCible, setMembreCible] = useState<string | null>(null);
 
@@ -78,6 +79,10 @@ function Shell({ userName }: { userName: string }) {
   const aller = useCallback((id: string, membre?: string) => {
     const section = SECTIONS.find((s) => s.id === id);
     if (!section?.ready) return;
+    if (section.lien) {
+      window.location.href = section.lien;
+      return;
+    }
     if (membre) setMembreCible(membre);
     setActive(id);
     setOpen(false);
@@ -103,9 +108,22 @@ function Shell({ userName }: { userName: string }) {
         });
         if (!vivant || !res.ok) return;
         const data = await res.json();
+        let enJeu = 0;
+        try {
+          const r2 = await fetch("/api/fripouille/action/enligne/etat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          });
+          if (r2.ok) enJeu = ((await r2.json())?.parties || []).filter((p: { terminee: boolean }) => !p.terminee).length;
+        } catch {
+          /* pas de pouls plutôt qu'un faux */
+        }
+        if (!vivant) return;
         setAlertes({
           tickets: data?.tickets?.non_pris ?? 0,
           anomalies: data?.economie?.anomalies ?? 0,
+          enJeu,
         });
       } catch {
         /* pastilles absentes plutôt que fausses */
@@ -132,20 +150,29 @@ function Shell({ userName }: { userName: string }) {
   }, []);
 
   const section = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
-  const groupes = useMemo(() => {
-    const map = new Map<string, Section[]>();
+  const parQuartier = useMemo(() => {
+    const map = new Map<QuartierId, Section[]>();
     for (const s of SECTIONS) {
-      if (!map.has(s.group)) map.set(s.group, []);
-      map.get(s.group)!.push(s);
+      if (!map.has(s.quartier)) map.set(s.quartier, []);
+      map.get(s.quartier)!.push(s);
     }
-    return [...map.entries()];
+    return map;
   }, []);
+  const qActif = quartierDe(active);
+  // Quartier dont l'étendard est déroulé : suit la page ouverte, mais un clic sur un
+  // blason permet de parcourir un autre quartier sans quitter la page.
+  const [ouvert, setOuvert] = useState<QuartierId>(qActif.id);
+  useEffect(() => setOuvert(quartierDe(active).id), [active]);
+  const qOuvert = QUARTIERS.find((q) => q.id === ouvert) ?? qActif;
 
   const compteur = (id: string) =>
     id === "tickets" ? alertes.tickets : id === "tresorerie" ? alertes.anomalies : 0;
 
   return (
-    <div className={`app ${open ? "menu-open" : ""}`}>
+    <div
+      className={`app ${open ? "menu-open" : ""}`}
+      style={{ ["--q" as string]: qActif.couleur, ["--q-fonce" as string]: qActif.fonce }}
+    >
       <aside className="sidebar">
         <div className="sidebar-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -153,36 +180,75 @@ function Shell({ userName }: { userName: string }) {
           <span className="crest-sub">Panneau des taverniers</span>
         </div>
 
-        <nav className="nav" aria-label="Sections">
-          {groupes.map(([groupe, items]) => (
-            <div key={groupe}>
-              <div className="nav-group">{groupe}</div>
-              {items.map((s) => {
-                const n = compteur(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    className={`nav-item ${s.id === active ? "active" : ""} ${s.ready ? "" : "soon"}`}
-                    onClick={() => aller(s.id)}
-                    disabled={!s.ready}
-                    aria-current={s.id === active ? "page" : undefined}
-                    title={s.ready ? s.hint : "Bientôt disponible"}
-                  >
-                    <span className="nav-icon">
-                      <Icon name={s.icon} />
-                    </span>
-                    <span className="nav-text">
-                      <span className="nav-label">{s.label}</span>
-                      <span className="nav-hint">{s.hint}</span>
-                    </span>
-                    {!s.ready && <span className="nav-badge">à venir</span>}
-                    {n > 0 && <span className="nav-count">{n}</span>}
-                  </button>
-                );
-              })}
+        <div className="quartiers">
+          {/* Le rail des blasons : un écu nommé par quartier */}
+          <nav className="rail" aria-label="Quartiers">
+            {QUARTIERS.map((q) => {
+              const n = parQuartier.get(q.id)?.reduce((t, s) => t + compteur(s.id), 0) ?? 0;
+              return (
+                <button
+                  key={q.id}
+                  className={`ecu ${q.id === ouvert ? "on" : ""} ${q.id === qActif.id ? "ici" : ""}`}
+                  style={{ ["--c" as string]: q.couleur }}
+                  onClick={() => setOuvert(q.id)}
+                  aria-pressed={q.id === ouvert}
+                  title={q.devise}
+                >
+                  <span className="ecu-bouclier">
+                    <Blason q={q} />
+                    {n > 0 && <span className="ecu-pastille">{n}</span>}
+                    {q.id === "jeu" && alertes.enJeu > 0 && <span className="ecu-pouls" title={`${alertes.enJeu} partie(s) en cours`} />}
+                  </span>
+                  <span className="ecu-nom">{q.nom}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* L'étendard du quartier ouvert : vélin suspendu à sa hampe */}
+          <div className="volet" style={{ ["--q" as string]: qOuvert.couleur, ["--q-fonce" as string]: qOuvert.fonce }}>
+            <div className="hampe" />
+            <div key={ouvert} className="etendard">
+              <div className="etendard-titre">
+                <span className="lettrine">{qOuvert.nom.replace(/^(L'|La |Le |Les )/, "")[0]}</span>
+                <div>
+                  <h2>{qOuvert.nom}</h2>
+                  <p>{qOuvert.devise}</p>
+                </div>
+              </div>
+              <div className="fleuron" aria-hidden="true">❦</div>
+              <ul className="etendard-liste">
+                {(parQuartier.get(ouvert) || []).map((s, k) => {
+                  const n = compteur(s.id);
+                  const etat = s.id === "tickets" && n ? `${n} en attente`
+                    : s.id === "tresorerie" && n ? `${n} écart${n > 1 ? "s" : ""}`
+                    : s.id === "enligne" && alertes.enJeu ? `${alertes.enJeu} en jeu` : "";
+                  return (
+                    <li key={s.id} style={{ ["--k" as string]: k }}>
+                      <button
+                        className={`onglet ${s.id === active ? "on" : ""} ${s.ready ? "" : "soon"}`}
+                        onClick={() => aller(s.id)}
+                        disabled={!s.ready}
+                        aria-current={s.id === active ? "page" : undefined}
+                      >
+                        <span className="onglet-puce"><Icon name={s.icon} /></span>
+                        <span className="onglet-texte">
+                          <span className="onglet-nom">{s.label}{s.lien ? " ↗" : ""}</span>
+                          <span className="onglet-hint">{s.ready ? s.hint : "Bientôt"}</span>
+                        </span>
+                        {etat && <span className={`onglet-etat ${s.id === "enligne" ? "direct" : "alerte"}`}>{etat}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-          ))}
-        </nav>
+            <button className="volet-chercher" onClick={() => setPaletteOuverte(true)}>
+              <span>Aller à…</span>
+              <kbd>⌘K</kbd>
+            </button>
+          </div>
+        </div>
 
         <div className="sidebar-foot">
           <span className="user-chip">
@@ -203,8 +269,11 @@ function Shell({ userName }: { userName: string }) {
             ☰
           </button>
           <div className="head-titles">
+            <div className="head-fil">
+              {qActif.nom} <span aria-hidden="true">›</span> {section.label}
+            </div>
             <h1>
-              <span className="head-icon">
+              <span key={active} className="head-sceau">
                 <Icon name={section.icon} />
               </span>
               {section.titre || section.label}
