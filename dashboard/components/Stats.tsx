@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { Loading, Vide } from "@/components/ui";
+import Parchemin from "@/components/Parchemin";
 
 type Jour = { jour: string; arrivees: number; departs: number; messages: number; actifs: number };
 type Resume = {
@@ -155,7 +156,7 @@ export default function Stats() {
           </p>
         </div>
         {(d.categories || []).length === 0 ? (
-          <p className="cfg-hint">Pas encore de données.</p>
+          <Parchemin icone="graphique" titre="Pas encore de données">Les chiffres arrivent avec l&apos;activité du serveur.</Parchemin>
         ) : (
           <div className="game-list">
             {(d.categories || []).map((c) => {
@@ -180,7 +181,7 @@ export default function Stats() {
           <p>Temps cumulé des parties suivies par « En ligne » (il doit être activé).</p>
         </div>
         {d.jeux.length === 0 ? (
-          <p className="cfg-hint">Aucune partie enregistrée sur la période.</p>
+          <Parchemin icone="manette" titre="Aucune partie enregistrée">Le temps de jeu vient du module En ligne.</Parchemin>
         ) : (
           <div className="game-list">
             {d.jeux.map((j) => (

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = {
   enabled: boolean;
@@ -194,7 +195,7 @@ export default function VieJeux() {
         {!etat ? (
           <p className="cfg-hint">Chargement…</p>
         ) : etat.jeux.length === 0 ? (
-          <p className="cfg-hint">Aucun jeu dans Rôles-jeux.</p>
+          <Parchemin icone="manette" titre="Aucun jeu déclaré">Ajoute des jeux dans Rôles-jeux.</Parchemin>
         ) : (
           <div className="game-list">
             {etat.jeux.map((j) => (

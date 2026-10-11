@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide, depuis } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = {
   enabled: boolean;
@@ -287,7 +288,7 @@ export default function EnLigne() {
           <p>Ce que le bot suit en ce moment (rafraîchi toutes les 30 s).</p>
         </div>
         {enCours.length === 0 ? (
-          <p className="cfg-hint">Personne en jeu pour l&apos;instant.</p>
+          <Parchemin icone="signal" titre="Personne en jeu">Les parties apparaîtront ici dès qu&apos;un membre lance un jeu.</Parchemin>
         ) : (
           <div className="game-list">
             {enCours.map((p) => (

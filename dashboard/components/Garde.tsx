@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide, depuis } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = {
   enabled: boolean;
@@ -297,7 +298,7 @@ export default function Garde() {
           <p>Depuis le dernier redémarrage du bot.</p>
         </div>
         {!etat || etat.alertes.length === 0 ? (
-          <p className="cfg-hint">Rien à signaler.</p>
+          <Parchemin icone="bouclier" titre="Rien à signaler">La garde veille ; ses alertes s&apos;afficheront ici.</Parchemin>
         ) : (
           <div className="game-list">
             {etat.alertes.map((a) => (

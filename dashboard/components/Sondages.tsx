@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = { enabled: boolean; channel_id: string | null; ping_role_id: string | null };
 type Option = { label: string; role_id: string };
@@ -171,7 +172,7 @@ export default function Sondages() {
       <section className="cfg-card">
         <div className="cfg-card-head"><h2>Sondages</h2></div>
         {liste.length === 0 ? (
-          <p className="cfg-hint">Aucun sondage.</p>
+          <Parchemin icone="urne" titre="Aucun sondage">Publie le premier : le gagnant peut devenir une soirée.</Parchemin>
         ) : (
           <div className="game-list">
             {liste.map((s) => {

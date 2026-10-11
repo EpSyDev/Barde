@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide, depuis } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = {
   enabled: boolean; channel_id: string | null; role_id: string | null;
@@ -125,7 +126,7 @@ export default function Sante() {
           </div>
         </div>
         {!a ? (
-          <p className="cfg-hint">Pas encore de mesure (la première arrive une minute après le démarrage du bot).</p>
+          <Parchemin icone="coeur" titre="Pas encore de mesure">La première arrive une minute après le démarrage du bot.</Parchemin>
         ) : (
           <>
             <div className="game-list">

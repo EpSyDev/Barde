@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
+import Parchemin from "@/components/Parchemin";
 
 type Devise = {
   nom: string;
@@ -460,7 +461,7 @@ export default function Economie() {
                 la Taverne 3D…). Désactivées, elles ne versent rien.
               </p>
             </div>
-            {Object.keys(draft?.evenements ?? {}).length === 0 && <p className="cfg-hint">Aucune récompense déclarée.</p>}
+            {Object.keys(draft?.evenements ?? {}).length === 0 && <Parchemin icone="bourse" titre="Aucune récompense déclarée" />}
             {Object.entries(draft?.evenements ?? {}).map(([key, evt]) => (
               <div className="rec-item" key={key}>
                 <label className="cfg-toggle compact">
@@ -495,7 +496,7 @@ export default function Economie() {
             </div>
 
             {boutique.length === 0 && (
-              <p className="cfg-hint">Aucun article pour l'instant.</p>
+              <Parchemin icone="coffre" titre="L&apos;étal est vide">Ajoute un premier article à la boutique.</Parchemin>
             )}
 
             {boutique.map((it) => (

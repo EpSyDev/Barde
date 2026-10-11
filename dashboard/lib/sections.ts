@@ -23,16 +23,18 @@ export type Quartier = {
   partition: Partition;
   hachure: Hachure;
   meuble: IconName;
+  /** Métal ou émail du meuble (règle : pas de métal sur métal). */
+  teinte: "or" | "argent" | "sable" | "gueules";
 };
 
 export const QUARTIERS: Quartier[] = [
-  { id: "salle", nom: "Salle commune", devise: "Le cœur de la taverne", couleur: "#c08a2c", fonce: "#7a5214", piece: "#9b2418", partition: "bordure", hachure: "or", meuble: "flamme" },
-  { id: "jeu", nom: "Le Jeu", devise: "Faire jouer les gens ensemble", couleur: "#3f8f5c", fonce: "#1f5634", piece: "#d6b25a", partition: "parti", hachure: "sinople", meuble: "manette" },
-  { id: "table", nom: "La Table", devise: "Donjons & Dragons", couleur: "#7b4fb3", fonce: "#46276f", piece: "#ece4d2", partition: "ecartele", hachure: "pourpre", meuble: "de" },
-  { id: "place", nom: "La Place", devise: "Parler à la communauté", couleur: "#2f6fb3", fonce: "#173f6e", piece: "#ece4d2", partition: "chevron", hachure: "azur", meuble: "cor" },
-  { id: "ecus", nom: "Écus & rites", devise: "L'économie et le rôle", couleur: "#b8902f", fonce: "#6e5416", piece: "#5a3a12", partition: "besants", hachure: "or", meuble: "bourse" },
-  { id: "ordre", nom: "L'Ordre", devise: "Protéger et rendre justice", couleur: "#b3392a", fonce: "#6b1a10", piece: "#ece4d2", partition: "bande", hachure: "gueules", meuble: "epees" },
-  { id: "atelier", nom: "L'Atelier", devise: "Les coulisses de la taverne", couleur: "#5f6f7c", fonce: "#333d45", piece: "#a9b6c0", partition: "fasce", hachure: "sable", meuble: "marteau" },
+  { id: "salle", nom: "Salle commune", devise: "Le cœur de la taverne", couleur: "#c08a2c", fonce: "#7a5214", piece: "#9b2418", partition: "bordure", hachure: "or", meuble: "flamme", teinte: "gueules" },
+  { id: "jeu", nom: "Le Jeu", devise: "Faire jouer les gens ensemble", couleur: "#3f8f5c", fonce: "#1f5634", piece: "#d6b25a", partition: "parti", hachure: "sinople", meuble: "manette", teinte: "argent" },
+  { id: "table", nom: "La Table", devise: "Donjons & Dragons", couleur: "#7b4fb3", fonce: "#46276f", piece: "#ece4d2", partition: "ecartele", hachure: "pourpre", meuble: "de", teinte: "or" },
+  { id: "place", nom: "La Place", devise: "Parler à la communauté", couleur: "#2f6fb3", fonce: "#173f6e", piece: "#ece4d2", partition: "chevron", hachure: "azur", meuble: "cor", teinte: "or" },
+  { id: "ecus", nom: "Écus & rites", devise: "L'économie et le rôle", couleur: "#b8902f", fonce: "#6e5416", piece: "#5a3a12", partition: "besants", hachure: "or", meuble: "bourse", teinte: "sable" },
+  { id: "ordre", nom: "L'Ordre", devise: "Protéger et rendre justice", couleur: "#b3392a", fonce: "#6b1a10", piece: "#ece4d2", partition: "bande", hachure: "gueules", meuble: "epees", teinte: "or" },
+  { id: "atelier", nom: "L'Atelier", devise: "Les coulisses de la taverne", couleur: "#5f6f7c", fonce: "#333d45", piece: "#a9b6c0", partition: "fasce", hachure: "sable", meuble: "marteau", teinte: "or" },
 ];
 
 export type Section = {

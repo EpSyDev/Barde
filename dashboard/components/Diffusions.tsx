@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide, depuis } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Twitch = { login: string; nom: string };
 type Youtube = { channel_id: string; nom: string };
@@ -169,7 +170,7 @@ export default function Diffusions() {
       <section className="cfg-card">
         <div className="cfg-card-head"><h2>🟣 Chaînes Twitch</h2></div>
         {d.twitch.length === 0 ? (
-          <p className="cfg-hint">Aucune chaîne suivie.</p>
+          <Parchemin icone="ecran" titre="Aucune chaîne suivie">Ajoute-en une juste en dessous.</Parchemin>
         ) : (
           <div className="game-list">
             {d.twitch.map((t) => {
@@ -203,7 +204,7 @@ export default function Diffusions() {
       <section className="cfg-card">
         <div className="cfg-card-head"><h2>🔴 Chaînes YouTube</h2></div>
         {d.youtube.length === 0 ? (
-          <p className="cfg-hint">Aucune chaîne suivie.</p>
+          <Parchemin icone="ecran" titre="Aucune chaîne suivie">Ajoute-en une juste en dessous.</Parchemin>
         ) : (
           <div className="game-list">
             {d.youtube.map((y) => (

@@ -13,6 +13,7 @@ import {
   Stat, FlowBars, Loading, Vide, formatMontant, formatNombre, depuis, type Devise,
 } from "@/components/ui";
 import { runAction } from "@/lib/useModuleConfig";
+import QuartiersSoir from "@/components/QuartiersSoir";
 
 type Tableau = {
   disponible: boolean;
@@ -70,89 +71,7 @@ export default function Accueil({ aller }: { aller: (id: string, membre?: string
 
   return (
     <>
-      <p className="section-intro">
-        Tout ce qui suit est compté, pas estimé. Les membres connectés n&apos;y figurent
-        pas : le bot ne demande pas l&apos;autorisation Discord qui permettrait de les voir.
-      </p>
-
-      <div className="stat-grid">
-        <Stat
-          icon="personnes"
-          label="Habitants"
-          value={formatNombre(serveur?.membres)}
-          hint={
-            arrivees || departs
-              ? `${arrivees} arrivée${arrivees > 1 ? "s" : ""} · ${departs} départ${departs > 1 ? "s" : ""} en 24 h`
-              : "aucun mouvement en 24 h"
-          }
-        />
-        <Stat
-          icon="cor"
-          label="En vocal"
-          value={formatNombre(vocal?.total)}
-          hint={
-            vocal?.salons?.length
-              ? vocal.salons.slice(0, 2).map((s) => `${s.nom} (${s.membres})`).join(" · ")
-              : "les salons sont silencieux"
-          }
-        />
-        <Stat
-          icon="ticket"
-          label="Tickets ouverts"
-          value={formatNombre(tickets?.ouverts)}
-          hint={
-            tickets?.non_pris
-              ? `${tickets.non_pris} sans personne dessus`
-              : "tous pris en charge"
-          }
-          alert={!!tickets?.non_pris}
-        />
-        <Stat
-          icon="coffre"
-          label="Masse monétaire"
-          value={formatMontant(economie?.masse.total ?? 0, devise)}
-          hint={`${formatNombre(economie?.masse.porteurs)} porteurs · médiane ${formatMontant(economie?.masse.mediane ?? 0, devise)}`}
-        />
-        <Stat
-          icon="chandelle"
-          label="Baptisés"
-          value={formatNombre(bapteme?.total)}
-          hint={
-            bapteme?.derniers?.[0]?.at
-              ? `dernier ${depuis(bapteme.derniers[0].at)}`
-              : "aucun baptême enregistré"
-          }
-        />
-        <Stat
-          icon="balance"
-          label="Sanctions (7 j)"
-          value={formatNombre(moderation?.total_semaine)}
-          hint={
-            moderation?.total_semaine
-              ? Object.entries(moderation.semaine)
-                  .map(([k, v]) => `${v} ${LIBELLE_SANCTION[k] || k}`)
-                  .join(" · ")
-              : "semaine calme"
-          }
-        />
-        {!!economie?.anomalies && (
-          <Stat
-            icon="alerte"
-            label="Écarts de gains"
-            value={formatNombre(economie.anomalies)}
-            hint="comptes très au-dessus de la médiane — à regarder"
-            alert
-          />
-        )}
-        {!!economie?.geles && (
-          <Stat
-            icon="gel"
-            label="Comptes gelés"
-            value={formatNombre(economie.geles)}
-            hint="ni gain ni dépense tant qu'ils le sont"
-          />
-        )}
-      </div>
+      <QuartiersSoir tableau={data} aller={aller} />
 
       <div className="cfg-grid wide">
         <section className="cfg-card">

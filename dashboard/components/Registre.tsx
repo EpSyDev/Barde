@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Parchemin from "@/components/Parchemin";
 
 type Entry = {
   id: string;
@@ -189,7 +190,7 @@ export default function Registre() {
         {notice && <p className="cfg-hint" style={{ marginTop: "-0.5rem" }}>{notice}</p>}
 
         {entries.length === 0 ? (
-          <div className="empty-state">Aucun baptisé pour l'instant.</div>
+          <Parchemin icone="registre" titre="Aucun baptisé">Le registre se remplira au fil des baptêmes.</Parchemin>
         ) : (
           <div className="table-scroll">
             <table className="reg-table">

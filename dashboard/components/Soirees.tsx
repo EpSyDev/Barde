@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = { enabled: boolean; channel_id: string | null; ping_role_id: string | null; rappel_min: number };
 type Soiree = {
@@ -166,7 +167,7 @@ export default function Soirees() {
           <h2>À venir</h2>
         </div>
         {prochaines.length === 0 ? (
-          <p className="cfg-hint">Aucune soirée prévue.</p>
+          <Parchemin icone="calendrier" titre="Aucune soirée prévue">Annonce la prochaine avec le formulaire.</Parchemin>
         ) : (
           <div className="game-list">
             {prochaines.map((s) => (

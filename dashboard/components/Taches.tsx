@@ -6,6 +6,7 @@ import { DirtyBar, Loading, Vide, depuis } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
 import { ChannelSelect, useGuildRefs } from "@/components/Mentions";
 import { useToasts } from "@/components/Toasts";
+import Parchemin from "@/components/Parchemin";
 
 type Cfg = { enabled: boolean; channel_id: string | null; role_ids: string[] };
 type Statut = "a_faire" | "attribuee" | "terminee";
@@ -166,7 +167,7 @@ export default function Taches() {
         {taches === null ? (
           <Loading lignes={3} />
         ) : visibles.length === 0 ? (
-          <p className="cfg-hint">Aucune tâche ici.</p>
+          <Parchemin icone="liste" titre="Aucune tâche ici" />
         ) : (
           <div className="tache-list">
             {visibles.map((t) => (

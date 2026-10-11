@@ -5,6 +5,7 @@
 // Tout ce qui apparaissait en triple exemplaire dans les composants.
 
 import Icon, { IconName } from "@/components/Icon";
+import Parchemin from "@/components/Parchemin";
 
 /* ───────────────────────── Formateurs ───────────────────────── */
 
@@ -227,6 +228,7 @@ export function Loading({ lignes = 4 }: { lignes?: number }) {
   );
 }
 
+/** Écran vide ou bot injoignable : même petit parchemin que les états vides des cartes. */
 export function Vide({ children }: { children: React.ReactNode }) {
-  return <div className="empty-state">{children}</div>;
+  return <Parchemin icone="chandelle">{children}</Parchemin>;
 }

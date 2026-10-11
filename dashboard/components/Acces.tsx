@@ -4,6 +4,7 @@ import { useState } from "react";
 import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
+import Parchemin from "@/components/Parchemin";
 
 type Role = "admin" | "mj" | "joueur";
 type Membre = { id: string; nom: string; role: Role };
@@ -79,7 +80,7 @@ export default function Acces() {
         </div>
 
         {d.membres.length === 0 ? (
-          <p className="cfg-hint">Aucun accès supplémentaire pour l&apos;instant.</p>
+          <Parchemin icone="cle" titre="Personne d&apos;autre n&apos;a la clé">Ajoute un identifiant Discord ci-dessous pour ouvrir l&apos;accès.</Parchemin>
         ) : (
           <div className="game-list">
             {d.membres.map((m) => (

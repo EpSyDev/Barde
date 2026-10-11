@@ -208,14 +208,6 @@ function Shell({ userName }: { userName: string }) {
         <div className="quartiers">
           {/* Le rail des blasons : un écu nommé par quartier */}
           <nav className="rail" aria-label="Quartiers">
-            <button
-              className="rail-repli"
-              onClick={basculerRepli}
-              title={replie ? "Déplier l'étendard" : "Replier l'étendard (plus de place pour la page)"}
-              aria-label={replie ? "Déplier le menu" : "Replier le menu"}
-            >
-              {replie ? "»" : "«"}
-            </button>
             {QUARTIERS.map((q) => {
               const n = parQuartier.get(q.id)?.reduce((t, s) => t + compteur(s.id), 0) ?? 0;
               return (
@@ -243,8 +235,18 @@ function Shell({ userName }: { userName: string }) {
 
           {/* L'étendard du quartier ouvert : vélin suspendu à sa hampe */}
           {replie && flottant && <div className="volet-voile" onClick={() => setFlottant(false)} />}
+          {/* Languette de cuir au bord du parchemin : range l'étendard sous le rail */}
+          <button
+            className="repli-onglet"
+            onClick={basculerRepli}
+            title={replie ? "Déplier l'étendard" : "Ranger l'étendard (plus de place pour la page)"}
+            aria-label={replie ? "Déplier le menu" : "Replier le menu"}
+            aria-expanded={!replie}
+          >
+            <span aria-hidden="true">{replie ? "›" : "‹"}</span>
+          </button>
           <div
-            className={`volet ${replie ? (flottant ? "flottant" : "cache") : ""}`}
+            className={`volet ${replie ? (flottant ? "flottant" : "range") : ""}`}
             style={{ ["--q" as string]: qOuvert.couleur, ["--q-fonce" as string]: qOuvert.fonce }}
           >
             <div className="hampe" />

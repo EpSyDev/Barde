@@ -7,6 +7,7 @@ import { useUnsavedGuard } from "@/lib/useModuleConfig";
 import { DirtyBar } from "@/components/ui";
 import MediaPicker from "@/components/MediaPicker";
 import { ChannelSelect, DiscordText, MentionField } from "@/components/Mentions";
+import Parchemin from "@/components/Parchemin";
 
 // Vignette fixe des embeds « classiques » (imposée aussi côté bot).
 const LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp";
@@ -642,7 +643,7 @@ function SentHistory({
   onDelete: (item: SentItem) => void;
 }) {
   if (items.length === 0) {
-    return <p className="cfg-hint">Aucun message envoyé pour l'instant.</p>;
+    return <Parchemin icone="plume" titre="Aucun message envoyé">Ceux que tu posteras apparaîtront ici, prêts à être réédités.</Parchemin>;
   }
   const fmt = (iso: string) => {
     const d = new Date(iso);
@@ -1250,7 +1251,7 @@ export default function Messages() {
             </div>
 
             {recurring.length === 0 && (
-              <p className="cfg-hint">Aucun message récurrent pour l'instant.</p>
+              <Parchemin icone="clepsydre" titre="Aucun message récurrent" />
             )}
 
             {recurring.map((r) => (
