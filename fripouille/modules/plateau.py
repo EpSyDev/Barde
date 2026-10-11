@@ -27,6 +27,7 @@ import time
 import uuid
 
 from .. import config
+from ..registry import Module, register
 from . import des as des_module
 
 log = logging.getLogger("fripouille.plateau")
@@ -696,6 +697,19 @@ async def appliquer(op: str, d: dict, qui: dict) -> dict:
 
 
 _bot_ref: dict = {}
+
+
+async def action_resume(_bot, _payload):
+    """Résumé de la table pour l'accueil du panneau (chiffres réels, rien de secret)."""
+    e = etat()
+    ini = e["initiative"]
+    return {"ok": True, "scene": e["scene"].get("nom") or "", "pions": len(e["pions"]),
+            "heros": sum(1 for p in e["pions"] if p["type"] == "joueur"),
+            "presents": len(_presents()), "aventures": len(aventures()),
+            "combat": bool(ini.get("actif")), "round": ini.get("round", 0)}
+
+
+MODULE = register(Module(key="plateau", label="Table de jeu", defaults={}, actions={"resume": action_resume}))
 
 
 def attacher(bot):
