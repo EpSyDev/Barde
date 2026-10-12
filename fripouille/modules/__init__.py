@@ -10,6 +10,7 @@ from . import diffusions  # noqa: F401
 from . import enligne  # noqa: F401
 from . import bapteme  # noqa: F401
 from . import farewell  # noqa: F401
+from . import flotte  # noqa: F401
 from . import garde  # noqa: F401
 from . import jeux  # noqa: F401
 from . import journal  # noqa: F401

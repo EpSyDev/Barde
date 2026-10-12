@@ -7,6 +7,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const retour = callbackUrl && /^\/(?!\/)[\w\-/?=&.]*$/.test(callbackUrl) ? callbackUrl : "/";
   const table = retour.startsWith("/table");
   const ombres = retour.startsWith("/ombres");
+  const flotte = retour.startsWith("/flotte");
   return (
     <div className="login-wrap">
       <div className="login-card">
@@ -14,9 +15,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <p>
           {ombres
             ? "Les Ombres de la Taverne t'attendent : entre avec ton compte Discord du serveur."
-            : table
-              ? "La table de jeu t'attend : connecte-toi avec ton compte Discord."
-              : "Seuls les maîtres des lieux peuvent commander les bardes."}
+            : flotte
+              ? "Ta flotte attend son capitaine : embarque avec ton compte Discord du serveur."
+              : table
+                ? "La table de jeu t'attend : connecte-toi avec ton compte Discord."
+                : "Seuls les maîtres des lieux peuvent commander les bardes."}
         </p>
         <form
           action={async () => {

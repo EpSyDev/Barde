@@ -3,8 +3,8 @@ import { auth } from "@/auth";
 
 // Les routes vérifient elles-mêmes qu'une session existe ; ce middleware ajoute la
 // séparation des rôles : un MJ ou un joueur n'accède qu'aux tables de jeu (plateau D&D,
-// Ombres), jamais au panneau d'administration ni à ses API ; un convive (tout membre du
-// serveur) n'a que la table des Ombres. /api/game a sa propre auth (public).
+// Ombres, Flottes Royales), jamais au panneau d'administration ni à ses API ; un convive
+// (tout membre du serveur) n'a que les Ombres et les Flottes. /api/game a sa propre auth (public).
 const FICHIER_PUBLIC = /\/[^/]+\.(webp|png|jpe?g|svg|ico|gif|mp3|ogg|woff2?)$/i;
 
 export default auth((req) => {
@@ -13,6 +13,7 @@ export default auth((req) => {
   const p = req.nextUrl.pathname;
   if (FICHIER_PUBLIC.test(p)) return;          // images de /public (cartes du plateau…) : publiques
   if (p.startsWith("/ombres") || p.startsWith("/api/ombres")) return;
+  if (p.startsWith("/flotte") || p.startsWith("/api/flotte")) return;
   if (role === "convive") {
     if (p.startsWith("/api/")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
     return NextResponse.redirect(new URL("/ombres", req.url));

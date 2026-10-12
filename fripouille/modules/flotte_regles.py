@@ -36,7 +36,7 @@ quitte le serveur.
 Duel final : quand il ne reste que deux capitaines en lice, le brouillard se lève — chacun
 voit toute la flotte de l'autre (pas de fin de partie à cache-cache).
 
-Victoire : dernier capitaine à flot. Limite de manches → départage : navires à flot,
+Victoire : dernier capitaine à flot (« anticipee » : clôture faute d'humain en lice). Limite de manches → départage : navires à flot,
 puis coque restante, puis dégâts infligés ; égalité parfaite → victoire partagée.
 """
 import math
@@ -945,10 +945,17 @@ class Partie:
         return e
 
     # ── fin ──
-    def _verifier_fin(self, maintenant: float, m: int) -> bool:
+    def clore(self, maintenant: float):
+        """Fin anticipée (plus aucun capitaine humain en lice) : départage comme à la limite."""
+        if self.d["phase"] not in ("salon", "fin"):
+            self._verifier_fin(maintenant, self.d["manche"], force=True)
+            if self.d["fin"]["raison"] == "limite":
+                self.d["fin"]["raison"] = "anticipee"
+
+    def _verifier_fin(self, maintenant: float, m: int, force: bool = False) -> bool:
         d = self.d
         actifs = self.actifs()
-        limite = m >= d["options"]["manches"]
+        limite = force or m >= d["options"]["manches"]
         if len(actifs) > 1 and not limite:
             return False
         if len(actifs) == 1:

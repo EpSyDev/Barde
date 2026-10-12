@@ -21,7 +21,7 @@ from pathlib import Path
 from aiohttp import web
 
 from . import config, media, registry
-from .modules import ombres, plateau
+from .modules import flotte, ombres, plateau
 
 log = logging.getLogger("fripouille.webapi")
 
@@ -79,6 +79,12 @@ async def _auth(request, handler):
             qui = ombres.spectateur(request.query.get("scene", ""))
         if qui:
             request["qui_ombres"] = qui
+            authorized = True
+    if not authorized and request.path in _FLOTTE_ROUTES:
+        # Flottes Royales : ticket de capitaine (session vérifiée par le dashboard).
+        qui = flotte.ticket(request.query.get("ticket", ""))
+        if qui:
+            request["qui_flotte"] = qui
             authorized = True
     if not authorized and request.path in _PLATEAU_ROUTES:
         # Plateau de jeu : ticket de soirée délivré par le dashboard (session vérifiée).
@@ -344,6 +350,50 @@ async def ombres_op(request):
         return web.json_response({"error": str(exc)}, status=400)
 
 
+# ─────────────────────────── Guerre des Flottes Royales ───────────────────────────
+_FLOTTE_ROUTES = {"/api/flotte/flux", "/api/flotte/op"}
+
+
+async def flotte_ticket(request):
+    """Appelé par le dashboard (token) : ticket de capitaine pour le flux et les gestes."""
+    try:
+        corps = await request.json()
+    except Exception:  # noqa: BLE001
+        corps = {}
+    try:
+        qui = flotte.identite(request.app["bot"], corps if isinstance(corps, dict) else {})
+    except PermissionError as exc:
+        return web.json_response({"error": str(exc)}, status=403)
+    t = flotte.nouveau_ticket(qui)
+    base = config.PUBLIC_BASE_URL or ""
+    return web.json_response({"flux_url": f"{base}/api/flotte/flux?ticket={t}",
+                              "op_url": f"{base}/api/flotte/op?ticket={t}"})
+
+
+def _qui_flotte(request) -> dict:
+    qui = request.get("qui_flotte")
+    if qui is None:          # appel au token (admin, outils) : pas de capitaine attaché
+        raise web.HTTPForbidden(reason="ticket de capitaine requis")
+    return qui
+
+
+async def flotte_flux(request):
+    return await flotte.flux(request, web, _qui_flotte(request))
+
+
+async def flotte_op(request):
+    try:
+        data = await request.json()
+    except Exception:  # noqa: BLE001
+        data = None
+    if not isinstance(data, dict):
+        return web.json_response({"error": "corps JSON attendu"}, status=400)
+    try:
+        return web.json_response(await flotte.appliquer(str(data.get("op") or ""), data, _qui_flotte(request)))
+    except ValueError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+
+
 async def media_list(request):
     config.MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     labels = media.load_labels()
@@ -476,6 +526,7 @@ def build_app(bot):
     app["bot"] = bot
     plateau.attacher(bot)
     ombres.attacher(bot)
+    flotte.attacher(bot)
     app.add_routes([
         web.get("/api/health", health),
         web.get("/api/audit", audit_log),
@@ -498,6 +549,9 @@ def build_app(bot):
         web.post("/api/ombres/ticket", ombres_ticket),
         web.get("/api/ombres/flux", ombres_flux),
         web.post("/api/ombres/op", ombres_op),
+        web.post("/api/flotte/ticket", flotte_ticket),
+        web.get("/api/flotte/flux", flotte_flux),
+        web.post("/api/flotte/op", flotte_op),
         web.post("/api/media/upload", media_upload),
         web.post("/api/media/rename", media_rename),
         web.post("/api/media/delete", media_delete),
