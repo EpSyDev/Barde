@@ -86,6 +86,7 @@
   font-size: 1rem;
 }
 .fl-btn-icone:hover { border-color: var(--fl-laiton); color: var(--fl-laiton-vif); }
+.fl-btn-icone.actif { color: var(--fl-laiton-vif); border-color: var(--fl-laiton); }
 
 .fl-case { display: flex; gap: 0.55rem; align-items: center; margin: 0.6rem 0; cursor: pointer; }
 .fl-case input { accent-color: var(--fl-laiton); width: 1.05rem; height: 1.05rem; }
@@ -302,7 +303,20 @@
 .fl-meteo { display: flex; align-items: center; gap: 0.5rem; }
 .fl-meteo strong { display: flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: 0.95rem; }
 .fl-meteo small { display: block; color: var(--fl-ivoire-doux); font-size: 0.8rem; }
-.fl-capitaines { display: flex; flex-wrap: wrap; gap: 0.35rem; list-style: none; padding: 0; margin: 0 0 0 auto; }
+/* Une seule ligne, défilable s'il y a foule (8 capitaines) : la carte garde sa hauteur. */
+.fl-capitaines {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  list-style: none;
+  padding: 0 0 2px;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.fl-capitaines li { flex-shrink: 0; }
 .fl-capitaines li {
   display: flex;
   align-items: center;
@@ -316,7 +330,7 @@
 }
 .fl-capitaines li.moi { box-shadow: 0 0 0 1px var(--fl-laiton-vif); }
 .fl-capitaines li.hors { opacity: 0.4; text-decoration: line-through; }
-.fl-capitaines .nom { color: var(--fl-ivoire); max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-capitaines .nom { color: var(--fl-ivoire); max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fl-capitaines .nb { display: inline-flex; align-items: center; gap: 2px; color: var(--fl-ivoire-doux); font-size: 0.8rem; }
 .fl-capitaines .verrou { color: var(--fl-ivoire-doux); }
 .fl-capitaines .verrou.ok { color: var(--fl-vert); }
@@ -364,6 +378,41 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 .fl-annonce.sombre { border-color: rgba(212, 80, 60, 0.6); color: var(--fl-sang-doux); top: auto; bottom: 64px; white-space: normal; text-align: center; }
+/* Bannière de phase : entre, se tient, s'efface (fondu seul en animations réduites). */
+.fl-banniere {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.9rem 2.6rem;
+  pointer-events: none;
+  text-align: center;
+  background: linear-gradient(90deg, transparent, rgba(4, 12, 18, 0.88) 18%, rgba(4, 12, 18, 0.88) 82%, transparent);
+  border-top: 1px solid rgba(243, 215, 142, 0.5);
+  border-bottom: 1px solid rgba(243, 215, 142, 0.5);
+  animation: fl-banniere 2.2s ease forwards;
+  z-index: 2;
+}
+.fl-banniere strong { font-family: var(--font-title), serif; font-size: clamp(1.4rem, 3.4vw, 2.3rem); color: var(--fl-laiton-vif); letter-spacing: 0.06em; text-shadow: 0 2px 18px rgba(243, 215, 142, 0.35); }
+.fl-banniere span { color: var(--fl-ivoire); font-size: 0.98rem; }
+.fl-banniere.breve { top: 9%; padding: 0.5rem 2rem; animation-duration: 1.5s; }
+.fl-banniere.breve strong { font-size: clamp(1.1rem, 2.4vw, 1.6rem); }
+@keyframes fl-banniere {
+  0% { opacity: 0; transform: translate(-50%, -50%) scaleX(0.6); letter-spacing: 0.3em; }
+  15% { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -58%); }
+}
+.fl-volumes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 0.2rem 0 0.4rem 1.6rem; }
+.fl-volumes label { display: grid; gap: 0.2rem; font-size: 0.88rem; color: var(--fl-ivoire-doux); }
+.fl-volumes input { accent-color: var(--fl-laiton); }
+.fl-fin.perdu .fl-fin-carte { border-color: rgba(212, 80, 60, 0.55); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 6px rgba(212, 80, 60, 0.08); }
+.fl-fin.perdu h1 { color: #e9c6b8; }
+.fl-fin.gagne .fl-fin-pavillons svg { animation: fl-flotte 3s ease-in-out infinite; transform-origin: 10% 90%; }
+@keyframes fl-flotte { 50% { transform: rotate(-4deg) translateY(-3px); } }
 .fl-scene .fl-refus { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); max-width: 90%; z-index: 3; }
 
 .fl-panneau {
@@ -528,7 +577,7 @@
   .fl-jeu { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 62dvh auto auto; height: auto; }
   .fl-panneau { grid-column: 1; grid-row: 3; border-left: 0; border-top: 1px solid var(--fl-bord); }
   .fl-journal { grid-column: 1; grid-row: 4; max-height: 40dvh; }
-  .fl-capitaines { margin-left: 0; width: 100%; }
+  .fl-capitaines { order: 5; flex-basis: 100%; justify-content: flex-start; }
   .fl-pavillons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
@@ -540,4 +589,9 @@
 @media (prefers-reduced-motion: reduce) {
   .fl-boussole { animation-duration: 10s; }
   .fl-fin, .fl-voile { animation: none; }
+  .fl-banniere { animation: fl-fondu-banniere 1.4s ease forwards; }
+  .fl-fin.gagne .fl-fin-pavillons svg { animation: none; }
 }
+.flotte.reduit .fl-banniere { animation: fl-fondu-banniere 1.4s ease forwards; }
+.flotte.reduit .fl-fin, .flotte.reduit .fl-voile, .flotte.reduit .fl-fin.gagne .fl-fin-pavillons svg { animation: none; }
+@keyframes fl-fondu-banniere { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }

@@ -55,6 +55,8 @@ function hache(c: number, r: number, k: number) {
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+/** Force de la mer selon le temps (houle, écume). */
+const FORCE: Record<string, number> = { calme: 0.2, brise: 0.55, vent_fort: 0.85, brouillard: 0.3, tempete: 1 };
 const doux = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 // ─────────────────────────── Scène ───────────────────────────
@@ -81,7 +83,7 @@ type Piste = { proto: Navire; chemin: Cell[]; entre: boolean; sort: boolean };
 type Effet = {
   type: "tir" | "choc" | "recif" | "reparation" | "coule";
   t: number; de?: Cell | null; vers?: Cell | null; touche?: boolean | null; critique?: boolean | null;
-  degats?: number | null; texte?: string; graine: number;
+  degats?: number | null; texte?: string; graine: number; rang?: number;
 };
 
 export class Animation {
@@ -90,7 +92,10 @@ export class Animation {
   effets: Effet[] = [];
   coules = new Map<string, { proto: Navire; t: number }>();
   tMouv = 0;
+  vol = 0;
   duree = 0;
+  /** Cases où il se passe quelque chose (pour « suivre l'action »). */
+  cases: Cell[] = [];
 
   constructor(m: Manche, connus: Map<string, Navire>, reduit: boolean, maintenant: number) {
     this.t0 = maintenant;
@@ -98,6 +103,7 @@ export class Animation {
     for (const e of m.evts) if (e.t === "mouv") maxPas = Math.max(maxPas, e.chemin.length - 1);
     this.tMouv = reduit ? 0 : Math.min(2.6, 0.42 * maxPas);
     const vol = reduit ? 0 : 0.6;
+    this.vol = vol;
     let t = this.tMouv + (maxPas ? 0.25 : 0);
     let graine = m.manche * 7919;
     const proto = (id: string, de?: Partial<Navire>): Navire | null => {
@@ -131,6 +137,16 @@ export class Animation {
     }
     this.duree = Math.max(tCoule + 1.6, reduit ? 2.6 : 0);
     for (const ef of this.effets) if (ef.type === "reparation") ef.t = this.duree - 1.4;
+    for (const ef of this.effets) for (const c of [ef.de, ef.vers]) if (c) this.cases.push(c);
+    // Plusieurs effets sur une même case : leurs étiquettes s'empilent au lieu de se chevaucher.
+    const parCase = new Map<string, number>();
+    for (const ef of this.effets) {
+      if (!ef.vers) continue;
+      const k = cle(ef.vers);
+      ef.rang = parCase.get(k) ?? 0;
+      parCase.set(k, ef.rang + 1);
+    }
+    for (const p of this.pistes.values()) this.cases.push(...p.chemin);
   }
 
   /** Position animée d'un navire (null = pas d'animation pour lui). */
@@ -173,6 +189,8 @@ export class Rendu {
   cam = { x: 0, y: 0, zoom: 30 };
   private ajuste = false;
   private focus: Cell[] | null = null;
+  private viser: { x: number; y: number; zoom: number } | null = null;
+  private dernier = 0;
 
   constructor(private toile: HTMLCanvasElement) {
     const ctx = toile.getContext("2d");
@@ -207,8 +225,20 @@ export class Rendu {
     }
   }
 
-  jouer(m: Manche, connus: Map<string, Navire>) {
+  jouer(m: Manche, connus: Map<string, Navire>): Animation {
     this.anim = new Animation(m, connus, !!this.scene?.reduit, performance.now() / 1000);
+    return this.anim;
+  }
+
+  /** Recadrage doux sur un ensemble de cases (sans jamais zoomer plus près qu'avant). */
+  cadrerSur(cases: Cell[]) {
+    if (!cases.length) return;
+    const pts = cases.map(centre);
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs) + 5, h = Math.max(...ys) - Math.min(...ys) + 5;
+    const zoom = Math.max(this.zoomMin(), Math.min(this.cam.zoom, this.larg / w, this.haut / h));
+    this.viser = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, zoom };
+    if (this.scene?.reduit) { this.cam = { ...this.viser }; this.viser = null; this.borner(); }
   }
 
   // ── caméra ──
@@ -241,14 +271,16 @@ export class Rendu {
     if (premier && this.ajuste) this.ajuster();
   }
 
-  centrerSur(cell: Cell) {
+  centrerSur(cell: Cell, doux = true) {
     const [x, y] = centre(cell);
+    if (doux && !this.scene?.reduit) { this.viser = { x, y, zoom: this.cam.zoom }; return; }
     this.cam.x = x;
     this.cam.y = y;
     this.borner();
   }
 
   zoomer(facteur: number, sx = this.larg / 2, sy = this.haut / 2) {
+    this.viser = null;                      // le joueur reprend la main
     const [wx, wy] = this.versMonde(sx, sy);
     this.cam.zoom = Math.max(this.zoomMin(), Math.min(110, this.cam.zoom * facteur));
     const [nx, ny] = this.versMonde(sx, sy);
@@ -258,6 +290,7 @@ export class Rendu {
   }
 
   deplacer(dx: number, dy: number) {
+    this.viser = null;
     this.cam.x -= dx / this.cam.zoom;
     this.cam.y -= dy / this.cam.zoom;
     this.borner();
@@ -290,6 +323,15 @@ export class Rendu {
     this.raf = requestAnimationFrame(this.boucle);
     if (!this.scene || document.hidden) return;
     if (this.scene.qualite === "basse" && Math.floor(ms / 16.7) % 2) return;   // ~30 i/s
+    const dt = Math.min(0.1, (ms - this.dernier) / 1000);
+    this.dernier = ms;
+    if (this.viser) {
+      const k = 1 - Math.exp(-dt * 4);
+      this.cam.x += (this.viser.x - this.cam.x) * k;
+      this.cam.y += (this.viser.y - this.cam.y) * k;
+      this.cam.zoom += (this.viser.zoom - this.cam.zoom) * k;
+      if (Math.hypot(this.viser.x - this.cam.x, this.viser.y - this.cam.y) < 0.01 && Math.abs(this.viser.zoom - this.cam.zoom) < 0.05) this.viser = null;
+    }
     try {
       this.dessiner(ms / 1000);
     } catch (e) {
@@ -315,12 +357,16 @@ export class Rendu {
     const cache = this.terrain();
     ctx.drawImage(cache, -3, -3, w + 6, h + 6);
     if (s.champ) this.dessinerBrume(t);
+    this.dessinerTemps(t);
     this.dessinerPlanification(t);
     const ta = this.anim ? performance.now() / 1000 - this.anim.t0 : 0;
     if (this.anim && this.anim.fini(ta) && ta > this.anim.duree + 0.2) this.anim = null;
     this.dessinerFantomes(t);
     this.dessinerNavires(t, ta);
     if (this.anim) this.dessinerEffets(ta);
+    this.dessinerCiel(t);
+    ctx.setTransform(this.dpr * this.cam.zoom, 0, 0, this.dpr * this.cam.zoom,
+      this.dpr * (this.larg / 2 - this.cam.x * this.cam.zoom), this.dpr * (this.haut / 2 - this.cam.y * this.cam.zoom));
     if (s.survol) {
       const [x, y] = centre(s.survol);
       ctx.beginPath();
@@ -331,7 +377,7 @@ export class Rendu {
     }
   }
 
-  // ── mer (vivante en phase 4 : houle procédurale) ──
+  // ── mer : dégradé, reflets, houle procédurale qui suit le vent et la météo ──
   private dessinerMer(t: number) {
     const ctx = this.ctx, s = this.scene!;
     const [w, h] = tailleMonde(s.carte);
@@ -357,6 +403,112 @@ export class Rendu {
       ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
     }
     ctx.restore();
+    this.dessinerHoule(t, w, h);
+  }
+
+  private dessinerHoule(t: number, w: number, h: number) {
+    const ctx = this.ctx, s = this.scene!;
+    const temps = s.meteo?.temps ?? "brise";
+    const force = FORCE[temps];
+    const fige = s.reduit;
+    const n = Math.min(320, Math.round((s.qualite === "haute" ? 1 : 0.4) * (0.45 + force * 0.75) * w * h * 0.42));
+    const dir = s.meteo ? angleCap(s.meteo.vent) : 0;
+    const ux = Math.cos(dir), uy = Math.sin(dir), px = -uy, py = ux;
+    const vit = 0.12 + force * 0.32;
+    const W = w + 6, H = h + 6;
+    // Vaguelettes regroupées par palier d'opacité : une poignée de tracés au lieu de centaines.
+    const traits = new Map<number, Path2D>(), ecume = new Map<number, Path2D>();
+    const palier = (m: Map<number, Path2D>, a: number) => {
+      const k = Math.round(a * 50);
+      let p = m.get(k);
+      if (!p) { p = new Path2D(); m.set(k, p); }
+      return p;
+    };
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineWidth = 0.035;
+    for (let i = 0; i < n; i++) {
+      const per = 4.5 + hache(i, 9, 3) * 4;
+      const vie = fige ? 0.5 : (t / per + hache(i, 10, 4)) % 1;
+      const derive = fige ? 0 : t * vit * (0.7 + hache(i, 11, 5) * 0.6);
+      const x = (((hache(i, 7, 1) * W + ux * derive) % W) + W) % W - 3;
+      const y = (((hache(i, 8, 2) * H + uy * derive) % H) + H) % H - 3;
+      const a = Math.sin(Math.PI * vie) * (0.09 + force * 0.17);
+      if (a < 0.01) continue;
+      const l = (0.3 + hache(i, 12, 6) * 0.45 + force * 0.3) / 2;
+      const p = palier(traits, a);
+      p.moveTo(x - px * l, y - py * l);
+      p.quadraticCurveTo(x + ux * 0.14, y + uy * 0.14, x + px * l, y + py * l);
+      if (force > 0.8 && hache(i, 13, 7) > 0.62) {            // moutons d'écume par gros temps
+        const e = palier(ecume, Math.min(1, a * 1.6));
+        e.moveTo(x + ux * 0.1 + 0.06, y + uy * 0.1);
+        e.arc(x + ux * 0.1, y + uy * 0.1, 0.06, 0, 7);
+      }
+    }
+    for (const [k, p] of traits) {
+      ctx.strokeStyle = `rgba(185, 228, 245, ${k / 50})`;
+      ctx.stroke(p);
+    }
+    for (const [k, p] of ecume) {
+      ctx.fillStyle = `rgba(240, 252, 255, ${k / 50})`;
+      ctx.fill(p);
+    }
+    ctx.restore();
+  }
+
+  // ── météo : brume (sous les navires, sans les masquer), ciel d'orage ──
+  private dessinerTemps(t: number) {
+    const ctx = this.ctx, s = this.scene!;
+    const temps = s.meteo?.temps;
+    const [w, h] = tailleMonde(s.carte);
+    if (temps === "tempete") {
+      ctx.fillStyle = "rgba(4, 8, 24, 0.24)";
+      ctx.fillRect(-3, -3, w + 6, h + 6);
+    }
+    if (temps === "brouillard") {
+      const dir = angleCap(s.meteo!.vent);
+      const n = s.qualite === "haute" ? 11 : 5;
+      for (let i = 0; i < n; i++) {
+        const d = s.reduit ? 0 : t * 0.05 * (0.6 + hache(i, 3, 3));
+        const x = (((hache(i, 1, 21) * (w + 10) + Math.cos(dir) * d) % (w + 10)) + w + 10) % (w + 10) - 5;
+        const y = (((hache(i, 2, 22) * (h + 10) + Math.sin(dir) * d) % (h + 10)) + h + 10) % (h + 10) - 5;
+        const r = 4 + hache(i, 4, 23) * 4;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, "rgba(205, 218, 228, 0.17)");
+        g.addColorStop(1, "rgba(205, 218, 228, 0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+      }
+    }
+  }
+
+  // ── par-dessus tout, en coordonnées écran : pluie et éclairs de tempête ──
+  private dessinerCiel(t: number) {
+    const ctx = this.ctx, s = this.scene!;
+    if (s.meteo?.temps !== "tempete" || s.reduit) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const dir = angleCap(s.meteo.vent);
+    const dx = Math.cos(dir) * 0.35;
+    const n = s.qualite === "haute" ? 120 : 45;
+    ctx.strokeStyle = "rgba(200, 220, 240, 0.2)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const v = 700 + hache(i, 5, 31) * 500;
+      const y = ((hache(i, 6, 32) * this.haut + t * v) % (this.haut + 40)) - 20;
+      const x = ((hache(i, 7, 33) * this.larg + t * v * dx) % this.larg + this.larg) % this.larg;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + dx * 16, y + 16);
+    }
+    ctx.stroke();
+    if (s.qualite === "haute") {                  // éclair rare : un double flash bref toutes les ~11 s
+      const ph = t % 11.3;
+      const a = ph < 0.12 ? 0.16 * (1 - ph / 0.12) : ph > 0.22 && ph < 0.3 ? 0.1 : 0;
+      if (a > 0) {
+        ctx.fillStyle = `rgba(225, 235, 255, ${a})`;
+        ctx.fillRect(0, 0, this.larg, this.haut);
+      }
+    }
   }
 
   // ── terrain (peint une fois) ──
@@ -704,6 +856,7 @@ export class Rendu {
       }
     }
     liste.sort((a, b) => a.y - b.y);
+    if (anim && ta < anim.tMouv + 0.8 && !s.reduit) this.dessinerSillages(anim, ta);
     for (const e of liste) {
       const mien = e.n.uid === s.moi;
       this.navire(e.n.classe, e.x, e.y, e.angle, {
@@ -711,7 +864,65 @@ export class Rendu {
         selection: e.n.id === s.selection, coule: e.coule, graine: e.n.id.length + Number(e.n.id.slice(1)),
       });
       if (!e.coule && e.alpha > 0.5) this.badge(e.n, e.x, e.y);
+      if (!e.coule && e.n.max && e.n.coque / e.n.max <= 0.5) this.fumee(e.x, e.y, t, e.n.coque / e.n.max, e.alpha, e.n.id);
     }
+  }
+
+  /** Écume dans le sillage des navires en mouvement. */
+  private dessinerSillages(anim: Animation, ta: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = "round";
+    for (const id of anim.pistes.keys()) {
+      const pts: [number, number, number][] = [];
+      for (let k = 0; k < 10; k++) {
+        const p = anim.position(id, Math.max(0, ta - k * 0.07));
+        if (p) pts.push([p.cell[0], p.cell[1], p.alpha]);
+      }
+      for (let k = 1; k < pts.length; k++) {
+        const [x1, y1, a1] = pts[k - 1], [x2, y2] = pts[k];
+        if (Math.hypot(x2 - x1, y2 - y1) < 0.005) continue;
+        ctx.strokeStyle = `rgba(225, 246, 255, ${(0.4 * (1 - k / pts.length) * a1).toFixed(3)})`;
+        ctx.lineWidth = 0.22 * (1 - k / pts.length) + 0.04;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Fumée (et lueur de feu sous 25 % de coque) au-dessus d'un navire touché. */
+  private fumee(x: number, y: number, t: number, ratio: number, alpha: number, id: string) {
+    const ctx = this.ctx, s = this.scene!;
+    const g = hache(id.length, Number(id.slice(1)) || 1, 41);
+    const dir = s.meteo ? angleCap(s.meteo.vent) : 0;
+    const grave = ratio <= 0.25;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (grave) {
+      const lueur = 0.55 + 0.25 * Math.sin(t * 2.3 + g * 9);      // lente : pas de stroboscope
+      const lg = ctx.createRadialGradient(x - 0.1, y, 0, x - 0.1, y, 0.35);
+      lg.addColorStop(0, `rgba(255, 170, 60, ${0.55 * lueur})`);
+      lg.addColorStop(1, "rgba(255, 90, 20, 0)");
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(x - 0.1, y, 0.35, 0, 7);
+      ctx.fill();
+    }
+    const n = s.qualite === "haute" ? (grave ? 5 : 3) : 2;
+    for (let k = 0; k < n; k++) {
+      const ph = s.reduit ? 0.35 + k * 0.15 : ((t + k * (2.6 / n) + g * 3) % 2.6) / 2.6;
+      const px = x - 0.1 + Math.cos(dir) * ph * 0.8;
+      const py = y - 0.15 - ph * 0.55 + Math.sin(dir) * ph * 0.3;
+      const r = 0.1 + ph * 0.32;
+      ctx.fillStyle = grave ? `rgba(38, 32, 28, ${(0.42 * (1 - ph)).toFixed(3)})` : `rgba(130, 132, 135, ${(0.3 * (1 - ph)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, 7);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Emblème du royaume (toujours droit) et jauge de coque, sous le navire. */
@@ -920,6 +1131,14 @@ export class Rendu {
           ctx.arc(de[0], de[1], 0.7, 0, 7);
           ctx.fill();
         }
+        if (de && dt < 1.4 && !reduit) {             // fumée de la bordée, qui se dissipe sous le vent
+          const k = dt / 1.4;
+          const dir = this.scene?.meteo ? angleCap(this.scene.meteo.vent) : 0;
+          ctx.fillStyle = `rgba(200, 200, 205, ${(0.35 * (1 - k)).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(de[0] + Math.cos(dir) * k * 0.6, de[1] + Math.sin(dir) * k * 0.6 - k * 0.2, 0.18 + k * 0.4, 0, 7);
+          ctx.fill();
+        }
         if (de && vers && dt < vol) {                  // boulet en cloche (ombre + projectile)
           const k = dt / vol;
           const x = lerp(de[0], vers[0], k), y = lerp(de[1], vers[1], k);
@@ -948,6 +1167,18 @@ export class Rendu {
               ctx.beginPath();
               ctx.arc(x, y, r, 0, 7);
               ctx.fill();
+              if (!reduit) {                              // éclats de bois
+                for (let i = 0; i < 7; i++) {
+                  const a = hache(e.graine, i, 51) * Math.PI * 2, v = 0.6 + hache(e.graine, i, 52) * 0.9;
+                  const d = v * doux(Math.min(1, k * 1.6));
+                  ctx.save();
+                  ctx.translate(x + Math.cos(a) * d, y + Math.sin(a) * d);
+                  ctx.rotate(a + k * 6);
+                  ctx.fillStyle = `rgba(110, 70, 35, ${(1 - k).toFixed(3)})`;
+                  ctx.fillRect(-0.05, -0.015, 0.1, 0.03);
+                  ctx.restore();
+                }
+              }
             } else if (e.touche === false) {
               ctx.strokeStyle = `rgba(235, 250, 255, ${0.8 * (1 - k)})`;
               ctx.lineWidth = 0.05;
@@ -963,12 +1194,12 @@ export class Rendu {
           const kt = (dt - vol) / 1.6;
           const texte = e.touche ? (e.critique ? `−${e.degats} coup au but !` : `−${e.degats}`)
             : e.touche === false ? "manqué" : "";
-          if (texte) this.etiquette(texte, vers[0], vers[1] - 0.6 - (reduit ? 0 : kt * 0.6),
-            e.touche ? "#ffb4a1" : "#d6ecf5", 1 - Math.max(0, kt - 0.6) / 0.4, e.critique ? 0.42 : 0.34);
+          if (texte) this.etiquette(texte, vers[0], vers[1] - 0.65 - (e.rang ?? 0) * 0.46 - (reduit ? 0 : kt * 0.5),
+            e.touche ? "#ffb4a1" : "#d6ecf5", 1 - Math.max(0, kt - 0.6) / 0.4, e.critique ? 0.46 : 0.4);
         }
       } else if (vers && dt < 1.6) {
         const k = dt / 1.6;
-        const y = vers[1] - 0.6 - (reduit ? 0 : k * 0.5);
+        const y = vers[1] - 0.65 - (e.rang ?? 0) * 0.46 - (reduit ? 0 : k * 0.5);
         const fondu = 1 - Math.max(0, k - 0.6) / 0.4;
         if (e.type === "choc") this.etiquette(`choc −${e.degats ?? 1}`, vers[0], y, "#ffcf9e", fondu);
         if (e.type === "recif") this.etiquette(`récif −${e.degats ?? 1}`, vers[0], y, "#cfe8ef", fondu);
@@ -986,11 +1217,11 @@ export class Rendu {
     }
   }
 
-  private etiquette(texte: string, x: number, y: number, couleur: string, alpha = 1, taille = 0.3) {
+  private etiquette(texte: string, x: number, y: number, couleur: string, alpha = 1, taille = 0.36) {
     const ctx = this.ctx;
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-    ctx.font = `600 ${taille}px ${this.police}`;
+    ctx.font = `700 ${taille}px ${this.police}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.lineWidth = 0.08;

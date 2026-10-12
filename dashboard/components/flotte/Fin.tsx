@@ -25,7 +25,7 @@ export default function Fin({ vue, op, surQuai }: {
   };
 
   return (
-    <div className={`fl-fin${gagne ? " gagne" : ""}`} role="dialog" aria-modal="true" aria-labelledby="fl-fin-titre">
+    <div className={`fl-fin${gagne ? " gagne" : vue.moi && vue.joueurs.some((j) => j.uid === vue.moi) ? " perdu" : ""}`} role="dialog" aria-modal="true" aria-labelledby="fl-fin-titre">
       <div className="fl-fin-carte">
         <p className="fl-surtitre">{RAISONS_FIN[fin.raison]} · {fin.manches} manche{fin.manches > 1 ? "s" : ""} · {formatDuree(fin.duree)}</p>
         <h1 id="fl-fin-titre">{titre}</h1>

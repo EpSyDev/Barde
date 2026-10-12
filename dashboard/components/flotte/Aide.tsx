@@ -110,6 +110,26 @@ export default function Aide({ regles, reglages, changer, fermer }: {
             <span>Animations réduites (résolution sans mouvements, résultats affichés directement)</span>
           </label>
           <label className="fl-case">
+            <input type="checkbox" checked={reglages.suivre} onChange={(e) => changer({ ...reglages, suivre: e.target.checked })} />
+            <span>Suivre l'action : recadrer doucement la vue sur les combats de chaque manche</span>
+          </label>
+          <label className="fl-case">
+            <input type="checkbox" checked={reglages.son} onChange={(e) => changer({ ...reglages, son: e.target.checked })} />
+            <span>Sons (bruitages et houle, synthétisés — aucun fichier)</span>
+          </label>
+          <div className="fl-volumes">
+            <label>
+              <span>Bruitages</span>
+              <input type="range" min={0} max={1} step={0.05} value={reglages.volEffets} disabled={!reglages.son}
+                onChange={(e) => changer({ ...reglages, volEffets: Number(e.target.value) })} />
+            </label>
+            <label>
+              <span>Houle</span>
+              <input type="range" min={0} max={1} step={0.05} value={reglages.volFond} disabled={!reglages.son}
+                onChange={(e) => changer({ ...reglages, volFond: Number(e.target.value) })} />
+            </label>
+          </div>
+          <label className="fl-case">
             <input type="checkbox" checked={reglages.qualite === "basse"} onChange={(e) => changer({ ...reglages, qualite: e.target.checked ? "basse" : "haute" })} />
             <span>Qualité visuelle réduite (petites machines, téléphones)</span>
           </label>

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { VueSalon } from "@/lib/flotte";
 import Aide from "./Aide";
-import Bataille, { type Reglages } from "./Bataille";
+import Bataille, { REGLAGES_DEFAUT, type Reglages } from "./Bataille";
 import Fin from "./Fin";
 import Quai from "./Quai";
 import Salon from "./Salon";
@@ -16,7 +16,7 @@ const CLE_REGLAGES = "flotte:reglages";
 
 function lireReglages(): Reglages {
   const reduit = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  const defaut: Reglages = { reduit: !!reduit, qualite: "haute", son: false };
+  const defaut: Reglages = { ...REGLAGES_DEFAUT, reduit: !!reduit };
   try {
     return { ...defaut, ...JSON.parse(localStorage.getItem(CLE_REGLAGES) || "{}") };
   } catch {
@@ -99,7 +99,7 @@ export default function Flotte() {
   } else {
     contenu = (
       <>
-        <Bataille vue={vue} op={op} maintenant={maintenant} reglages={reglages}
+        <Bataille vue={vue} op={op} maintenant={maintenant} reglages={reglages} changerReglages={changerReglages}
           surAide={() => setAide(true)} surQuitter={demanderQuitter} />
         {vue.phase === "fin" && finPrete && !voirCarte && <Fin vue={vue} op={op} surQuai={() => aller(null)} />}
         {vue.phase === "fin" && finPrete && (
@@ -112,7 +112,7 @@ export default function Flotte() {
   }
 
   return (
-    <div className="flotte">
+    <div className={`flotte${reglages.reduit ? " reduit" : ""}`}>
       {liaison === "perdue" && vue && <div className="fl-liaison" role="status">Liaison perdue avec la flotte — reconnexion…</div>}
       {message && <div className="fl-message-flottant" role="status">{message}</div>}
       {contenu}

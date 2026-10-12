@@ -17,18 +17,24 @@ import { texteEvt, type Annuaire } from "./journal";
 import { PictoTemps, RoseDesVents } from "./Meteo";
 import type { Rendu, Scene } from "./rendu";
 import type { Reponse } from "./useFlotte";
+import { FlotteSon, type BruitFlotte } from "@/lib/flotte-son";
 
-export type Reglages = { reduit: boolean; qualite: "haute" | "basse"; son: boolean };
+export type Reglages = {
+  reduit: boolean; qualite: "haute" | "basse"; son: boolean; volEffets: number; volFond: number; suivre: boolean;
+};
+export const REGLAGES_DEFAUT: Reglages = { reduit: false, qualite: "haute", son: false, volEffets: 0.6, volFond: 0.3, suivre: false };
+const FORCE_MER: Record<string, number> = { calme: 0.1, brise: 0.4, vent_fort: 0.75, brouillard: 0.25, tempete: 1 };
 
 // Touches physiques (event.code) des six directions, autour de S : même place sur tous les claviers.
 const TOUCHES: Record<string, number> = { KeyD: 0, KeyE: 1, KeyW: 2, KeyA: 3, KeyZ: 4, KeyX: 5 };
 const AZERTY = ["D", "E", "Z", "Q", "W", "X"];
 
-export default function Bataille({ vue, op, maintenant, reglages, surAide, surQuitter }: {
+export default function Bataille({ vue, op, maintenant, reglages, changerReglages, surAide, surQuitter }: {
   vue: VueSalon;
   op: (c: Record<string, unknown>) => Promise<Reponse>;
   maintenant: () => number;
   reglages: Reglages;
+  changerReglages: (r: Reglages) => void;
   surAide: () => void;
   surQuitter: () => void;
 }) {
@@ -46,6 +52,9 @@ export default function Bataille({ vue, op, maintenant, reglages, surAide, surQu
   const anime = useRef(vue.historique.at(-1)?.manche ?? 0);
   const connus = useRef(new Map<string, Navire>());
   const annuaire = useRef<Annuaire>(new Map());
+  const son = useRef<FlotteSon | null>(null);
+  const [banniere, setBanniere] = useState<{ titre: string; sous: string; cle: number; breve?: boolean } | null>(null);
+  const finAnim = useRef(0);
 
   const moi = vue.moi;
   const joueur = vue.joueurs.find((j) => j.uid === moi) ?? null;
@@ -73,20 +82,82 @@ export default function Bataille({ vue, op, maintenant, reglages, surAide, surQu
     if (!local.current) setBrouillon(vue.ordres);
   }, [vue.manche, vue.ordres]);
 
-  // Rejouer la manche qui vient d'être résolue.
+  // ── son ──
+  const bruit = useCallback((b: BruitFlotte, delai = 0) => {
+    if (!reglages.son) return;
+    son.current ??= new FlotteSon();
+    son.current.jouer(b, delai);
+  }, [reglages.son]);
+  useEffect(() => {
+    if (!reglages.son) { son.current?.ambiance(false); return; }
+    son.current ??= new FlotteSon();
+    son.current.volumes(reglages.volEffets, reglages.volFond);
+    son.current.ambiance(true, FORCE_MER[meteo?.temps ?? "brise"]);
+  }, [reglages.son, reglages.volEffets, reglages.volFond, meteo?.temps]);
+  useEffect(() => () => son.current?.fermer(), []);
+
+  // Rejouer la manche qui vient d'être résolue (sons calés sur l'animation).
   useEffect(() => {
     const der = vue.historique.at(-1);
     if (der && der.manche > anime.current) {
       anime.current = der.manche;
-      rendu.current?.jouer(der, connus.current);
+      const a = rendu.current?.jouer(der, connus.current);
+      if (a) {
+        finAnim.current = a.duree;
+        for (const e of a.effets) {
+          if (e.type === "tir") {
+            if (e.de) bruit("canon", e.t);
+            if (e.touche) bruit("impact", e.t + a.vol);
+            else if (e.touche === false) bruit("gerbe", e.t + a.vol);
+          } else if (e.type === "choc") bruit("choc", e.t);
+          else if (e.type === "coule") bruit("naufrage", e.t);
+        }
+        if (reglages.suivre) rendu.current?.cadrerSur(a.cases);
+      }
     }
     connus.current = new Map(vue.navires.map((n) => [n.id, n]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vue.historique, vue.navires]);
 
+  // Bannières de phase, cloche de quart, fanfare de fin.
+  const phasePrec = useRef(vue.phase);
   useEffect(() => {
-    const t = setInterval(() => tic((x) => x + 1), 250);
+    const avant = phasePrec.current;
+    phasePrec.current = vue.phase;
+    if (avant === vue.phase) return;
+    const montrer = (titre: string, sous: string, breve = false) => setBanniere({ titre, sous, cle: Date.now(), breve });
+    if (vue.phase === "preparation") montrer("Les flottes se déploient", "Repère tes navires et le vent");
+    else if (vue.phase === "resolution") montrer("Feu à volonté !", `La manche ${vue.manche - 1} se joue`, true);
+    else if (vue.phase === "planification") {
+      montrer(`Manche ${vue.manche}`, enLice ? "À vos ordres, capitaine" : "Les capitaines délibèrent");
+      bruit("cloche");
+    } else if (vue.phase === "fin" && moi && vue.fin) {
+      bruit(vue.fin.gagnants.includes(moi) ? "victoire" : "defaite", finAnim.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vue.phase, vue.manche]);
+  useEffect(() => {
+    if (!banniere) return;
+    const t = setTimeout(() => setBanniere(null), reglages.reduit ? 1400 : banniere.breve ? 1500 : 2200);
+    return () => clearTimeout(t);
+  }, [banniere, reglages.reduit]);
+  const verrouPrec = useRef(false);
+  useEffect(() => {
+    if (joueur?.verrou && !verrouPrec.current) bruit("verrou");
+    verrouPrec.current = !!joueur?.verrou;
+  }, [joueur?.verrou, bruit]);
+
+  // Sablier : rafraîchit le chrono, et fait tiquer les 5 dernières secondes si l'on n'a pas fini.
+  const dernierTic = useRef(0);
+  useEffect(() => {
+    const t = setInterval(() => {
+      tic((x) => x + 1);
+      if (vue.phase !== "planification" || !enLice || joueur?.verrou || !vue.echeance) return;
+      const r = Math.ceil(vue.echeance - maintenant());
+      if (r > 0 && r <= 5 && r !== dernierTic.current) { dernierTic.current = r; bruit("tic"); }
+    }, 250);
     return () => clearInterval(t);
-  }, []);
+  }, [vue.phase, vue.echeance, enLice, joueur?.verrou, maintenant, bruit]);
 
   useEffect(() => {
     if (!refus) return;
@@ -180,7 +251,7 @@ export default function Bataille({ vue, op, maintenant, reglages, surAide, surQu
       if (e.key === "Enter" && planif && !cible.closest("button")) { verrouiller(); e.preventDefault(); return; }
       if (e.key === "+" || e.key === "=") { rendu.current?.zoomer(1.2); return; }
       if (e.key === "-") { rendu.current?.zoomer(1 / 1.2); return; }
-      if (e.code === "KeyC" && mien[0]) { rendu.current?.centrerSur(mien[0].pos); return; }
+      if (e.code === "KeyC" && mien[0]) { rendu.current?.centrerSur((sel ?? mien[0]).pos); return; }
       if (e.key.startsWith("Arrow")) {
         const d = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key];
         if (d) { rendu.current?.deplacer(d[0], d[1]); e.preventDefault(); }
@@ -323,6 +394,13 @@ export default function Bataille({ vue, op, maintenant, reglages, surAide, surQu
           ))}
         </ul>
         <div className="fl-outils">
+          <button className={`fl-btn-icone${reglages.son ? " actif" : ""}`} onClick={() => changerReglages({ ...reglages, son: !reglages.son })}
+            aria-pressed={reglages.son} aria-label={reglages.son ? "Couper le son" : "Activer le son"} title={reglages.son ? "Son activé" : "Son coupé"}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+              {reglages.son ? <path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" /> : <path d="m16 9.5 5 5m0-5-5 5" />}
+            </svg>
+          </button>
           <button className="fl-btn-icone" onClick={surAide} aria-label="Aide et règles" title="Aide (règles, touches)">?</button>
           <button className="fl-btn fl-btn-petit" onClick={surQuitter} aria-label="Quitter la partie">Quitter</button>
         </div>
@@ -338,6 +416,12 @@ export default function Bataille({ vue, op, maintenant, reglages, surAide, surQu
           {mien[0] && <button onClick={() => rendu.current?.centrerSur((sel ?? mien[0]).pos)} aria-label="Recentrer sur ma flotte" title="Ma flotte (C)">⌖</button>}
         </div>
         {survolInfo && <div className="fl-survol">{survolInfo}</div>}
+        {banniere && (
+          <div key={banniere.cle} className={`fl-banniere${banniere.breve ? " breve" : ""}`} aria-live="polite">
+            <strong>{banniere.titre}</strong>
+            <span>{banniere.sous}</span>
+          </div>
+        )}
         {vue.phase === "preparation" && <div className="fl-annonce">Les flottes se déploient… <strong>{Math.ceil(reste)}</strong></div>}
         {refus && <div className="fl-refus" role="alert">{refus}</div>}
         {!enLice && joueur && vue.phase !== "fin" && (
