@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VueQuai, VueSalon } from "@/lib/flotte";
 
-type Urls = { flux_url: string; op_url: string };
+// Le ticket voyage en en-tête pour les gestes ; il n'est dans l'URL que pour le flux SSE.
+type Urls = { flux_url: string; op_url: string; ticket: string };
 export type Liaison = "connexion" | "direct" | "perdue";
 export type Reponse = { ok: boolean; salon?: string; code?: string; erreur?: string };
 
@@ -86,11 +87,16 @@ export function useFlotte(salon: string | null, surFermeture: () => void) {
     try {
       const u = urls.current ?? (await ticket());
       if (!u) return { ok: false, erreur: "Pas de ticket de capitaine." };
-      let r = await fetch(u.op_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+      const envoyer = (x: Urls) => fetch(x.op_url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Flotte-Ticket": x.ticket },
+        body: JSON.stringify(corps),
+      });
+      let r = await envoyer(u);
       if (r.status === 401) {                       // ticket oublié par le bot : un neuf, et on rejoue
         const n = await ticket();
         if (!n) return { ok: false, erreur: "Session expirée." };
-        r = await fetch(n.op_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+        r = await envoyer(n);
       }
       const d = await r.json().catch(() => ({}));
       return r.ok ? { ok: true, ...d } : { ok: false, erreur: d.error || "Geste refusé." };

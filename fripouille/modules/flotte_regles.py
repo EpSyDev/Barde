@@ -852,8 +852,8 @@ class Partie:
             u = x["uid"]
             vus = [e for e in (self._filtrer(e, u, v_avant[u], v_mid[u]) for e in evts) if e]
             mem = d["memoire"].setdefault(u, {})
-            for e in vus:          # sorti de vue en route : on retient la dernière case aperçue
-                if e["t"] == "mouv" and not e.get("fin_vue", True):
+            for e in vus:          # dernière case aperçue (en route, ou à l'arrivée avant les tirs)
+                if e["t"] == "mouv" and e["chemin"]:
                     mem[e["id"]] = {"pos": e["chemin"][-1], "manche": m}
             hist = d["historique"].setdefault(u, [])
             hist.append({"manche": m, "evts": vus + publics})

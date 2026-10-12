@@ -376,6 +376,44 @@ def test_memoire_derniere_position():
     assert "[11, 4]" not in json.dumps(v) and "[12, 4]" not in json.dumps(v)
 
 
+def test_brouillard_sur_parties_entieres():
+    """À chaque manche de vraies parties, pour chaque capitaine : la vue ne contient que
+    ses navires et ceux qu'il voit, et aucun événement n'associe un navire caché à sa
+    position réelle."""
+    controles = 0
+    for n, g in ((4, 3), (6, 8), (8, 21)):
+        d = R.nouvelle("s", {"uid": "x"}, g, {"manches": 30}, sel=g + 1)
+        p = R.Partie(d)
+        for _ in range(n):
+            p.ajouter_bot()
+        p.lancer(T0)
+        t = T0
+        while d["phase"] != "fin":
+            t += 10
+            p.avancer(t)
+            if d["phase"] != "resolution" or p.duel():
+                continue
+            for j in d["joueurs"]:
+                u = j["uid"]
+                v = R.vue(d, u, t)
+                permis = {x["id"] for x in p.flotte(u)} | {x["id"] for x in p.visibles(u)}
+                assert {x["id"] for x in v["navires"]} <= permis
+                caches = {x["id"]: x["pos"] for x in d["navires"] if x["coule"] is None and x["id"] not in permis}
+                for sid in v["cibles"]:
+                    assert all(c["id"] in permis for c in v["cibles"][sid])
+                for e in (v["historique"][-1]["evts"] if v["historique"] else []):
+                    ids = {e.get(k) for k in ("id", "de", "vers")} | set(e.get("ids", []))
+                    lieux = [e.get(k) for k in ("pos", "pos_de", "pos_vers")] + list(e.get("chemin", [])[-1:])
+                    memoire = d["memoire"].get(u, {})
+                    for sid in ids & set(caches):
+                        if e["t"] == "choc" or caches[sid] not in lieux:
+                            continue          # (un choc se voit à sa case, pas à celle du navire)
+                        # Position actuelle d'un navire caché : seulement si on l'a vue.
+                        assert memoire.get(sid, {}).get("pos") == caches[sid], (e, sid)
+                    controles += 1
+    assert controles > 200
+
+
 # ─────────────────────────── Absences ───────────────────────────
 def test_absent_puis_abandon():
     p = bac(MER, [("a", "fregate", (1, 1)), ("b", "fregate", (10, 7))])

@@ -30,6 +30,16 @@ règle globale "jamais de push automatique") :
    sur push GitHub. Une variable d'env ajoutée dans Vercel après coup demande un redeploy manuel
    (bouton "Redeploy" dans l'UI) pour être prise en compte.
 
+## Guerre des Flottes Royales (`/flotte`)
+
+Bataille navale multijoueur, même pont que les Ombres : moteur pur
+`fripouille/modules/flotte_regles.py`, salons/flux SSE `fripouille/modules/flotte.py`, front
+`dashboard/components/flotte/`. Serveur autoritaire (le client n'envoie que des ordres) et vue
+filtrée par joueur — ne jamais ajouter au flux une donnée qu'un capitaine ne doit pas voir. Le
+miroir TS `dashboard/lib/flotte.ts` doit rester identique aux règles Python (aide au tracé).
+Tests : `fripouille/tests/test_flotte_regles.py`, `test_flotte_api.py`, banc `e2e_flotte/`.
+Doc complète : section dédiée de `dashboard/README.md`.
+
 ## Lien avec le jeu MYRHAVEN
 
 Repo séparé `EpSyDev/myrhaven-point-and-click` (dossier local `MYRHAVEN POINT AND CLIK`, a son

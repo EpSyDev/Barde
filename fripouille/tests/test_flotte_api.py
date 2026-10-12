@@ -8,6 +8,7 @@ temporaire. L'horloge des manches est avancée à la main (``flotte.tic``).
 """
 import asyncio
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -22,7 +23,7 @@ from aiohttp import ClientSession, test_utils  # noqa: E402
 from fripouille import webapi  # noqa: E402
 from fripouille.modules import flotte, flotte_regles as R  # noqa: E402
 
-A, B, INTRUS = "100000000000000001", "100000000000000002", "100000000000000009"
+A, B, C, INTRUS = "100000000000000001", "100000000000000002", "100000000000000003", "100000000000000009"
 JETON = {"X-Api-Token": "jeton-de-test"}
 
 
@@ -39,7 +40,7 @@ class Membre:
 
 
 class Guilde:
-    membres = {int(A): Membre("Anne"), int(B): Membre("Bastien")}
+    membres = {int(A): Membre("Anne"), int(B): Membre("Bastien"), int(C): Membre("Corentin")}
 
     def get_member(self, uid):
         return self.membres.get(uid)
@@ -68,23 +69,33 @@ async def dernier_etat(flux, condition, essais=30):
     raise AssertionError("état attendu jamais reçu")
 
 
+class Capture(logging.Handler):
+    """Garde tout ce qui est journalisé (comme le journal de la VM, au niveau INFO)."""
+    lignes: list = []
+
+    def emit(self, record):
+        self.lignes.append(record.getMessage())
+
+
 async def scenario():
+    logging.basicConfig(level=logging.INFO, handlers=[Capture()], force=True)
     dossier = Path(tempfile.mkdtemp())
     flotte.FICHIER = dossier / "flotte.json"
+    flotte.HISTORIQUE = dossier / "flotte_historique.json"
     flotte._etat = {"salons": {}}
     app = webapi.build_app(FauxBot())
     flotte._taches["horloge"].cancel()          # l'horloge est menée par le test
-    serveur = test_utils.TestServer(app)
+    serveur = test_utils.TestServer(app)            # journal d'accès aiohttp actif, comme en prod
     await serveur.start_server()
     base = str(serveur.make_url(""))
-    async with ClientSession() as http_a, ClientSession() as http_b:
+    async with ClientSession() as http_a, ClientSession() as http_b, ClientSession() as http_c:
         async def ticket(http, uid, role="convive"):
             r = await http.post(base + "/api/flotte/ticket", headers=JETON,
                                 json={"uid": uid, "role": role, "nom": "x"})
             return r.status, await r.json()
 
         async def op(http, t, **corps):
-            r = await http.post(base + "/api/flotte/op?ticket=" + t, json=corps)
+            r = await http.post(base + "/api/flotte/op", json=corps, headers={"X-Flotte-Ticket": t})
             return r.status, await r.json()
 
         # Identités : membre du serveur obligatoire, ticket obligatoire pour agir.
@@ -96,7 +107,10 @@ async def scenario():
         assert r.status == 403                    # le token seul ne fait pas un capitaine
         _, ta = await ticket(http_a, A)
         _, tb = await ticket(http_b, B)
-        ta, tb = ta["op_url"].split("ticket=")[1], tb["op_url"].split("ticket=")[1]
+        _, tc = await ticket(http_c, C)
+        ta, tb, tc = ta["ticket"], tb["ticket"], tc["ticket"]
+        r = await http_a.post(base + "/api/flotte/op?ticket=" + ta, json={"op": "creer"})
+        assert r.status == 401                    # le ticket en URL n'ouvre pas les gestes
 
         # Salon : création idempotente, quai, code, hôte.
         st, c1 = await op(http_a, ta, op="creer", options={"plan": 30})
@@ -119,6 +133,12 @@ async def scenario():
         await op(http_a, ta, op="bot", salon=sid)  # 3 flottes : le brouillard tient
         st, e = await op(http_a, ta, op="lancer", salon=sid)
         assert st == 400 and "prêts" in e["error"]
+        st, _ = await op(http_b, tb, op="regler", salon=sid, options={"manches": 8})
+        assert st == 400                          # réglages : hôte seulement
+        st, _ = await op(http_b, tb, op="retirer", salon=sid, uid=A)
+        assert st == 400                          # expulser : hôte seulement
+        st, _ = await op(http_c, tc, op="pret", salon=sid, valeur=True)
+        assert st == 400                          # Corentin n'est pas du salon
         await op(http_b, tb, op="pret", salon=sid, valeur=True)
 
         flux_a = await http_a.get(base + "/api/flotte/flux?ticket=%s&salon=%s" % (ta, sid))
@@ -127,6 +147,8 @@ async def scenario():
         assert v["type"] == "salon" and v["peut"]["lancer"] and v["phase"] == "salon"
         st, _ = await op(http_a, ta, op="lancer", salon=sid)
         assert st == 200
+        st, e = await op(http_c, tc, op="rejoindre", code=c1["code"])
+        assert st == 400                          # la partie a levé l'ancre : on n'embarque plus
         t0 = time.time()
         flotte.tic(t0 + 9)
         va = await dernier_etat(flux_a, lambda x: x.get("phase") == "planification")
@@ -153,6 +175,8 @@ async def scenario():
         assert st == 400                          # navire d'autrui
         st, _ = await op(http_a, ta, op="ordres", salon=sid, manche=2, ordres={})
         assert st == 400                          # mauvaise manche
+        st, _ = await op(http_c, tc, op="ordres", salon=sid, manche=1, ordres={mien["id"]: {}})
+        assert st == 400                          # un étranger ne commande rien
         st, _ = await op(http_a, ta, op="ordres", salon=sid, manche=1,
                          ordres={mien["id"]: {"chemin": [[0, 0], [12, 10]]}})
         assert st == 400                          # téléportation
@@ -182,7 +206,7 @@ async def scenario():
         # Reconnexion : un nouveau flux redonne aussitôt l'état autorisé.
         flux_b.close()
         _, tb2 = await ticket(http_b, B)
-        tb2 = tb2["op_url"].split("ticket=")[1]
+        tb2 = tb2["ticket"]
         flux_b = await http_b.get(base + "/api/flotte/flux?ticket=%s&salon=%s" % (tb2, sid))
         vb = await lire_evenement(flux_b)
         assert vb["manche"] == 2 and vb["moi"] == B
@@ -208,6 +232,9 @@ async def scenario():
         assert vf["graine"] == d["graine"] and vf["peut"]["revanche"]
         st, _ = await op(http_b, tb2, op="revanche", salon=sid)
         assert st == 400                          # B a quitté : il n'est plus du salon…
+        archives = json.loads(flotte.HISTORIQUE.read_text(encoding="utf-8"))
+        assert len(archives) == 1 and archives[0]["graine"] == d["graine"]
+        assert {j["uid"] for j in archives[0]["joueurs"]} >= {A, B}
         st, e = await op(http_a, ta, op="revanche", salon=sid, meme_carte=True)
         assert st == 200, e
         neuve = flotte.salons()[sid]
@@ -216,7 +243,12 @@ async def scenario():
         flux_a.close()
         flux_b.close()
     await serveur.close()
-    print("ok   scénario complet : salon, brouillard, ordres, résolution, reconnexion, revanche")
+    # Aucun ticket en clair dans les journaux (accès aiohttp compris).
+    journal = "\n".join(Capture.lignes)
+    for t in (ta, tb, tb2, tc):
+        assert t not in journal, "ticket en clair dans le journal"
+    assert "GET /api/flotte/flux?ticket=***" in journal, "journal d'accès absent ?"
+    print("ok   scénario complet : salon, permissions, brouillard, ordres, résolution, reconnexion, archive, journaux sans ticket, revanche")
 
 
 async def relais_et_menage():

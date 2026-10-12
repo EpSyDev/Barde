@@ -9,7 +9,13 @@ Temps réel : même pont que les Ombres — le dashboard vérifie la session Dis
 un ticket ; le navigateur se branche ensuite directement sur l'API (Funnel) :
 - ``GET  /api/flotte/flux?ticket=…[&salon=…]`` : sans salon, le « quai » (salons publics
   ouverts) ; avec, la vue du salon, filtrée pour CE capitaine (brouillard de guerre) ;
-- ``POST /api/flotte/op?ticket=…`` : les gestes (``op`` + ``salon`` + arguments).
+- ``POST /api/flotte/op`` (en-tête ``X-Flotte-Ticket``) : les gestes (``op`` + ``salon`` +
+  arguments). Le ticket ne passe dans l'URL que pour le flux (EventSource), et le journal
+  d'accès le masque (voir webapi).
+
+Persistance : l'état des salons (``data/flotte.json``) et, pour chaque partie finie, un
+résumé (date, carte, participants, vainqueurs, statistiques) dans
+``data/flotte_historique.json`` — les 200 dernières parties, rien de plus.
 
 Le serveur est seul juge : le client envoie des intentions (ordres d'une manche), jamais un
 état. Un code de salon permet de s'inscrire au quai, rien de plus : chaque geste est
@@ -29,6 +35,8 @@ from . import flotte_regles as R
 log = logging.getLogger("fripouille.flotte")
 
 FICHIER = config.DATA_DIR / "flotte.json"
+HISTORIQUE = config.DATA_DIR / "flotte_historique.json"   # résultats des parties finies
+MAX_ARCHIVES = 200                                        # rétention : les 200 dernières
 TICKET_TTL = 12 * 3600
 UID = re.compile(r"^\d{15,25}$")
 AVATAR = re.compile(r"^https://cdn\.discordapp\.com/[\w/.\-]+(\?[\w=&.\-]*)?$")
@@ -84,6 +92,7 @@ def _changer(sid: str | None):
     """Un salon a bougé : nouvelle vue pour ses abonnés, et le quai suit."""
     if sid and sid in salons():
         salons()[sid]["maj"] = time.time()
+        _archiver(salons()[sid])
     _diffuser(sid)
     _diffuser(None)
     t = _taches.get("sauvegarde")
@@ -92,6 +101,40 @@ def _changer(sid: str | None):
             _taches["sauvegarde"] = asyncio.get_running_loop().create_task(_ecrire_plus_tard())
         except RuntimeError:          # hors boucle (tests) : écriture immédiate
             _ecrire()
+
+
+def _archiver(d: dict):
+    """Une seule fois par partie finie : son résumé rejoint l'historique (borné)."""
+    if d["phase"] != "fin" or not d.get("fin") or d.get("archivee"):
+        return
+    d["archivee"] = True
+    f = d["fin"]
+    rangs = {c["uid"]: c for c in f["classement"]}
+    resume = {
+        "date": round(time.time()), "code": d.get("code"), "graine": d["graine"], "manches": f["manches"],
+        "duree": f["duree"], "raison": f["raison"], "gagnants": f["gagnants"],
+        "joueurs": [{"uid": j["uid"], "nom": j["nom"], "bot": j["bot"], "pavillon": j["pavillon"],
+                     **{k: rangs.get(j["uid"], {}).get(k) for k in ("rang", "degats", "coules", "perdus", "precision")}}
+                    for j in d["joueurs"]],
+    }
+    try:
+        liste = json.loads(HISTORIQUE.read_text(encoding="utf-8")) if HISTORIQUE.exists() else []
+        liste = (liste if isinstance(liste, list) else [])[-(MAX_ARCHIVES - 1):] + [resume]
+        HISTORIQUE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = HISTORIQUE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(liste, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(HISTORIQUE)
+        log.info("flotte salon=%s archivee gagnants=%s manches=%d", d["id"], ",".join(f["gagnants"]), f["manches"])
+    except (OSError, ValueError) as exc:
+        log.error("historique des Flottes : %s", exc)
+
+
+def historique(n: int = 10) -> list:
+    try:
+        liste = json.loads(HISTORIQUE.read_text(encoding="utf-8")) if HISTORIQUE.exists() else []
+    except (OSError, ValueError):
+        return []
+    return liste[-n:] if isinstance(liste, list) else []
 
 
 # ─────────────────────────── Vues ───────────────────────────
@@ -336,7 +379,8 @@ async def action_resume(_bot, _payload):
     for d in salons().values():
         par_phase[d["phase"]] = par_phase.get(d["phase"], 0) + 1
     return {"ok": True, "salons": len(salons()), "phases": par_phase,
-            "capitaines": len({v["qui"]["uid"] for v in _abonnes.values()})}
+            "capitaines": len({v["qui"]["uid"] for v in _abonnes.values()}),
+            "dernieres": historique(5)}
 
 
 MODULE = register(Module(key="flotte", label="Guerre des Flottes Royales", defaults=DEFAULTS,

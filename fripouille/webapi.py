@@ -25,6 +25,22 @@ from .modules import flotte, ombres, plateau
 
 log = logging.getLogger("fripouille.webapi")
 
+# Les flux SSE (Ombres, Plateau, Flottes) portent leur ticket dans l'URL — EventSource ne
+# sait pas envoyer d'en-tête. Le journal d'accès d'aiohttp écrit la ligne de requête en
+# entier : on y masque tickets et clés de scène pour qu'aucun jeton n'atterrisse en clair.
+_JETON_URL = re.compile(r"((?:ticket|scene)=)[^&\s\"]+")
+
+
+class _MasqueJetons(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        if "ticket=" in msg or "scene=" in msg:
+            record.msg, record.args = _JETON_URL.sub(r"\1***", msg), ()
+        return True
+
+
+logging.getLogger("aiohttp.access").addFilter(_MasqueJetons())
+
 # --- Média (images et audios des embeds/messages) ---
 _ALLOWED_EXT_IMAGE = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 _ALLOWED_EXT_AUDIO = {".mp3", ".ogg", ".wav", ".m4a"}
@@ -81,8 +97,12 @@ async def _auth(request, handler):
             request["qui_ombres"] = qui
             authorized = True
     if not authorized and request.path in _FLOTTE_ROUTES:
-        # Flottes Royales : ticket de capitaine (session vérifiée par le dashboard).
-        qui = flotte.ticket(request.query.get("ticket", ""))
+        # Flottes Royales : ticket de capitaine (session vérifiée par le dashboard) — en
+        # en-tête pour les gestes, dans l'URL seulement pour le flux SSE.
+        jeton = request.headers.get("X-Flotte-Ticket", "")
+        if not jeton and request.method == "GET":
+            jeton = request.query.get("ticket", "")
+        qui = flotte.ticket(jeton)
         if qui:
             request["qui_flotte"] = qui
             authorized = True
@@ -105,7 +125,7 @@ async def _auth(request, handler):
 
 def _cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Headers"] = "X-Api-Token, Content-Type"
+    resp.headers["Access-Control-Allow-Headers"] = "X-Api-Token, X-Flotte-Ticket, Content-Type"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return resp
 
@@ -367,7 +387,7 @@ async def flotte_ticket(request):
     t = flotte.nouveau_ticket(qui)
     base = config.PUBLIC_BASE_URL or ""
     return web.json_response({"flux_url": f"{base}/api/flotte/flux?ticket={t}",
-                              "op_url": f"{base}/api/flotte/op?ticket={t}"})
+                              "op_url": f"{base}/api/flotte/op", "ticket": t})
 
 
 def _qui_flotte(request) -> dict:
