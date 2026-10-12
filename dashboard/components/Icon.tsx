@@ -14,7 +14,7 @@ export type IconName =
   | "televerser" | "corbeille" | "oeil" | "gel" | "maison"
   // Un picto par onglet (menu des quartiers) + meubles des blasons
   | "pousse" | "signal" | "calendrier" | "urne" | "ecran" | "carte" | "de" | "micro" | "liste"
-  | "graphique" | "coeur" | "cle" | "flamme" | "epees" | "marteau";
+  | "graphique" | "coeur" | "cle" | "flamme" | "epees" | "marteau" | "ancre";
 
 const PATHS: Record<IconName, string> = {
   // Ossature du menu
@@ -36,6 +36,7 @@ const PATHS: Record<IconName, string> = {
   flamme: "M12 21c-3.6 0-6-2.5-6-5.8 0-3.6 3.2-5.2 3.7-9.2 2.2 1.4 3.3 3.3 3.1 5.4 1-.6 1.6-1.6 1.8-2.9 2 1.7 3.4 4 3.4 6.7C18 18.5 15.6 21 12 21Zm0 0c-1.5 0-2.5-1-2.5-2.4 0-1.6 1.3-2.4 1.6-3.9 1.8 1 3.4 2.4 3.4 4 0 1.3-1 2.3-2.5 2.3Z",
   epees: "M4 4l9.5 9.5M4 4v3l8 8M4 4h3l8 8m4.5 4.5-3 3M14 15l2.5 2.5M20 4l-9.5 9.5M20 4v3l-4.2 4.2M20 4h-3l-4.2 4.2M4.5 16.5l3 3M10 15l-2.5 2.5",
   marteau: "M13.5 5.5 18 10m-6.2-2.8 3.4-3.4 4.6 4.6-3.4 3.4m-4.6-4.6L4.6 14.4a1.5 1.5 0 0 0 0 2.1l2.9 2.9a1.5 1.5 0 0 0 2.1 0l7.2-7.2",
+  ancre: "M12 7.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0 0v13m-4-10h8M4.5 13.5c.6 4 3.6 7 7.5 7s6.9-3 7.5-7M4.5 13.5 3 15.5m1.5-2 2 1.2m13-1.2 1.5 2m-1.5-2-2 1.2",
   luth: "M14.5 3.5c1.6 1.6 1.6 4 0 5.6M9 9l6-6M9.5 10.5 7 13m-.8 7.2c-1.7-1.7-1.7-4.4 0-6.1a4.3 4.3 0 0 1 6.1 0c1.7 1.7 1.7 4.4 0 6.1a4.3 4.3 0 0 1-6.1 0Z",
   blason: "M12 3 4.5 5.5v6c0 4.4 3.1 8.3 7.5 9.5 4.4-1.2 7.5-5.1 7.5-9.5v-6L12 3Zm0 4.5v9M8 11h8",
   manette: "M7.5 8h9a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4A2.6 2.6 0 0 1 15.9 18l-1.2-1.6h-5.4L8.1 18a2.6 2.6 0 0 1-4.3-1.2l-.7-3.4A4.5 4.5 0 0 1 7.5 8Zm-1 3.2v2.6m-1.3-1.3h2.6m8.2-.7h.01m2 2h.01",
