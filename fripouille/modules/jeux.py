@@ -23,6 +23,7 @@ recliquer le retire. Aucun autre rôle n'est touché. (``placeholder`` n'est plu
 utilisé côté rendu — conservé pour compat config.)
 """
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -68,6 +69,7 @@ DEFAULTS = {
     # categories : [{ id, label, emoji, description, placeholder, games:[{id,label,role_id}] }]
     "categories": [],
     "message_ids": [],   # géré bot : messages postés dans l'ordre (intro puis catégories)
+    "message_hashes": [],  # géré bot : empreinte de chaque bloc posté (évite les rééditions inutiles)
     # Actualités Steam : chaque jeu peut avoir steam_appid + news_channel_id (+ category_id,
     # pubs) ; le bot relaie les annonces Steam dans ce salon.
     "actus_enabled": False,
@@ -201,54 +203,80 @@ def _build_blocks(cfg):
     return blocks
 
 
-async def _reconcile(channel, stored, blocks):
-    """Édite les messages en place si leur nombre n'a pas changé, sinon supprime et
-    repost tout dans l'ordre. Renvoie la nouvelle liste d'ids."""
-    if stored and len(stored) == len(blocks) and blocks:
-        new_ids, ok = [], True
-        for mid, (embed, view) in zip(stored, blocks):
-            try:
-                msg = await channel.fetch_message(int(mid))
-                await msg.edit(embed=embed, view=view)
-                new_ids.append(str(msg.id))
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                ok = False
-                break
-        if ok:
-            return new_ids
+def _empreinte(embed, view) -> str:
+    """Signature d'un bloc (embed + boutons) : un bloc inchangé n'est pas réédité."""
+    boutons = [(i.custom_id, i.label, str(i.emoji) if i.emoji else "") for i in view.children] if view else []
+    brut = json.dumps([embed.to_dict(), boutons], sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(brut.encode()).hexdigest()[:12]
 
-    # Repost complet : purge des anciens messages puis renvoi dans l'ordre.
-    for mid in stored:
+
+async def _supprimer(channel, ids):
+    for mid in ids:
         try:
-            msg = await channel.fetch_message(int(mid))
-            await msg.delete()
+            await channel.get_partial_message(int(mid)).delete()
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
-    new_ids = []
-    for embed, view in blocks:
-        sent = await channel.send(embed=embed, view=view)
-        new_ids.append(str(sent.id))
-    return new_ids
+
+
+async def _reconcile(channel, stored, hashes, blocks):
+    """Met le salon à jour en touchant le minimum de messages.
+
+    Les messages existants sont réédités en place — et seulement si leur contenu a
+    changé (empreinte) ; les blocs en trop sont envoyés à la suite, les messages en trop
+    supprimés. Si un message a disparu, l'ordre ne tient plus : repost complet.
+    Renvoie (ids, empreintes)."""
+    empreintes = [_empreinte(e, v) for e, v in blocks]
+    ids = []
+    try:
+        for i, (embed, view) in enumerate(blocks[:len(stored)]):
+            if i < len(hashes) and hashes[i] == empreintes[i]:
+                ids.append(str(stored[i]))
+                continue
+            await channel.get_partial_message(int(stored[i])).edit(embed=embed, view=view)
+            ids.append(str(stored[i]))
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        await _supprimer(channel, stored)
+        ids, stored = [], []
+    for embed, view in blocks[len(ids):]:
+        ids.append(str((await channel.send(embed=embed, view=view)).id))
+    await _supprimer(channel, stored[len(blocks):])
+    return ids, empreintes
+
+
+_verrou = asyncio.Lock()      # une seule publication à la fois
+_taches: set = set()
+
+
+async def _publier(bot):
+    async with _verrou:
+        cfg = bot.store.get("jeux")      # config la plus récente (les enregistrements rapprochés s'enchaînent)
+        if not cfg.get("enabled") or not cfg.get("channel_id"):
+            return
+        channel = bot.get_channel(int(cfg["channel_id"]))
+        if channel is None:
+            log.warning("jeux : salon %s introuvable", cfg["channel_id"])
+            return
+        blocks = _build_blocks(cfg)
+        ids, hashes = await _reconcile(
+            channel, list(cfg.get("message_ids") or []), list(cfg.get("message_hashes") or []), blocks
+        )
+        bot.store.set("jeux", {"message_ids": ids, "message_hashes": hashes})
+        for _embed, view in blocks:
+            if view is not None:
+                bot.add_view(view)
 
 
 async def apply(bot, cfg):
-    """Répercute la config : (re)poste les blocs de catégories dans le salon."""
-    if not cfg.get("enabled"):
-        return
-    channel_id = cfg.get("channel_id")
-    if not channel_id:
-        return
-    channel = bot.get_channel(int(channel_id))
-    if channel is None:
-        log.warning("jeux : salon %s introuvable", channel_id)
-        return
+    """Répercute la config : met à jour les blocs de catégories dans le salon.
 
-    blocks = _build_blocks(cfg)
-    new_ids = await _reconcile(channel, list(cfg.get("message_ids") or []), blocks)
-    bot.store.set("jeux", {"message_ids": new_ids})
-    for _embed, view in blocks:
-        if view is not None:
-            bot.add_view(view)
+    La publication (plusieurs appels Discord, soumis aux limites de débit) tourne en
+    tâche de fond : l'enregistrement depuis le dashboard répond tout de suite."""
+    if not cfg.get("enabled") or not cfg.get("channel_id"):
+        return
+    tache = bot.loop.create_task(_publier(bot))
+    _taches.add(tache)
+    tache.add_done_callback(_taches.discard)
+    tache.add_done_callback(lambda t: t.cancelled() or not t.exception() or log.error("publication jeux : %s", t.exception()))
 
 
 async def setup_persistent(bot):
