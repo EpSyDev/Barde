@@ -403,13 +403,13 @@ async def action_create_emoji(bot, payload):
 # --- Arborescence d'un jeu ---
 # (clé de reconnaissance d'un salon existant, nom créé, lecture seule, facultatif)
 ARBO = [
-    ("actualite", "actualité-{jeu}", True, False),
-    ("evenement", "événement", False, False),
-    ("parlons", "parlons-jeux", False, False),
-    ("entraide", "entraide", False, False),
-    ("screenshot", "vos-screenshots", False, False),
-    ("stream", "vos-streams", False, False),
-    ("pub", "pubs-serveurs", False, True),
+    ("actualite", "📰┃actualités-{jeu}", True, False),
+    ("evenement", "📅┃événements", False, False),
+    ("parlons", "🎮┃parlons-jeux", False, False),
+    ("entraide", "🧩┃entraide", False, False),
+    ("screenshot", "📸┃vos-screenshots", False, False),
+    ("stream", "📺┃vos-streams", False, False),
+    ("pub", "📢┃pubs-serveurs-{jeu}", False, True),
 ]
 
 
