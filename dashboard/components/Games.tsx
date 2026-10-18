@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { DirtyBar, Loading, Vide } from "@/components/ui";
 import { useModuleConfig, useUnsavedGuard } from "@/lib/useModuleConfig";
@@ -12,7 +12,16 @@ import TaverneTesteurs from "@/components/TaverneTesteurs";
 
 type Role = { id: string; name: string; color: number };
 type Channel = { id: string; name: string; category: string | null };
-type Game = { id: string; label: string; role_id: string | null; emoji: string };
+type Game = {
+  id: string;
+  label: string;
+  role_id: string | null;
+  emoji: string;
+  steam_appid: string;
+  news_channel_id: string | null;
+  category_id: string | null;
+  pubs: boolean;
+};
 type Category = {
   id: string;
   label: string;
@@ -26,11 +35,15 @@ type JeuxCfg = {
   channel_id: string | null;
   title: string;
   description: string;
+  actus_enabled: boolean;
   categories: Category[];
 };
 
 const rid = () => (globalThis.crypto?.randomUUID?.() ?? String(Math.random())).slice(0, 8);
-const newGame = (): Game => ({ id: rid(), label: "", role_id: null, emoji: "" });
+const newGame = (): Game => ({
+  id: rid(), label: "", role_id: null, emoji: "",
+  steam_appid: "", news_channel_id: null, category_id: null, pubs: false,
+});
 const newCategory = (): Category => ({
   id: rid(),
   label: "",
@@ -102,6 +115,7 @@ const serialize = (cfg: JeuxCfg) => ({
   channel_id: cfg.channel_id,
   title: cfg.title.trim(),
   description: cfg.description.trim(),
+  actus_enabled: cfg.actus_enabled,
   categories: cfg.categories
     .map((k) => ({
       id: k.id,
@@ -111,7 +125,16 @@ const serialize = (cfg: JeuxCfg) => ({
       placeholder: k.placeholder.trim(),
       games: k.games
         .filter((g) => g.label.trim() && g.role_id)
-        .map((g) => ({ id: g.id, label: g.label.trim(), role_id: g.role_id, emoji: g.emoji.trim() })),
+        .map((g) => ({
+          id: g.id,
+          label: g.label.trim(),
+          role_id: g.role_id,
+          emoji: g.emoji.trim(),
+          steam_appid: g.steam_appid.trim(),
+          news_channel_id: g.news_channel_id,
+          category_id: g.category_id,
+          pubs: g.pubs,
+        })),
     }))
     .filter((k) => k.label && k.games.length),
 });
@@ -121,6 +144,10 @@ const mapGame = (g: Partial<Game>): Game => ({
   label: g.label || "",
   role_id: g.role_id != null ? String(g.role_id) : null,
   emoji: g.emoji || "",
+  steam_appid: g.steam_appid != null ? String(g.steam_appid) : "",
+  news_channel_id: g.news_channel_id != null ? String(g.news_channel_id) : null,
+  category_id: g.category_id != null ? String(g.category_id) : null,
+  pubs: !!g.pubs,
 });
 
 const normalize = (raw: Record<string, unknown>): JeuxCfg => {
@@ -147,6 +174,7 @@ const normalize = (raw: Record<string, unknown>): JeuxCfg => {
     channel_id: raw.channel_id != null ? String(raw.channel_id) : null,
     title: String(raw.title || ""),
     description: String(raw.description || ""),
+    actus_enabled: !!raw.actus_enabled,
     categories,
   };
 };
@@ -170,16 +198,18 @@ export default function Games() {
       .then((j) => j && typeof j.used === "number" && setQuota({ used: j.used, limit: j.limit }))
       .catch(() => undefined);
 
+  const majChannels = () =>
+    fetch("/api/fripouille/channels", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { channels: [] }))
+      .then((c) => setChannels(c.channels || []))
+      .catch(() => undefined);
+
   useEffect(() => {
     majQuota();
-    Promise.all([
-      fetch("/api/fripouille/roles", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { roles: [] })),
-      fetch("/api/fripouille/channels", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { channels: [] })),
-    ])
-      .then(([r, c]) => {
-        setRoles(r.roles || []);
-        setChannels(c.channels || []);
-      })
+    majChannels();
+    fetch("/api/fripouille/roles", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { roles: [] }))
+      .then((r) => setRoles(r.roles || []))
       .catch(() => undefined);
   }, []);
 
@@ -253,41 +283,103 @@ export default function Games() {
     toasts.ok(`Icône ${r.emoji} prête`, "Enregistre pour publier le bouton.");
   };
 
+  /** Catégorie + salons du jeu (idempotent : réutilise l'existant) et id Steam. */
+  const creerArbo = async (g: Game, roleId: string): Promise<{ patch?: Partial<Game>; err?: string }> => {
+    try {
+      const res = await fetch("/api/fripouille/action/jeux/arbo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: g.label.trim(), role_id: roleId, pubs: g.pubs }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) return { err: (j.error as string) || "Salons non créés" };
+      majChannels();
+      return {
+        patch: {
+          category_id: j.category_id ?? null,
+          news_channel_id: j.news_channel_id ?? null,
+          ...(j.steam_appid && !g.steam_appid.trim() ? { steam_appid: String(j.steam_appid) } : {}),
+        },
+      };
+    } catch {
+      return { err: "La Fripouille est injoignable" };
+    }
+  };
+
+  /** Fabrique tout ce qui manque à un jeu : rôle, icône, salons, lien Steam. */
+  const fabriquer = async (g: Game): Promise<{ patch: Partial<Game>; notes: string[]; ok: boolean }> => {
+    const notes: string[] = [];
+    const patch: Partial<Game> = {};
+    let roleId = g.role_id;
+    if (!roleId) {
+      const role = await creerRole(g.label);
+      if (!role) return { patch, notes: ["rôle non créé (permission « Gérer les rôles » ?)"], ok: false };
+      roleId = role.id;
+      patch.role_id = role.id;
+    }
+    if (!g.emoji.trim()) {
+      const ico = await creerEmoji(g.label);
+      if (ico.emoji) patch.emoji = ico.emoji;
+      else notes.push(`icône : ${ico.err}`);
+    }
+    if (!g.category_id) {
+      const arbo = await creerArbo(g, roleId);
+      if (arbo.patch) Object.assign(patch, arbo.patch);
+      else notes.push(`salons : ${arbo.err}`);
+    }
+    return { patch, notes, ok: true };
+  };
+
   const creerPour = async (cid: string, g: Game) => {
     setCreation((c) => ({ ...c, [g.id]: true }));
-    const role = await creerRole(g.label);
-    const ico = g.emoji.trim() ? null : await creerEmoji(g.label);
+    const r = await fabriquer(g);
     setCreation((c) => ({ ...c, [g.id]: false }));
-    if (!role) return toasts.err("Rôle non créé", "La Fripouille a-t-elle « Gérer les rôles » ?");
-    patchGame(cid, g.id, { role_id: role.id, ...(ico?.emoji ? { emoji: ico.emoji } : {}) });
-    toasts.ok(`Rôle @${role.name} prêt`, ico?.err ? `Icône : ${ico.err}` : "Enregistre pour publier le bouton.");
+    if (!r.ok) return toasts.err("Rien n'a été créé", r.notes.join(" · "));
+    patchGame(cid, g.id, r.patch);
+    if (r.notes.length) toasts.err(`${g.label.trim()} : incomplet`, r.notes.join(" · "));
+    else toasts.ok(`${g.label.trim()} prêt`, "Rôle, icône, salons et actus. Enregistre pour publier le bouton.");
   };
 
   const creerManquants = async (k: Category) => {
     const manquants = k.games.filter((g) => g.label.trim() && !g.role_id);
-    const ids: Record<string, string> = {};
-    const icones: Record<string, string> = {};
+    const patchs: Record<string, Partial<Game>> = {};
+    const problemes: string[] = [];
     for (const g of manquants) {
       setCreation((c) => ({ ...c, [g.id]: true }));
-      const role = await creerRole(g.label);
-      if (!g.emoji.trim()) {
-        const ico = await creerEmoji(g.label);
-        if (ico.emoji) icones[g.id] = ico.emoji;
-      }
+      const r = await fabriquer(g);
       setCreation((c) => ({ ...c, [g.id]: false }));
-      if (role) ids[g.id] = role.id;
+      patchs[g.id] = r.patch;
+      if (!r.ok || r.notes.length) problemes.push(`${g.label.trim()} (${r.notes.join(", ")})`);
     }
-    patchCatGames(k.id, (games) =>
-      games.map((g) => ({
-        ...g,
-        ...(ids[g.id] ? { role_id: ids[g.id] } : {}),
-        ...(icones[g.id] ? { emoji: icones[g.id] } : {}),
-      }))
-    );
-    const n = Object.keys(ids).length;
-    if (n < manquants.length)
-      toasts.err(`${manquants.length - n} rôle(s) non créé(s)`, "Vérifie la permission « Gérer les rôles ».");
-    else toasts.ok(`${n} rôle(s) créé(s)`, "Enregistre pour publier les boutons.");
+    patchCatGames(k.id, (games) => games.map((g) => (patchs[g.id] ? { ...g, ...patchs[g.id] } : g)));
+    if (problemes.length) toasts.err(`${problemes.length} jeu(x) incomplet(s)`, problemes.join(" · "));
+    else toasts.ok(`${manquants.length} jeu(x) créé(s)`, "Enregistre pour publier les boutons.");
+  };
+
+  /** Jeu déjà doté d'un rôle : crée/retrouve ses salons et le relie à Steam. */
+  const salonsPour = async (cid: string, g: Game) => {
+    if (!g.role_id) return;
+    setCreation((c) => ({ ...c, [`s${g.id}`]: true }));
+    const r = await creerArbo(g, g.role_id);
+    setCreation((c) => ({ ...c, [`s${g.id}`]: false }));
+    if (!r.patch) return toasts.err("Salons non créés", r.err);
+    patchGame(cid, g.id, r.patch);
+    toasts.ok(`Salons de ${g.label.trim()} prêts`, "Enregistre pour activer les actualités.");
+  };
+
+  const verifierActus = async () => {
+    try {
+      const res = await fetch("/api/fripouille/action/jeux/actus_sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) return toasts.err("Vérification impossible", j.error);
+      toasts.ok("Actualités vérifiées", `${j.postees} annonce(s) postée(s).`);
+    } catch {
+      toasts.err("Vérification impossible", "La Fripouille est injoignable.");
+    }
   };
 
   const ajouterListe = async (k: Category) => {
@@ -356,6 +448,25 @@ export default function Games() {
           <span className="switch" />
           <span>Publier les blocs</span>
         </label>
+
+        <label className="cfg-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.actus_enabled}
+            onChange={(e) => set({ actus_enabled: e.target.checked })}
+          />
+          <span className="switch" />
+          <span>Relayer les actualités Steam dans le salon « actualité » de chaque jeu</span>
+        </label>
+        {cfg.actus_enabled && (
+          <p className="cfg-hint">
+            Vérification toutes les 30 min ; les annonces des développeurs sont postées (3 maximum
+            par passage). Au premier passage d&apos;un jeu, l&apos;existant n&apos;est pas republié.{" "}
+            <button type="button" className="btn small" onClick={verifierActus}>
+              Vérifier maintenant
+            </button>
+          </p>
+        )}
 
         <div className="cfg-field">
           <label>Salon des blocs</label>
@@ -476,7 +587,8 @@ export default function Games() {
                           const role = g.role_id ? roleById.get(g.role_id) : undefined;
                           const memes = g.role_id ? usages.get(g.role_id) || [] : [];
                           return (
-                            <div className={`game-row ${memes.length > 1 ? "doublon" : ""}`} key={g.id}>
+                            <Fragment key={g.id}>
+                            <div className={`game-row ${memes.length > 1 ? "doublon" : ""}`}>
                               {emojiUrl(g.emoji) && (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img className="emoji-perso" src={emojiUrl(g.emoji)!} alt="" title={g.emoji} />
@@ -518,9 +630,9 @@ export default function Games() {
                                   className="btn small primary"
                                   onClick={() => creerPour(k.id, g)}
                                   disabled={!!creation[g.id]}
-                                  title={`Créer le rôle « ${g.label.trim()} » sur Discord`}
+                                  title={`Créer sur Discord le rôle, l'icône, la catégorie et les salons de « ${g.label.trim()} », et le relier aux actus Steam`}
                                 >
-                                  {creation[g.id] ? "…" : "+ Créer le rôle"}
+                                  {creation[g.id] ? "…" : "+ Tout créer"}
                                 </button>
                               )}
                               <select
@@ -548,6 +660,47 @@ export default function Games() {
                                 ✕
                               </button>
                             </div>
+                            {g.role_id && (
+                              <div className="game-row game-actus">
+                                <span title="Salon où sont relayées les annonces Steam du jeu">📰</span>
+                                <ChannelSelect
+                                  channels={channels}
+                                  value={g.news_channel_id}
+                                  onChange={(v) => patchGame(k.id, g.id, { news_channel_id: v })}
+                                  placeholder="— salon d'actualité —"
+                                />
+                                <input
+                                  className="game-label"
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={g.steam_appid}
+                                  onChange={(e) => patchGame(k.id, g.id, { steam_appid: e.target.value.replace(/\D/g, "") })}
+                                  placeholder="N° Steam (auto)"
+                                  title="Identifiant du jeu sur Steam (le nombre dans store.steampowered.com/app/…). Rempli automatiquement à la création des salons."
+                                  aria-label="Identifiant Steam"
+                                />
+                                <label className="cfg-toggle" title="Créer aussi le salon « pubs-serveurs »">
+                                  <input
+                                    type="checkbox"
+                                    checked={g.pubs}
+                                    onChange={(e) => patchGame(k.id, g.id, { pubs: e.target.checked })}
+                                  />
+                                  <span className="switch" />
+                                  <span>pubs</span>
+                                </label>
+                                {!g.category_id && g.label.trim() && (
+                                  <button
+                                    className="btn small"
+                                    onClick={() => salonsPour(k.id, g)}
+                                    disabled={!!creation[`s${g.id}`]}
+                                    title="Retrouve (ou crée) la catégorie et les salons du jeu, et résout son id Steam"
+                                  >
+                                    {creation[`s${g.id}`] ? "…" : "+ Salons"}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            </Fragment>
                           );
                         })}
                       </div>

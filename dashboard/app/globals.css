@@ -3655,3 +3655,8 @@ table.ledger .actions {
 .carnet-etape { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 10px; }
 .carnet-doc { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed var(--panel-edge); border-radius: 8px; }
 .carnet-doc-actions, .carnet-barre { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Ligne « actualités Steam » sous un jeu : en retrait, plus discrète. */
+.game-row.game-actus { margin: -2px 0 6px 34px; opacity: 0.9; flex-wrap: wrap; }
+.game-row.game-actus select { max-width: 240px; }
+.game-row.game-actus .game-label { max-width: 150px; }

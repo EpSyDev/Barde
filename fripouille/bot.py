@@ -73,6 +73,7 @@ class FripouilleBot(discord.Client):
         soirees.start_scheduler(self)
         stats.start_scheduler(self)
         diffusions.start_scheduler(self)
+        jeux.start_scheduler(self)
         viejeux.start_scheduler(self)
         chronique.start_scheduler(self)
         sante.start_scheduler(self)

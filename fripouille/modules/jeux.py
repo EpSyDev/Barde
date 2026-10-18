@@ -27,6 +27,7 @@ import io
 import logging
 import re
 import unicodedata
+from datetime import datetime, timezone
 
 import aiohttp
 import discord
@@ -65,6 +66,10 @@ DEFAULTS = {
     # categories : [{ id, label, emoji, description, placeholder, games:[{id,label,role_id}] }]
     "categories": [],
     "message_ids": [],   # géré bot : messages postés dans l'ordre (intro puis catégories)
+    # Actualités Steam : chaque jeu peut avoir steam_appid + news_channel_id (+ category_id,
+    # pubs) ; le bot relaie les annonces Steam dans ce salon.
+    "actus_enabled": False,
+    "actus_etat": {},    # géré bot : "appid:salon" → date (epoch) de la dernière annonce vue
 }
 
 
@@ -325,8 +330,11 @@ async def _icone_discord(s, k: str) -> bytes | None:
         return await r.read() if r.status == 200 else None
 
 
-async def _icone_steam(s, nom: str, k: str) -> bytes | None:
-    """Repli : visuel du jeu sur Steam (bannière recadrée au carré)."""
+async def _steam_app(s, nom: str) -> dict | None:
+    """Jeu Steam correspondant au nom (égalité normalisée, sinon préfixe) : {id, name}."""
+    k = _cle(nom)
+    if not k:
+        return None
     async with s.get(STEAM_SEARCH, params={"term": nom, "cc": "fr", "l": "french"}) as r:
         if r.status != 200:
             return None
@@ -334,9 +342,15 @@ async def _icone_steam(s, nom: str, k: str) -> bytes | None:
     exact = [i for i in items if _cle(i.get("name") or "") == k]
     proche = [i for i in items if len(k) >= 4 and _cle(i.get("name") or "").startswith(k)]
     cands = exact or proche
-    if not cands:
+    return cands[0] if cands else None
+
+
+async def _icone_steam(s, nom: str) -> bytes | None:
+    """Repli : visuel du jeu sur Steam (bannière recadrée au carré)."""
+    app = await _steam_app(s, nom)
+    if not app:
         return None
-    async with s.get(STEAM_HEADER.format(cands[0]["id"])) as r:
+    async with s.get(STEAM_HEADER.format(app["id"])) as r:
         return await r.read() if r.status == 200 else None
 
 
@@ -348,7 +362,7 @@ async def _icone_jeu(nom: str) -> bytes | None:
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
         data = await _icone_discord(s, k)
         if data is None:
-            data = await _icone_steam(s, nom, k)
+            data = await _icone_steam(s, nom)
             if data is not None:
                 data = await asyncio.to_thread(_carre_png, data)
         return data
@@ -386,6 +400,204 @@ async def action_create_emoji(bot, payload):
     return {"ok": True, "emoji": str(emoji)}
 
 
+# --- Arborescence d'un jeu ---
+# (clé de reconnaissance d'un salon existant, nom créé, lecture seule, facultatif)
+ARBO = [
+    ("actualite", "actualité-{jeu}", True, False),
+    ("evenement", "événement", False, False),
+    ("parlons", "parlons-jeux", False, False),
+    ("entraide", "entraide", False, False),
+    ("screenshot", "vos-screenshots", False, False),
+    ("stream", "vos-streams", False, False),
+    ("pub", "pubs-serveurs", False, True),
+]
+
+
+def _slug(nom: str) -> str:
+    return re.sub(r"[^\w]+", "-", nom.lower()).strip("-")[:60] or "jeu"
+
+
+async def action_steam_resolve(bot, payload):
+    """Identifiant Steam d'un jeu d'après son nom."""
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise ValueError("nom du jeu manquant")
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            app = await _steam_app(s, name)
+    except (aiohttp.ClientError, TimeoutError):
+        raise ValueError("Steam injoignable")
+    if not app:
+        raise ValueError(f"« {name} » introuvable sur Steam")
+    return {"ok": True, "appid": str(app["id"]), "name": app.get("name") or name}
+
+
+async def action_arbo(bot, payload):
+    """Crée (ou retrouve) la catégorie d'un jeu et ses salons, puis résout son id Steam.
+
+    Idempotent : une catégorie au nom du jeu et des salons déjà reconnus sont réutilisés,
+    seuls les manquants sont créés. La catégorie neuve est cachée à @everyone et visible
+    du rôle du jeu ; le salon d'actualité est en lecture seule pour le rôle."""
+    name = (payload.get("name") or "").strip()[:90]
+    if not name:
+        raise ValueError("nom du jeu manquant")
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    role = guild.get_role(int(payload["role_id"])) if str(payload.get("role_id") or "").isdigit() else None
+    acteur = payload.get("_acteur") or "?"
+    reason = f"Rôles-jeux — arborescence ({acteur})"
+    k = _cle(name)
+    cat = discord.utils.find(
+        lambda c: _cle(c.name) == k or (len(k) >= 4 and _cle(c.name).startswith(k)), guild.categories
+    )
+    creees, existants = [], []
+    try:
+        if cat is None:
+            ow = {guild.default_role: discord.PermissionOverwrite(view_channel=False)}
+            if role:
+                ow[role] = discord.PermissionOverwrite(view_channel=True)
+            cat = await guild.create_category(name, overwrites=ow, reason=reason)
+            creees.append(f"catégorie {name}")
+        news = None
+        for cle, modele, lecture_seule, facultatif in ARBO:
+            ch = discord.utils.find(lambda c: cle in _cle(c.name), cat.text_channels)
+            if ch is None and not (facultatif and not payload.get("pubs")):
+                kw = {}
+                if lecture_seule and role:
+                    ow = dict(cat.overwrites)
+                    ow[role] = discord.PermissionOverwrite(
+                        view_channel=True, send_messages=False, create_public_threads=False
+                    )
+                    kw["overwrites"] = ow
+                ch = await cat.create_text_channel(modele.format(jeu=_slug(name)), reason=reason, **kw)
+                creees.append(ch.name)
+            elif ch is not None:
+                existants.append(ch.name)
+            if cle == "actualite":
+                news = ch
+    except discord.Forbidden:
+        raise ValueError("permission « Gérer les salons » manquante pour La Fripouille")
+    except discord.HTTPException as e:
+        raise ValueError(f"Discord a refusé : {e.text}")
+    appid = None
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            app = await _steam_app(s, name)
+        appid = str(app["id"]) if app else None
+    except (aiohttp.ClientError, TimeoutError):
+        pass
+    return {
+        "ok": True, "category_id": str(cat.id),
+        "news_channel_id": str(news.id) if news else None,
+        "steam_appid": appid, "creees": creees, "existants": existants,
+    }
+
+
+# --- Actualités Steam ---
+STEAM_NEWS = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
+STEAM_IMG = "https://clan.cloudflare.steamstatic.com/images/"
+ACTUS_INTERVALLE_S = 1800
+ACTUS_PAR_CYCLE = 3          # au plus 3 annonces par jeu et par passage (anti-déluge)
+
+
+def _texte_steam(contents: str) -> tuple[str, str | None]:
+    """BBCode Steam → (texte brut, première image)."""
+    contents = contents.replace("{STEAM_CLAN_IMAGE}", STEAM_IMG.rstrip("/"))
+    m = re.search(r"\[img\](https?://[^\[\s]+)\[/img\]", contents)
+    img = m.group(1) if m else None
+    txt = re.sub(r"\[img\].*?\[/img\]", "", contents, flags=re.S)
+    txt = re.sub(r"\[/?[a-z0-9*]+(?:=[^\]]*)?\]", "", txt, flags=re.I)
+    txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
+    return txt, img
+
+
+async def _annonces(s, appid: str) -> list[dict]:
+    params = {"appid": appid, "count": 5, "maxlength": 600, "format": "json"}
+    async with s.get(STEAM_NEWS, params=params) as r:
+        if r.status != 200:
+            return []
+        items = (await r.json()).get("appnews", {}).get("newsitems", [])
+    # feed_type 1 = annonces des développeurs (les autres sont de la presse tierce).
+    return [i for i in items if i.get("feed_type") == 1]
+
+
+def _embed_actu(g: dict, item: dict) -> discord.Embed:
+    txt, img = _texte_steam(item.get("contents") or "")
+    embed = discord.Embed(
+        title=(item.get("title") or "Annonce")[:250], url=item.get("url") or None,
+        description=txt[:450] + ("…" if len(txt) > 450 else ""), color=0x1B2838,
+        timestamp=datetime.fromtimestamp(int(item.get("date") or 0), timezone.utc),
+    )
+    if img:
+        embed.set_image(url=img)
+    embed.set_footer(text=f"Steam · {g.get('label') or ''}".strip(" ·"))
+    return embed
+
+
+async def actus_cycle(bot) -> int:
+    """Un passage : poste les nouvelles annonces Steam de chaque jeu relié. Renvoie le total posté."""
+    cfg = bot.store.get("jeux")
+    etat = dict(cfg.get("actus_etat") or {})
+    avant, total = dict(etat), 0
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+        for cat in cfg.get("categories", []):
+            for g in cat.get("games", []):
+                appid, ch_id = str(g.get("steam_appid") or ""), str(g.get("news_channel_id") or "")
+                chan = bot.get_channel(int(ch_id)) if ch_id.isdigit() else None
+                if not appid.isdigit() or chan is None:
+                    continue
+                try:
+                    items = await _annonces(s, appid)
+                except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
+                    log.warning("actus %s : %s", g.get("label"), exc)
+                    continue
+                if not items:
+                    continue
+                cle = f"{appid}:{ch_id}"
+                dernier = int(max(i.get("date") or 0 for i in items))
+                if cle not in etat:           # premier passage : on part de l'existant, sans le poster
+                    etat[cle] = dernier
+                    continue
+                neuves = sorted((i for i in items if int(i.get("date") or 0) > etat[cle]),
+                                key=lambda i: i["date"])[-ACTUS_PAR_CYCLE:]
+                for item in neuves:
+                    try:
+                        await chan.send(embed=_embed_actu(g, item))
+                        total += 1
+                    except discord.HTTPException as exc:
+                        log.warning("actus %s : envoi impossible (%s)", g.get("label"), exc)
+                        break
+                else:
+                    etat[cle] = max(etat[cle], dernier)
+                    continue
+                etat[cle] = max(etat[cle], int(neuves[0]["date"]) - 1)   # réessaie au prochain passage
+                await asyncio.sleep(1)
+    if etat != avant:
+        bot.store.set("jeux", {"actus_etat": etat})
+    return total
+
+
+async def _boucle_actus(bot):
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        try:
+            if bot.store.get("jeux").get("actus_enabled"):
+                await actus_cycle(bot)
+        except Exception as exc:  # noqa: BLE001
+            log.error("actus : %s", exc)
+        await asyncio.sleep(ACTUS_INTERVALLE_S)
+
+
+def start_scheduler(bot):
+    bot.loop.create_task(_boucle_actus(bot))
+
+
+async def action_actus_sync(bot, payload):
+    """Force un passage immédiat (bouton « Vérifier maintenant »)."""
+    return {"ok": True, "postees": await actus_cycle(bot)}
+
+
 async def action_emoji_quota(bot, payload):
     """Emplacements d'emojis utilisés / disponibles sur le serveur."""
     guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
@@ -400,5 +612,6 @@ MODULE = register(Module(
     defaults=DEFAULTS,
     apply=apply,
     actions={"create_role": action_create_role, "create_emoji": action_create_emoji,
-             "emoji_quota": action_emoji_quota},
+             "emoji_quota": action_emoji_quota, "steam_resolve": action_steam_resolve,
+             "arbo": action_arbo, "actus_sync": action_actus_sync},
 ))
