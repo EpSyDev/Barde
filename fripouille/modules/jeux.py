@@ -23,7 +23,10 @@ recliquer le retire. Aucun autre rôle n'est touché. (``placeholder`` n'est plu
 utilisé côté rendu — conservé pour compat config.)
 """
 import logging
+import re
+import unicodedata
 
+import aiohttp
 import discord
 
 from .. import config
@@ -271,10 +274,81 @@ async def action_create_role(bot, payload):
     return {"ok": True, "role": {"id": str(role.id), "name": role.name, "color": role.color.value}}
 
 
+DETECTABLE_URL = "https://discord.com/api/v10/applications/detectable"
+_detectables: list[dict] | None = None   # cache mémoire (liste publique Discord, ~1 Mo)
+
+
+def _cle(nom: str) -> str:
+    s = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+async def _icone_jeu(nom: str) -> bytes | None:
+    """PNG de l'icône officielle du jeu d'après la liste des jeux détectables de Discord."""
+    global _detectables
+    k = _cle(nom)
+    if not k:
+        return None
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+        if _detectables is None:
+            async with s.get(DETECTABLE_URL) as r:
+                if r.status != 200:
+                    return None
+                _detectables = await r.json()
+        exact, proche = [], []
+        for app in _detectables:
+            if not app.get("icon"):
+                continue
+            cles = [_cle(n) for n in [app.get("name") or "", *(app.get("aliases") or [])] if n]
+            if k in cles:
+                exact.append(app)
+            elif len(k) >= 4 and any(c.startswith(k) for c in cles):
+                proche.append(app)      # « Red Dead » → « Red Dead Redemption 2 »
+        cands = exact or sorted(proche, key=lambda a: len(a.get("name") or ""))
+        if not cands:
+            return None
+        app = cands[0]
+        url = f"https://cdn.discordapp.com/app-icons/{app['id']}/{app['icon']}.png?size=128"
+        async with s.get(url) as r:
+            return await r.read() if r.status == 200 else None
+
+
+async def action_create_emoji(bot, payload):
+    """Emoji du serveur pour un jeu : réutilise celui du même nom, sinon le crée depuis
+    l'icône officielle du jeu (liste « jeux détectables » de Discord)."""
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise ValueError("nom du jeu manquant")
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    ename = (_cle(name) or "jeu")[:32].ljust(2, "_")
+    emoji = discord.utils.find(lambda e: e.name.casefold() == ename, guild.emojis)
+    if emoji is None:
+        if len(guild.emojis) >= guild.emoji_limit:
+            raise ValueError(f"quota d'emojis atteint ({guild.emoji_limit})")
+        try:
+            data = await _icone_jeu(name)
+        except (aiohttp.ClientError, TimeoutError):
+            raise ValueError("liste des jeux Discord injoignable")
+        if not data:
+            raise ValueError(f"aucune icône officielle trouvée pour « {name} »")
+        try:
+            emoji = await guild.create_custom_emoji(
+                name=ename, image=data,
+                reason=f"Rôles-jeux — icône auto ({payload.get('_acteur') or '?'})",
+            )
+        except discord.Forbidden:
+            raise ValueError("permission « Gérer les expressions » manquante pour La Fripouille")
+        except discord.HTTPException as e:
+            raise ValueError(f"Discord a refusé l'emoji : {e.text}")
+    return {"ok": True, "emoji": str(emoji)}
+
+
 MODULE = register(Module(
     key="jeux",
     label="Rôles-jeux",
     defaults=DEFAULTS,
     apply=apply,
-    actions={"create_role": action_create_role},
+    actions={"create_role": action_create_role, "create_emoji": action_create_emoji},
 ))

@@ -197,25 +197,62 @@ export default function Games() {
     }
   };
 
+  /** Emoji du serveur pour un jeu : créé par le bot depuis l'icône officielle Discord. */
+  const creerEmoji = async (label: string): Promise<{ emoji?: string; err?: string }> => {
+    try {
+      const res = await fetch("/api/fripouille/action/jeux/create_emoji", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: label.trim() }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.emoji) return { emoji: j.emoji as string };
+      return { err: (j.error as string) || "Emoji non créé" };
+    } catch {
+      return { err: "La Fripouille est injoignable" };
+    }
+  };
+
+  const iconePour = async (cid: string, g: Game) => {
+    setCreation((c) => ({ ...c, [`e${g.id}`]: true }));
+    const r = await creerEmoji(g.label);
+    setCreation((c) => ({ ...c, [`e${g.id}`]: false }));
+    if (!r.emoji) return toasts.err("Icône non créée", r.err);
+    patchGame(cid, g.id, { emoji: r.emoji });
+    toasts.ok(`Icône ${r.emoji} prête`, "Enregistre pour publier le bouton.");
+  };
+
   const creerPour = async (cid: string, g: Game) => {
     setCreation((c) => ({ ...c, [g.id]: true }));
     const role = await creerRole(g.label);
+    const ico = g.emoji.trim() ? null : await creerEmoji(g.label);
     setCreation((c) => ({ ...c, [g.id]: false }));
     if (!role) return toasts.err("Rôle non créé", "La Fripouille a-t-elle « Gérer les rôles » ?");
-    patchGame(cid, g.id, { role_id: role.id });
-    toasts.ok(`Rôle @${role.name} prêt`, "Enregistre pour publier le bouton.");
+    patchGame(cid, g.id, { role_id: role.id, ...(ico?.emoji ? { emoji: ico.emoji } : {}) });
+    toasts.ok(`Rôle @${role.name} prêt`, ico?.err ? `Icône : ${ico.err}` : "Enregistre pour publier le bouton.");
   };
 
   const creerManquants = async (k: Category) => {
     const manquants = k.games.filter((g) => g.label.trim() && !g.role_id);
     const ids: Record<string, string> = {};
+    const icones: Record<string, string> = {};
     for (const g of manquants) {
       setCreation((c) => ({ ...c, [g.id]: true }));
       const role = await creerRole(g.label);
+      if (!g.emoji.trim()) {
+        const ico = await creerEmoji(g.label);
+        if (ico.emoji) icones[g.id] = ico.emoji;
+      }
       setCreation((c) => ({ ...c, [g.id]: false }));
       if (role) ids[g.id] = role.id;
     }
-    patchCatGames(k.id, (games) => games.map((g) => (ids[g.id] ? { ...g, role_id: ids[g.id] } : g)));
+    patchCatGames(k.id, (games) =>
+      games.map((g) => ({
+        ...g,
+        ...(ids[g.id] ? { role_id: ids[g.id] } : {}),
+        ...(icones[g.id] ? { emoji: icones[g.id] } : {}),
+      }))
+    );
     const n = Object.keys(ids).length;
     if (n < manquants.length)
       toasts.err(`${manquants.length - n} rôle(s) non créé(s)`, "Vérifie la permission « Gérer les rôles ».");
@@ -409,6 +446,16 @@ export default function Games() {
                                 placeholder="Nom du jeu"
                                 aria-label="Nom du jeu"
                               />
+                              {!g.emoji.trim() && g.label.trim() && (
+                                <button
+                                  className="btn small"
+                                  onClick={() => iconePour(k.id, g)}
+                                  disabled={!!creation[`e${g.id}`]}
+                                  title={`Créer l'emoji de « ${g.label.trim()} » depuis son icône officielle`}
+                                >
+                                  {creation[`e${g.id}`] ? "…" : "+ Icône"}
+                                </button>
+                              )}
                               {!g.role_id && g.label.trim() && (
                                 <button
                                   className="btn small primary"
