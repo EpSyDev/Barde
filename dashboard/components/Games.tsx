@@ -51,6 +51,28 @@ function parseLigne(ligne: string): { emoji: string; label: string } {
   return m ? { emoji: m[1], label: m[2].trim() } : { emoji: "", label: t };
 }
 
+/** Emoji suggéré d'après le nom d'une catégorie (aucune icône officielle n'existe pour un genre). */
+const EMOJI_GENRES: [RegExp, string][] = [
+  [/fps|tir|shoot/, "🔫"],
+  [/mmo|rpg|fantasy/, "⚔️"],
+  [/simul/, "🚜"],
+  [/cours|racing|auto|voiture/, "🏎️"],
+  [/strat|tactic|4x/, "♟️"],
+  [/surviv|craft|bac a sable|sandbox/, "🏕️"],
+  [/sport|foot|basket/, "⚽"],
+  [/aventure|explor|open world/, "🗺️"],
+  [/combat|baston|fight/, "🥊"],
+  [/coop|party|ambiance|social/, "🤝"],
+  [/horreur|horror/, "👻"],
+  [/mobile/, "📱"],
+  [/indie/, "🎨"],
+  [/classique|retro/, "🕹️"],
+];
+function emojiGenre(label: string): string {
+  const n = label.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return EMOJI_GENRES.find(([re]) => re.test(n))?.[1] ?? "";
+}
+
 /** URL de l'image d'un emoji perso Discord (<:nom:id> / <a:nom:id>), sinon null. */
 function emojiUrl(e: string): string | null {
   const m = /^<(a?):\w+:(\d+)>$/.exec(e.trim());
@@ -140,8 +162,16 @@ export default function Games() {
   // Zone « coller une liste » par catégorie : présente = ouverte.
   const [collage, setCollage] = useState<Record<string, string | undefined>>({});
   const [creation, setCreation] = useState<Record<string, boolean>>({});
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+
+  const majQuota = () =>
+    fetch("/api/fripouille/action/jeux/emoji_quota", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && typeof j.used === "number" && setQuota({ used: j.used, limit: j.limit }))
+      .catch(() => undefined);
 
   useEffect(() => {
+    majQuota();
     Promise.all([
       fetch("/api/fripouille/roles", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { roles: [] })),
       fetch("/api/fripouille/channels", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { channels: [] })),
@@ -206,6 +236,7 @@ export default function Games() {
         body: JSON.stringify({ name: label.trim() }),
       });
       const j = await res.json().catch(() => ({}));
+      majQuota();
       if (res.ok && j.emoji) return { emoji: j.emoji as string };
       return { err: (j.error as string) || "Emoji non créé" };
     } catch {
@@ -259,7 +290,7 @@ export default function Games() {
     else toasts.ok(`${n} rôle(s) créé(s)`, "Enregistre pour publier les boutons.");
   };
 
-  const ajouterListe = (k: Category) => {
+  const ajouterListe = async (k: Category) => {
     const lignes = (collage[k.id] || "").split("\n").map(parseLigne).filter((l) => l.label);
     if (!lignes.length) return;
     const nouveaux = lignes.map((l) => ({
@@ -272,6 +303,22 @@ export default function Games() {
       [...games.filter((g) => g.label.trim() || g.role_id), ...nouveaux].slice(0, 25)
     );
     setCollage((c) => ({ ...c, [k.id]: undefined }));
+    // Icônes officielles pour les jeux collés sans emoji.
+    const sans = nouveaux.filter((g) => !g.emoji.trim());
+    let ok = 0;
+    for (const g of sans) {
+      setCreation((c) => ({ ...c, [`e${g.id}`]: true }));
+      const r = await creerEmoji(g.label);
+      setCreation((c) => ({ ...c, [`e${g.id}`]: false }));
+      if (r.emoji) {
+        ok++;
+        patchGame(k.id, g.id, { emoji: r.emoji });
+      } else if (/quota/.test(r.err || "")) {
+        toasts.err("Icônes interrompues", r.err);
+        return;
+      }
+    }
+    if (sans.length) toasts.ok(`${ok}/${sans.length} icône(s) créée(s)`, "Les autres : emoji manuel ou « + Icône ».");
   };
 
   const save = mod.save;
@@ -345,7 +392,13 @@ export default function Games() {
           <label>Catégories ({cfg.categories.length})</label>
           <p className="cfg-hint">
             Tape le nom d&apos;un jeu : s&apos;il existe déjà un rôle du même nom, il est relié tout
-            seul ; sinon « + Créer le rôle » le fabrique sur Discord (mentionnable, sans permission).
+            seul ; sinon « + Créer le rôle » le fabrique sur Discord (mentionnable, sans permission),
+            avec l&apos;icône officielle du jeu en emoji.
+            {quota && (
+              <strong className={quota.used >= quota.limit - 5 ? "jeux-alerte" : undefined}>
+                {" "}Emojis du serveur : {quota.used}/{quota.limit}.
+              </strong>
+            )}
           </p>
 
           <div className="rec-list">
@@ -377,6 +430,10 @@ export default function Games() {
                       type="text"
                       value={k.label}
                       onChange={(e) => patchCat(k.id, { label: e.target.value })}
+                      onBlur={() => {
+                        const e = !k.emoji.trim() && emojiGenre(k.label);
+                        if (e) patchCat(k.id, { emoji: e });
+                      }}
                       placeholder="Nom de la catégorie (ex. FPS, MMORPG, Simulation)"
                       aria-label="Nom de la catégorie"
                     />

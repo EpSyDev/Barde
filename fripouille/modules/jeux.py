@@ -345,10 +345,19 @@ async def action_create_emoji(bot, payload):
     return {"ok": True, "emoji": str(emoji)}
 
 
+async def action_emoji_quota(bot, payload):
+    """Emplacements d'emojis utilisés / disponibles sur le serveur."""
+    guild = bot.get_guild(config.GUILD_ID) if config.GUILD_ID else None
+    if guild is None:
+        raise ValueError("serveur introuvable")
+    return {"ok": True, "used": len(guild.emojis), "limit": guild.emoji_limit}
+
+
 MODULE = register(Module(
     key="jeux",
     label="Rôles-jeux",
     defaults=DEFAULTS,
     apply=apply,
-    actions={"create_role": action_create_role, "create_emoji": action_create_emoji},
+    actions={"create_role": action_create_role, "create_emoji": action_create_emoji,
+             "emoji_quota": action_emoji_quota},
 ))
