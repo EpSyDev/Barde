@@ -19,7 +19,7 @@ log = logging.getLogger("fripouille.pubdemandes")
 OUVRIR_ID = "pub:ouvrir"
 MAX_DEMANDES = 50
 COLOR = 0xC9A44A
-INVITE_RE = re.compile(r"^https?://(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[\w-]+/?$", re.I)
+LIEN_RE = re.compile(r"^https?://[^\s/$.?#][^\s]*\.[^\s]{2,}$", re.I)
 IMG_RE = re.compile(r"^https://\S+$", re.I)
 
 
@@ -47,7 +47,8 @@ class PubModal(discord.ui.Modal, title="Proposer mon serveur"):
         placeholder="Qui êtes-vous, ce que vous proposez, l'ambiance…",
     )
     invitation = discord.ui.TextInput(
-        label="Lien d'invitation (permanent)", placeholder="https://discord.gg/…", max_length=100,
+        label="Lien pour vous rejoindre (facultatif)", required=False, max_length=200,
+        placeholder="Invitation Discord, site, réseau social…",
     )
     meta = discord.ui.TextInput(
         label="Type · nombre de membres", required=False, max_length=100,
@@ -56,9 +57,11 @@ class PubModal(discord.ui.Modal, title="Proposer mon serveur"):
 
     async def on_submit(self, interaction: discord.Interaction):
         invite = self.invitation.value.strip()
-        if not INVITE_RE.match(invite):
+        if invite and not re.match(r"^https?://", invite, re.I):
+            invite = "https://" + invite          # « discord.gg/xyz » ou « monsite.fr » sans schéma
+        if invite and not LIEN_RE.match(invite):
             await interaction.response.send_message(
-                "❌ Le lien d'invitation doit être un lien Discord (https://discord.gg/…). Relance le formulaire.",
+                "❌ Ce lien n'est pas valide. Relance le formulaire (ou laisse le champ vide).",
                 ephemeral=True,
             )
             return
@@ -163,7 +166,7 @@ def setup(tree: app_commands.CommandTree, guild: discord.Object | None) -> None:
             title="📣 Proposer mon serveur",
             description=(
                 "Tu as un serveur à faire connaître ? Clique sur le bouton, remplis le formulaire "
-                "(nom, jeux, présentation, lien d'invitation) et l'équipe s'occupe de la publication.\n\n"
+                "(nom, jeux, présentation, lien pour vous rejoindre) et l'équipe s'occupe de la publication.\n\n"
                 "-# Chaque demande est relue avant d'être publiée."
             ),
             color=COLOR,
