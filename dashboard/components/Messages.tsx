@@ -56,6 +56,7 @@ type Jeu = {
   image_url: string;
   color: string;
 };
+type PubDemande = { id: string; user_name: string; created_at: string; pub: Partial<Pub> };
 type Kind = "unique" | "pub" | "jeu";
 type SentItem = {
   id: string;
@@ -707,6 +708,8 @@ export default function Messages() {
   const [pubAudio, setPubAudio] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [editingPub, setEditingPub] = useState<Editing>(null);
+  const [demandes, setDemandes] = useState<PubDemande[]>([]);
+  const [pubDemandeId, setPubDemandeId] = useState<string | null>(null);
 
   // Promo jeu
   const [jeuChannel, setJeuChannel] = useState<string | null>(null);
@@ -769,6 +772,7 @@ export default function Messages() {
         const cData = await cRes.json();
         setChannels(chData.channels || []);
         setHistory(cData.sent || []);
+        setDemandes(cData.pub_demandes || []);
         setModeles(cData.modeles || []);
         if (mRes.ok) {
           const mData = await mRes.json();
@@ -798,6 +802,7 @@ export default function Messages() {
       if (r.ok) {
         const d = await r.json();
         setHistory(d.sent || []);
+        setDemandes(d.pub_demandes || []);
       }
     } catch {
       /* silencieux */
@@ -850,6 +855,26 @@ export default function Messages() {
     setPubAudio("");
     setPubChannel(null);
     setEditingPub(null);
+    setPubDemandeId(null);
+  };
+
+  const chargerDemande = (d: PubDemande) => {
+    setPub({ ...emptyPub(), ...d.pub });
+    setPubAudio("");
+    setEditingPub(null);
+    setPubDemandeId(d.id);
+  };
+
+  const supprimerDemande = async (id: string) => {
+    try {
+      await fetch("/api/fripouille/action/messages/demande_supprimer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } catch {
+      /* silencieux : la demande restera listée */
+    }
   };
 
   const publishPub = useCallback(async () => {
@@ -874,6 +899,7 @@ export default function Messages() {
       });
       if (!res.ok) throw new Error();
       toasts.ok(editingPub ? "Annonce mise à jour" : "Annonce publiée");
+      if (!editingPub && pubDemandeId) await supprimerDemande(pubDemandeId);
       resetPub();
       await reloadHistory();
     } catch {
@@ -883,7 +909,7 @@ export default function Messages() {
     } finally {
       setPublishing(false);
     }
-  }, [editingPub, pubChannel, pub, pubAudio, reloadHistory]);
+  }, [editingPub, pubChannel, pub, pubAudio, pubDemandeId, reloadHistory]);
 
   const resetJeu = () => {
     setJeu(emptyJeu());
@@ -1140,6 +1166,41 @@ export default function Messages() {
               <h2>📣 Publicité — serveur partenaire</h2>
               <p>Gabarit prêt à remplir pour annoncer le serveur d'un partenaire.</p>
             </div>
+            {demandes.length > 0 && (
+              <div className="cfg-field">
+                <label>📥 Demandes reçues via /pub ({demandes.length})</label>
+                <div className="rec-list">
+                  {demandes.map((d) => (
+                    <div className="reason-item" key={d.id}>
+                      <div className="reason-head">
+                        <strong>{d.pub.server_name || "Sans nom"}</strong>
+                        <span className="jeux-compte">
+                          {d.user_name} · {new Date(d.created_at).toLocaleDateString("fr-FR")}
+                        </span>
+                        <button
+                          className={`btn small ${pubDemandeId === d.id ? "" : "primary"}`}
+                          onClick={() => chargerDemande(d)}
+                        >
+                          {pubDemandeId === d.id ? "Chargée" : "Charger"}
+                        </button>
+                        <button
+                          className="btn icon danger"
+                          title="Refuser / supprimer"
+                          onClick={async () => {
+                            if (!window.confirm(`Supprimer la demande « ${d.pub.server_name || "sans nom"} » ?`)) return;
+                            if (pubDemandeId === d.id) setPubDemandeId(null);
+                            await supprimerDemande(d.id);
+                            await reloadHistory();
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {editingPub && (
               <div className="edit-banner">
                 ✎ Édition d'une pub déjà publiée

@@ -30,10 +30,12 @@ import discord
 
 from .. import config, media
 from ..registry import Module, register
+from . import pubdemandes
 
 log = logging.getLogger("fripouille.messages")
 
-DEFAULTS = {"recurring": [], "sent": [], "modeles": []}  # modeles : bibliothèque de textes réutilisables
+# modeles : bibliothèque de textes réutilisables ; pub_demandes : demandes reçues via /pub (géré bot)
+DEFAULTS = {"recurring": [], "sent": [], "modeles": [], "pub_demandes": []}
 
 # Vignette fixe des embeds « classiques » (logo de la Taverne).
 LOGO_URL = "https://taverne-ten.vercel.app/logo1.webp"
@@ -415,5 +417,6 @@ MODULE = register(Module(
         "jeu": action_jeu,
         "edit": action_edit,
         "delete": action_delete,
+        "demande_supprimer": pubdemandes.action_demande_supprimer,
     },
 ))

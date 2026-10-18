@@ -13,7 +13,7 @@ import discord
 from . import config, modules, registry, webapi  # noqa: F401  (modules importé = enregistrement)
 from .modules import (
     anonyme, autorole, bapteme, chronique, sante, sauvegarde, sondages, des, diffusions, economie, enligne, farewell, garde, help as help_module, jeux, journal,
-    membres, messages, moderation, soirees, stats, taches, tempvoice, tickets, viejeux, welcome,
+    membres, messages, moderation, pubdemandes, soirees, stats, taches, tempvoice, tickets, viejeux, welcome,
 )
 from .store import ConfigStore
 
@@ -66,6 +66,7 @@ class FripouilleBot(discord.Client):
         # global sinon (propagation Discord plus lente).
         guild = discord.Object(id=config.GUILD_ID) if config.GUILD_ID else None
         anonyme.setup(self.tree, guild)
+        pubdemandes.setup(self.tree, guild)
         economie.install(self, guild)
         economie.start_scheduler(self)
         enligne.start_scheduler(self)
@@ -97,6 +98,7 @@ class FripouilleBot(discord.Client):
         sondages.setup_persistent(self)
         taches.setup_persistent(self)
         des.setup_persistent(self)
+        pubdemandes.setup_persistent(self)
 
     async def _on_arrival(self, member: discord.Member):
         # Membre réellement arrivé (règles validées, ou pas d'écran de règles).
