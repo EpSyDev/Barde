@@ -6,15 +6,27 @@ La demande est rangée dans la config du module Messages (``pub_demandes``) ; le
 dashboard (Messages → Pub) la charge dans le gabarit de pub : il ne reste qu'à choisir le
 salon et publier. Rien n'est posté publiquement sans validation d'un admin.
 """
+import asyncio
+import io
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone
 
+import aiohttp
 import discord
 from discord import app_commands
+from PIL import Image
 
 log = logging.getLogger("fripouille.pubdemandes")
+
+# Hébergement des images des membres : ImgBB (clé gratuite). Sans clé, le formulaire
+# retombe sur des champs « lien d'image ».
+IMGBB_KEY = os.getenv("IMGBB_API_KEY", "").strip()
+IMGBB_URL = "https://api.imgbb.com/1/upload"
+MAX_OCTETS = 8 * 1024 * 1024
+TAILLES = {"banner_url": (1600, 800), "logo_url": (512, 512)}   # dimensions maximales
 
 OUVRIR_ID = "pub:ouvrir"
 MAX_DEMANDES = 50
@@ -126,6 +138,77 @@ class ImagesModal(discord.ui.Modal, title="Bannière et logo"):
         await interaction.response.send_message("🖼️ Images enregistrées. Merci !", ephemeral=True)
 
 
+def _preparer_image(brut: bytes, cle: str) -> tuple[bytes, str]:
+    """Vérifie que c'est bien une image, la réduit et la ré-encode (retire aussi les
+    métadonnées). Renvoie (octets, nom de fichier)."""
+    img = Image.open(io.BytesIO(brut))
+    img.load()
+    img.thumbnail(TAILLES[cle], Image.LANCZOS)
+    out = io.BytesIO()
+    if cle == "logo_url":
+        img.convert("RGBA").save(out, "PNG", optimize=True)
+        return out.getvalue(), "logo.png"
+    img.convert("RGB").save(out, "JPEG", quality=88, optimize=True)
+    return out.getvalue(), "banniere.jpg"
+
+
+async def _heberger(octets: bytes, nom: str) -> str:
+    """Envoie l'image sur ImgBB et renvoie son URL directe."""
+    form = aiohttp.FormData()
+    form.add_field("image", octets, filename=nom)
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
+        async with s.post(IMGBB_URL, params={"key": IMGBB_KEY}, data=form) as r:
+            if r.status != 200:
+                raise ValueError(f"hébergeur : HTTP {r.status}")
+            return (await r.json())["data"]["url"]
+
+
+class FichiersModal(discord.ui.Modal, title="Bannière et logo"):
+    banniere = discord.ui.Label(
+        text="Bannière (image large, facultative)",
+        component=discord.ui.FileUpload(required=False, min_values=0, max_values=1),
+    )
+    logo = discord.ui.Label(
+        text="Logo (image carrée, facultative)",
+        component=discord.ui.FileUpload(required=False, min_values=0, max_values=1),
+    )
+
+    def __init__(self, demande_id: str):
+        super().__init__()
+        self.demande_id = demande_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        bot = interaction.client
+        urls, erreurs = {}, []
+        for cle, label in (("banner_url", self.banniere), ("logo_url", self.logo)):
+            fichiers = label.component.values
+            if not fichiers:
+                continue
+            f = fichiers[0]
+            if f.size > MAX_OCTETS:
+                erreurs.append(f"{f.filename} dépasse 8 Mo")
+                continue
+            try:
+                octets, nom = await asyncio.to_thread(_preparer_image, await f.read(), cle)
+                urls[cle] = await _heberger(octets, nom)
+            except (OSError, ValueError, aiohttp.ClientError, TimeoutError, KeyError) as exc:
+                log.warning("pub : image %s refusée (%s)", f.filename, exc)
+                erreurs.append(f"{f.filename} n'est pas une image valide ou l'envoi a échoué")
+        demandes = _demandes(bot)
+        d = next((x for x in demandes if x.get("id") == self.demande_id
+                  and x.get("user_id") == str(interaction.user.id)), None)
+        if d is None:
+            await interaction.followup.send("❌ Demande introuvable (déjà traitée ?).", ephemeral=True)
+            return
+        d["pub"].update(urls)
+        _enregistrer(bot, demandes)
+        msg = "🖼️ Images enregistrées. Merci !" if urls else "Aucune image enregistrée."
+        if erreurs:
+            msg += "\n⚠️ " + " · ".join(erreurs)
+        await interaction.followup.send(msg, ephemeral=True)
+
+
 class ImagesView(discord.ui.View):
     def __init__(self, demande_id: str):
         super().__init__(timeout=900)
@@ -133,7 +216,8 @@ class ImagesView(discord.ui.View):
 
     @discord.ui.button(label="🖼️ Ajouter bannière / logo", style=discord.ButtonStyle.secondary)
     async def images(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        await interaction.response.send_modal(ImagesModal(self.demande_id))
+        modal = FichiersModal(self.demande_id) if IMGBB_KEY else ImagesModal(self.demande_id)
+        await interaction.response.send_modal(modal)
 
 
 class PanneauView(discord.ui.View):
