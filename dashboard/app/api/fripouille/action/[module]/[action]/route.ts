@@ -28,6 +28,8 @@ export async function POST(
       actor: actorFrom(session),
     });
     const data = await res.json().catch(() => ({}));
+    // Les refus du bot (ValueError → 400) passent dans la raison HTTP, pas dans le corps.
+    if (!res.ok && !data.error && res.statusText) data.error = res.statusText;
     return NextResponse.json(data, { status: res.status });
   } catch (e) {
     console.error(`fripouille action ${module}/${action}`, e);

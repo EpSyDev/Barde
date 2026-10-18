@@ -22,12 +22,15 @@ Chaque bouton bascule le rôle de SON jeu (toggle indépendant) : cliquer l'ajou
 recliquer le retire. Aucun autre rôle n'est touché. (``placeholder`` n'est plus
 utilisé côté rendu — conservé pour compat config.)
 """
+import asyncio
+import io
 import logging
 import re
 import unicodedata
 
 import aiohttp
 import discord
+from PIL import Image
 
 from .. import config
 from ..registry import Module, register
@@ -283,34 +286,72 @@ def _cle(nom: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", s)
 
 
-async def _icone_jeu(nom: str) -> bytes | None:
-    """PNG de l'icône officielle du jeu d'après la liste des jeux détectables de Discord."""
+STEAM_SEARCH = "https://store.steampowered.com/api/storesearch/"
+STEAM_HEADER = "https://cdn.cloudflare.steamstatic.com/steam/apps/{}/header.jpg"
+
+
+def _carre_png(data: bytes) -> bytes:
+    """Recadre au carré (centre) et redimensionne en PNG 128 px, prêt pour un emoji."""
+    img = Image.open(io.BytesIO(data)).convert("RGBA")
+    c = min(img.size)
+    x, y = (img.width - c) // 2, (img.height - c) // 2
+    out = io.BytesIO()
+    img.crop((x, y, x + c, y + c)).resize((128, 128), Image.LANCZOS).save(out, "PNG")
+    return out.getvalue()
+
+
+async def _icone_discord(s, k: str) -> bytes | None:
+    """Icône officielle d'après la liste des jeux détectables de Discord."""
     global _detectables
+    if _detectables is None:
+        async with s.get(DETECTABLE_URL) as r:
+            if r.status != 200:
+                return None
+            _detectables = await r.json()
+    exact, proche = [], []
+    for app in _detectables:
+        if not app.get("icon"):
+            continue
+        cles = [_cle(n) for n in [app.get("name") or "", *(app.get("aliases") or [])] if n]
+        if k in cles:
+            exact.append(app)
+        elif len(k) >= 4 and any(c.startswith(k) for c in cles):
+            proche.append(app)      # « Red Dead » → « Red Dead Redemption 2 »
+    cands = exact or sorted(proche, key=lambda a: len(a.get("name") or ""))
+    if not cands:
+        return None
+    url = f"https://cdn.discordapp.com/app-icons/{cands[0]['id']}/{cands[0]['icon']}.png?size=128"
+    async with s.get(url) as r:
+        return await r.read() if r.status == 200 else None
+
+
+async def _icone_steam(s, nom: str, k: str) -> bytes | None:
+    """Repli : visuel du jeu sur Steam (bannière recadrée au carré)."""
+    async with s.get(STEAM_SEARCH, params={"term": nom, "cc": "fr", "l": "french"}) as r:
+        if r.status != 200:
+            return None
+        items = [i for i in (await r.json()).get("items", []) if i.get("type") == "app"]
+    exact = [i for i in items if _cle(i.get("name") or "") == k]
+    proche = [i for i in items if len(k) >= 4 and _cle(i.get("name") or "").startswith(k)]
+    cands = exact or proche
+    if not cands:
+        return None
+    async with s.get(STEAM_HEADER.format(cands[0]["id"])) as r:
+        return await r.read() if r.status == 200 else None
+
+
+async def _icone_jeu(nom: str) -> bytes | None:
+    """PNG carré 128 px du jeu : icône officielle Discord, sinon visuel Steam."""
     k = _cle(nom)
     if not k:
         return None
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
-        if _detectables is None:
-            async with s.get(DETECTABLE_URL) as r:
-                if r.status != 200:
-                    return None
-                _detectables = await r.json()
-        exact, proche = [], []
-        for app in _detectables:
-            if not app.get("icon"):
-                continue
-            cles = [_cle(n) for n in [app.get("name") or "", *(app.get("aliases") or [])] if n]
-            if k in cles:
-                exact.append(app)
-            elif len(k) >= 4 and any(c.startswith(k) for c in cles):
-                proche.append(app)      # « Red Dead » → « Red Dead Redemption 2 »
-        cands = exact or sorted(proche, key=lambda a: len(a.get("name") or ""))
-        if not cands:
-            return None
-        app = cands[0]
-        url = f"https://cdn.discordapp.com/app-icons/{app['id']}/{app['icon']}.png?size=128"
-        async with s.get(url) as r:
-            return await r.read() if r.status == 200 else None
+        data = await _icone_discord(s, k)
+        if data is None:
+            data = await _icone_steam(s, nom, k)
+            if data is not None:
+                data = await asyncio.to_thread(_carre_png, data)
+        return data
 
 
 async def action_create_emoji(bot, payload):
