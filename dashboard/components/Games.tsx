@@ -36,6 +36,7 @@ type JeuxCfg = {
   title: string;
   description: string;
   actus_enabled: boolean;
+  actus_traduction: boolean;
   categories: Category[];
 };
 
@@ -116,6 +117,7 @@ const serialize = (cfg: JeuxCfg) => ({
   title: cfg.title.trim(),
   description: cfg.description.trim(),
   actus_enabled: cfg.actus_enabled,
+  actus_traduction: cfg.actus_traduction,
   categories: cfg.categories
     .map((k) => ({
       id: k.id,
@@ -175,6 +177,7 @@ const normalize = (raw: Record<string, unknown>): JeuxCfg => {
     title: String(raw.title || ""),
     description: String(raw.description || ""),
     actus_enabled: !!raw.actus_enabled,
+    actus_traduction: raw.actus_traduction !== false,
     categories,
   };
 };
@@ -458,6 +461,17 @@ export default function Games() {
           <span className="switch" />
           <span>Relayer les actualités Steam dans le salon « actualité » de chaque jeu</span>
         </label>
+        {cfg.actus_enabled && (
+          <label className="cfg-toggle">
+            <input
+              type="checkbox"
+              checked={cfg.actus_traduction}
+              onChange={(e) => set({ actus_traduction: e.target.checked })}
+            />
+            <span className="switch" />
+            <span>Traduire en français les annonces qui ne le sont pas</span>
+          </label>
+        )}
         {cfg.actus_enabled && (
           <p className="cfg-hint">
             Vérification toutes les 30 min ; les annonces des développeurs sont postées (3 maximum
